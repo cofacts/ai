@@ -5,14 +5,14 @@
   "scripts": {
     "dev": "concurrently \"pnpm run dev:ui\" \"pnpm run dev:agent\" --names ui,agent --prefix-colors blue,green --kill-others",
     "dev:ui": "vite dev --port 3000",
-    "dev:agent": "uv run --project agent adk web --port 8000 .",
+    "dev:agent": "uv run --project adk adk web --port 8000 adk",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint",
     "format": "prettier",
     "check": "prettier --write . && eslint --fix",
-    "install:agent": "uv sync --project agent",
+    "install:agent": "uv sync --project adk",
     "postinstall": "pnpm run install:agent"
   },
   "dependencies": {

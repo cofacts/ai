@@ -22,9 +22,11 @@ export function useChat({ sessionId }: UseChatOptions) {
   // Subscribe to the global store via TanStack Query
   const { data = INITIAL_CHAT_STATE } = useQuery<ChatSessionState>({
     queryKey,
-    // We don't provide a queryFn here because the data is pushed from SSE
-    // over `queryClient.setQueryData()`.
-    // StaleTime infinity prevents TS Query from aggressively collecting it
+    // Returns the initial empty state when the cache is cold (e.g., after a
+    // page refresh). Real data is pushed via queryClient.setQueryData() from
+    // the SSE stream, so this queryFn is only called when there is nothing
+    // in the cache yet.
+    queryFn: () => INITIAL_CHAT_STATE,
     staleTime: Infinity,
     gcTime: Infinity,
   })

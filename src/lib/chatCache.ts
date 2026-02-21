@@ -41,7 +41,7 @@ export interface StartStreamOptions {
 export async function startChatStream({
   queryClient,
   sessionId,
-  appName = 'agent',
+  appName = 'cofacts-ai',
   userId = 'anonymous',
   payload = {},
 }: StartStreamOptions) {

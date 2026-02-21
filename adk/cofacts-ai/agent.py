@@ -20,7 +20,7 @@ from google.adk.tools import url_context, google_search
 from google.adk.tools.agent_tool import AgentTool
 from datetime import datetime
 
-from tools import (
+from .tools import (
     search_cofacts_database,
     get_single_cofacts_article,
     submit_cofacts_reply,

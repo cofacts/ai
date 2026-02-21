@@ -17,6 +17,17 @@ export const Route = createFileRoute('/api/chat')({
       POST: async ({ request }) => {
         const body = await request.json()
 
+        // ADK requires the session to exist before calling /run_sse.
+        // Create it upfront; ignore 409 if it already exists.
+        await fetch(
+          `${ADK_INTERNAL_URL}/apps/${body.app_name}/users/${body.user_id}/sessions/${body.session_id}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          },
+        )
+
         const adkResponse = await fetch(`${ADK_INTERNAL_URL}/run_sse`, {
           method: 'POST',
           headers: {
