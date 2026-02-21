@@ -1,0 +1,57 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - 'release/*'
+
+jobs:
+  build-adk:
+    name: Build & push cofacts/adk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./adk
+          file: ./adk/Dockerfile
+          push: true
+          tags: cofacts/adk:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-site:
+    name: Build & push cofacts/site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: cofacts/site:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
