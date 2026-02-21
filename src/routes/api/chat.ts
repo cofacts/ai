@@ -6,27 +6,19 @@
  *
  * The browser sends a POST to /api/chat, this handler forwards it to ADK at :8000,
  * and streams the SSE response back without buffering.
+ *
+ * Sessions must be created beforehand via POST /api/sessions.
  */
 import { createFileRoute } from '@tanstack/react-router'
+import type { ChatRequest } from '@/lib/apiTypes'
 
 const ADK_INTERNAL_URL = process.env.ADK_URL || 'http://localhost:8000'
 
 export const Route = createFileRoute('/api/chat')({
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        const body = await request.json()
-
-        // ADK requires the session to exist before calling /run_sse.
-        // Create it upfront; ignore 409 if it already exists.
-        await fetch(
-          `${ADK_INTERNAL_URL}/apps/${body.app_name}/users/${body.user_id}/sessions/${body.session_id}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          },
-        )
+      POST: async ({ request }): Promise<Response> => {
+        const body = (await request.json()) as ChatRequest
 
         const adkResponse = await fetch(`${ADK_INTERNAL_URL}/run_sse`, {
           method: 'POST',

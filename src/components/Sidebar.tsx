@@ -1,51 +1,17 @@
 import { Link, useParams } from '@tanstack/react-router'
+import { useSessions, getSessionTitle } from '@/hooks/useSessions'
 
 interface SidebarProps {
   isOpen: boolean
   onClose: () => void
 }
 
-// Placeholder session data — will be replaced by real ADK session queries
-interface SessionItem {
-  id: string
-  title: string
-  subtitle: string
-  active?: boolean
-}
-
-const placeholderSessions: { label: string; items: SessionItem[] }[] = [
-  {
-    label: '進行中',
-    items: [
-      {
-        id: 'demo-1',
-        title: 'Line: 免費 iPhone 詐騙',
-        subtitle: '剛剛編輯 • 協作中',
-        active: true,
-      },
-      {
-        id: 'demo-2',
-        title: '謠言：選舉日期變更',
-        subtitle: '2 小時前',
-      },
-    ],
-  },
-  {
-    label: '近期紀錄',
-    items: [
-      {
-        id: 'demo-3',
-        title: '健康：檸檬水療法',
-        subtitle: '昨天',
-      },
-    ],
-  },
-]
-
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const params = useParams({ strict: false })
   const currentSessionId = (params as Record<string, string | undefined>)
     .sessionId
+
+  const { data: sessions, isLoading } = useSessions()
 
   return (
     <>
@@ -80,39 +46,54 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         {/* Session list */}
         <div className="flex-1 overflow-y-auto px-2 space-y-1 pb-4">
-          {placeholderSessions.map((group) => (
-            <div key={group.label}>
-              <div className="px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider mt-2">
-                {group.label}
-              </div>
-              {group.items.map((session) => {
-                const isActive = currentSessionId === session.id
-                return (
-                  <Link
-                    key={session.id}
-                    to="/session/$sessionId"
-                    params={{ sessionId: session.id }}
-                    onClick={onClose}
-                    className={`
-                      flex flex-col p-3 rounded-lg group transition-colors
-                      ${isActive ? 'bg-primary/10 text-text-main' : 'hover:bg-gray-50 text-text-muted'}
-                    `}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div
-                        className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
-                      >
-                        {session.title}
-                      </div>
-                      <div className="text-xs text-text-muted truncate mt-0.5 text-left">
-                        {session.subtitle}
-                      </div>
-                    </div>
-                  </Link>
-                )
-              })}
+          <div className="px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider mt-2">
+            查核紀錄
+          </div>
+
+          {isLoading && (
+            <div className="space-y-1 px-1">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-14 rounded-lg bg-gray-100 animate-pulse"
+                />
+              ))}
             </div>
-          ))}
+          )}
+
+          {!isLoading && (!sessions || sessions.length === 0) && (
+            <div className="px-3 py-4 text-sm text-text-muted text-center">
+              尚無查核任務
+            </div>
+          )}
+
+          {sessions?.map((session) => {
+            const isActive = currentSessionId === session.id
+            const title = getSessionTitle(session)
+            return (
+              <Link
+                key={session.id}
+                to="/session/$sessionId"
+                params={{ sessionId: session.id }}
+                onClick={onClose}
+                className={`
+                  flex flex-col p-3 rounded-lg group transition-colors
+                  ${isActive ? 'bg-primary/10 text-text-main' : 'hover:bg-gray-50 text-text-muted'}
+                `}
+              >
+                <div className="flex-1 min-w-0">
+                  <div
+                    className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
+                  >
+                    {title}
+                  </div>
+                  <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
+                    {session.id.slice(0, 8)}…
+                  </div>
+                </div>
+              </Link>
+            )
+          })}
         </div>
 
         {/* Footer */}

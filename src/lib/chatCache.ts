@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query'
 import type { ChatMessage, ToolCall, AdkEvent, SourceItem } from './adk'
+import { ADK_APP_NAME, ADK_USER_ID } from './adk'
 
 export interface ChatSessionState {
   messages: ChatMessage[]
@@ -41,8 +42,8 @@ export interface StartStreamOptions {
 export async function startChatStream({
   queryClient,
   sessionId,
-  appName = 'cofacts-ai',
-  userId = 'anonymous',
+  appName = ADK_APP_NAME,
+  userId = ADK_USER_ID,
   payload = {},
 }: StartStreamOptions) {
   const queryKey = ['chat', sessionId]
