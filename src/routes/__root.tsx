@@ -1,5 +1,11 @@
-import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRoute,
+} from '@tanstack/react-router'
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRoute({
@@ -17,7 +23,8 @@ export const Route = createRootRoute({
       },
       {
         name: 'description',
-        content: 'Cofacts.ai 是一個對話式 AI 查核協作平台，讓查核協作者可以透過 AI 輔助來查核可疑訊息、撰寫回應。',
+        content:
+          'Cofacts.ai 是一個對話式 AI 查核協作平台，讓查核協作者可以透過 AI 輔助來查核可疑訊息、撰寫回應。',
       },
     ],
     links: [
@@ -48,8 +55,6 @@ export const Route = createRootRoute({
   component: RootComponent,
   shellComponent: RootDocument,
 })
-
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const queryClient = new QueryClient({
   defaultOptions: {

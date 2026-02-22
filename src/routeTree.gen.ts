@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as ApiSessionsRouteImport } from './routes/api/sessions'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiSessionsSessionIdRouteImport } from './routes/api/sessions.$sessionId'
 import { Route as AppSessionSessionIdRouteImport } from './routes/_app/session.$sessionId'
 
 const AppRoute = AppRouteImport.update({
@@ -34,6 +35,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionsSessionIdRoute = ApiSessionsSessionIdRouteImport.update({
+  id: '/$sessionId',
+  path: '/$sessionId',
+  getParentRoute: () => ApiSessionsRoute,
+} as any)
 const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
   id: '/session/$sessionId',
   path: '/session/$sessionId',
@@ -43,28 +49,41 @@ const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/sessions': typeof ApiSessionsRoute
+  '/api/sessions': typeof ApiSessionsRouteWithChildren
   '/session/$sessionId': typeof AppSessionSessionIdRoute
+  '/api/sessions/$sessionId': typeof ApiSessionsSessionIdRoute
 }
 export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
-  '/api/sessions': typeof ApiSessionsRoute
+  '/api/sessions': typeof ApiSessionsRouteWithChildren
   '/': typeof AppIndexRoute
   '/session/$sessionId': typeof AppSessionSessionIdRoute
+  '/api/sessions/$sessionId': typeof ApiSessionsSessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/api/chat': typeof ApiChatRoute
-  '/api/sessions': typeof ApiSessionsRoute
+  '/api/sessions': typeof ApiSessionsRouteWithChildren
   '/_app/': typeof AppIndexRoute
   '/_app/session/$sessionId': typeof AppSessionSessionIdRoute
+  '/api/sessions/$sessionId': typeof ApiSessionsSessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/chat' | '/api/sessions' | '/session/$sessionId'
+  fullPaths:
+    | '/'
+    | '/api/chat'
+    | '/api/sessions'
+    | '/session/$sessionId'
+    | '/api/sessions/$sessionId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/api/chat' | '/api/sessions' | '/' | '/session/$sessionId'
+  to:
+    | '/api/chat'
+    | '/api/sessions'
+    | '/'
+    | '/session/$sessionId'
+    | '/api/sessions/$sessionId'
   id:
     | '__root__'
     | '/_app'
@@ -72,12 +91,13 @@ export interface FileRouteTypes {
     | '/api/sessions'
     | '/_app/'
     | '/_app/session/$sessionId'
+    | '/api/sessions/$sessionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   ApiChatRoute: typeof ApiChatRoute
-  ApiSessionsRoute: typeof ApiSessionsRoute
+  ApiSessionsRoute: typeof ApiSessionsRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -110,6 +130,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/sessions/$sessionId': {
+      id: '/api/sessions/$sessionId'
+      path: '/$sessionId'
+      fullPath: '/api/sessions/$sessionId'
+      preLoaderRoute: typeof ApiSessionsSessionIdRouteImport
+      parentRoute: typeof ApiSessionsRoute
+    }
     '/_app/session/$sessionId': {
       id: '/_app/session/$sessionId'
       path: '/session/$sessionId'
@@ -132,10 +159,22 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface ApiSessionsRouteChildren {
+  ApiSessionsSessionIdRoute: typeof ApiSessionsSessionIdRoute
+}
+
+const ApiSessionsRouteChildren: ApiSessionsRouteChildren = {
+  ApiSessionsSessionIdRoute: ApiSessionsSessionIdRoute,
+}
+
+const ApiSessionsRouteWithChildren = ApiSessionsRoute._addFileChildren(
+  ApiSessionsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   ApiChatRoute: ApiChatRoute,
-  ApiSessionsRoute: ApiSessionsRoute,
+  ApiSessionsRoute: ApiSessionsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -12,7 +12,11 @@ export interface CreateSessionResponse {
 
 // ── GET /api/sessions ──────────────────────────────────────────────
 
-export type ListSessionsResponse = AdkSession[]
+export type ListSessionsResponse = Array<AdkSession>
+
+// ── GET /api/sessions/$sessionId ───────────────────────────────────
+
+export type GetSessionResponse = AdkSession
 
 // ── POST /api/chat ─────────────────────────────────────────────────
 

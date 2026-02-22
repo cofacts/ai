@@ -1,16 +1,20 @@
-import type { ChatMessage } from '@/lib/adk'
+import { useEffect, useRef } from 'react'
 import { UserMessage } from './UserMessage'
 import { AgentMessage } from './AgentMessage'
 import { ChatInput } from './ChatInput'
-import { useRef, useEffect } from 'react'
+import type { ChatMessage } from '@/lib/adk'
 
 interface ChatAreaProps {
-  messages: ChatMessage[]
+  messages: Array<ChatMessage>
   isStreaming: boolean
   onSendMessage: (text: string) => void
 }
 
-export function ChatArea({ messages, isStreaming, onSendMessage }: ChatAreaProps) {
+export function ChatArea({
+  messages,
+  isStreaming,
+  onSendMessage,
+}: ChatAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom on new messages

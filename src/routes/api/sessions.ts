@@ -42,8 +42,7 @@ export const Route = createFileRoute('/api/sessions')({
       },
 
       POST: async ({ request }): Promise<Response> => {
-        const { session_id } =
-          (await request.json()) as CreateSessionRequest
+        const { session_id } = (await request.json()) as CreateSessionRequest
 
         const adkResponse = await fetch(
           `${ADK_INTERNAL_URL}/apps/${APP_NAME}/users/${USER_ID}/sessions/${session_id}`,

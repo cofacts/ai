@@ -1,11 +1,11 @@
 import type { SourceItem } from '@/lib/adk'
 
 interface SourceLinkageProps {
-  sources: SourceItem[]
+  sources: Array<SourceItem>
 }
 
 // Placeholder sources for UI development
-const placeholderSources: SourceItem[] = [
+const placeholderSources: Array<SourceItem> = [
   {
     url: 'https://tfc-taiwan.org.tw/articles/1234',
     title: '【錯誤】網傳政府補助電動機車2萬元？',

@@ -12,44 +12,47 @@ interface ResponseEditorProps {
   onDraftChange?: (text: string) => void
 }
 
-const categories: {
+const categories: Array<{
   key: ReplyCategory
   label: string
   icon: string
   colorClass: string
   activeClass: string
-}[] = [
-    {
-      key: 'NOT_ARTICLE',
-      label: '不在查證範圍',
-      icon: 'warning',
-      colorClass: 'text-yellow-500',
-      activeClass: 'bg-yellow-50 border-yellow-300 text-yellow-700',
-    },
-    {
-      key: 'RUMOR',
-      label: '含有不實訊息',
-      icon: 'cancel',
-      colorClass: 'text-red-500',
-      activeClass: 'bg-red-50 border-red-300 text-red-700',
-    },
-    {
-      key: 'NOT_RUMOR',
-      label: '含有正確訊息',
-      icon: 'check_circle',
-      colorClass: 'text-green-500',
-      activeClass: 'bg-green-50 border-green-300 text-green-700',
-    },
-    {
-      key: 'OPINIONATED',
-      label: '含有個人意見',
-      icon: 'comment',
-      colorClass: 'text-blue-500',
-      activeClass: 'bg-blue-50 border-blue-300 text-blue-700',
-    },
-  ]
+}> = [
+  {
+    key: 'NOT_ARTICLE',
+    label: '不在查證範圍',
+    icon: 'warning',
+    colorClass: 'text-yellow-500',
+    activeClass: 'bg-yellow-50 border-yellow-300 text-yellow-700',
+  },
+  {
+    key: 'RUMOR',
+    label: '含有不實訊息',
+    icon: 'cancel',
+    colorClass: 'text-red-500',
+    activeClass: 'bg-red-50 border-red-300 text-red-700',
+  },
+  {
+    key: 'NOT_RUMOR',
+    label: '含有正確訊息',
+    icon: 'check_circle',
+    colorClass: 'text-green-500',
+    activeClass: 'bg-green-50 border-green-300 text-green-700',
+  },
+  {
+    key: 'OPINIONATED',
+    label: '含有個人意見',
+    icon: 'comment',
+    colorClass: 'text-blue-500',
+    activeClass: 'bg-blue-50 border-blue-300 text-blue-700',
+  },
+]
 
-export function ResponseEditor({ draftResponse = '', onDraftChange }: ResponseEditorProps) {
+export function ResponseEditor({
+  draftResponse = '',
+  onDraftChange,
+}: ResponseEditorProps) {
   const [selectedCategory, setSelectedCategory] = useState<ReplyCategory>(null)
   const [responseText, setResponseText] = useState(draftResponse)
   const [references, setReferences] = useState('')
@@ -89,15 +92,14 @@ export function ResponseEditor({ draftResponse = '', onDraftChange }: ResponseEd
           return (
             <button
               key={cat.key}
-              onClick={() =>
-                setSelectedCategory(isActive ? null : cat.key)
-              }
+              onClick={() => setSelectedCategory(isActive ? null : cat.key)}
               className={`
                 flex-1 min-w-[80px] whitespace-nowrap py-2 text-[10px] font-bold text-center rounded
                 flex flex-col items-center justify-center gap-0.5 transition-all
-                ${isActive
-                  ? `bg-white shadow-sm border border-gray-200 ${cat.activeClass}`
-                  : 'text-gray-500 hover:bg-white/80'
+                ${
+                  isActive
+                    ? `bg-white shadow-sm border border-gray-200 ${cat.activeClass}`
+                    : 'text-gray-500 hover:bg-white/80'
                 }
               `}
             >
