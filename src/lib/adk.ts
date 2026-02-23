@@ -25,7 +25,7 @@ export interface AdkPart {
 
 export interface AdkContent {
   role: string
-  parts: AdkPart[]
+  parts: Array<AdkPart>
 }
 
 export interface AdkEvent {
@@ -59,7 +59,7 @@ export interface AdkSession {
   app_name: string
   user_id: string
   state: Record<string, unknown>
-  events: AdkEvent[]
+  events: Array<AdkEvent>
 }
 
 export interface AdkRunPayload {
@@ -88,7 +88,7 @@ export interface ChatMessage {
   role: MessageRole
   author?: string
   text: string
-  toolCalls?: ToolCall[]
+  toolCalls?: Array<ToolCall>
   isStreaming?: boolean
   timestamp?: Date
 }
@@ -109,8 +109,8 @@ export interface SourceItem {
  * Parse a raw SSE text stream into individual event data strings.
  * Each SSE event is separated by a blank line and prefixed with `data: `.
  */
-export function parseSseLines(chunk: string): string[] {
-  const events: string[] = []
+export function parseSseLines(chunk: string): Array<string> {
+  const events: Array<string> = []
   const lines = chunk.split('\n')
   let currentData = ''
 

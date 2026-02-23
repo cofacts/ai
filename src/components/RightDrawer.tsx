@@ -1,8 +1,8 @@
-import type { DrawerTab } from '@/routes/_app'
-import type { SourceItem } from '@/lib/adk'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ResponseEditor } from './ResponseEditor'
 import { SourceLinkage } from './SourceLinkage'
-import { useState, useRef, useCallback, useEffect } from 'react'
+import type { DrawerTab } from '@/routes/_app'
+import type { SourceItem } from '@/lib/adk'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -12,7 +12,7 @@ interface RightDrawerProps {
   onTabChange: (tab: DrawerTab) => void
   draftResponse?: string
   onDraftChange?: (text: string) => void
-  sources?: SourceItem[]
+  sources?: Array<SourceItem>
 }
 
 export function RightDrawer({
@@ -81,19 +81,21 @@ function DrawerTabs({
     <div className="flex border-b border-border-subtle bg-white shrink-0">
       <button
         onClick={() => onTabChange('editor')}
-        className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'editor'
+        className={`flex-1 py-3 text-sm font-medium transition-colors ${
+          activeTab === 'editor'
             ? 'border-b-2 border-primary text-primary bg-primary/5'
             : 'text-text-muted hover:text-text-main hover:bg-gray-50'
-          }`}
+        }`}
       >
         回應編輯器
       </button>
       <button
         onClick={() => onTabChange('sources')}
-        className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'sources'
+        className={`flex-1 py-3 text-sm font-medium transition-colors ${
+          activeTab === 'sources'
             ? 'border-b-2 border-primary text-primary bg-primary/5'
             : 'text-text-muted hover:text-text-main hover:bg-gray-50'
-          }`}
+        }`}
       >
         資料關聯
       </button>
@@ -112,7 +114,7 @@ function DrawerContent({
   activeTab: DrawerTab
   draftResponse?: string
   onDraftChange?: (text: string) => void
-  sources?: SourceItem[]
+  sources?: Array<SourceItem>
 }) {
   if (activeTab === 'editor') {
     return (
@@ -167,7 +169,10 @@ function MobileBottomSheet({
     const delta = dragRef.current.startY - e.touches[0].clientY
     const windowHeight = window.innerHeight
     const deltaVh = (delta / windowHeight) * 100
-    const newHeight = Math.max(40, Math.min(95, dragRef.current.startHeight + deltaVh))
+    const newHeight = Math.max(
+      40,
+      Math.min(95, dragRef.current.startHeight + deltaVh),
+    )
     setSheetHeight(newHeight)
   }, [])
 

@@ -60,7 +60,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           <span className="material-symbols-outlined">notifications</span>
         </button>
         <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 cursor-pointer flex items-center justify-center">
-          <span className="material-symbols-outlined text-gray-500">person</span>
+          <span className="material-symbols-outlined text-gray-500">
+            person
+          </span>
         </div>
       </div>
     </header>

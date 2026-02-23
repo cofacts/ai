@@ -1,14 +1,12 @@
-import type { ChatMessage } from '@/lib/adk'
 import { useState } from 'react'
+import type { ChatMessage } from '@/lib/adk'
 
 interface AgentMessageProps {
   message: ChatMessage
 }
 
 export function AgentMessage({ message }: AgentMessageProps) {
-  const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(
-    null,
-  )
+  const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null)
 
   return (
     <div className="flex flex-col items-start w-full">
@@ -48,7 +46,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
                 {tool.name.toLowerCase().includes('search')
                   ? 'search'
                   : tool.name.toLowerCase().includes('verify') ||
-                    tool.name.toLowerCase().includes('check')
+                      tool.name.toLowerCase().includes('check')
                     ? 'shield'
                     : tool.name.toLowerCase().includes('cofacts')
                       ? 'fact_check'
@@ -79,10 +77,11 @@ export function AgentMessage({ message }: AgentMessageProps) {
             onClick={() =>
               setFeedbackGiven(feedbackGiven === 'up' ? null : 'up')
             }
-            className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 'up'
+            className={`p-1 rounded hover:bg-gray-100 transition-colors ${
+              feedbackGiven === 'up'
                 ? 'text-primary'
                 : 'text-gray-400 hover:text-gray-600'
-              }`}
+            }`}
           >
             <span className="material-symbols-outlined text-[18px]">
               thumb_up
@@ -92,10 +91,11 @@ export function AgentMessage({ message }: AgentMessageProps) {
             onClick={() =>
               setFeedbackGiven(feedbackGiven === 'down' ? null : 'down')
             }
-            className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 'down'
+            className={`p-1 rounded hover:bg-gray-100 transition-colors ${
+              feedbackGiven === 'down'
                 ? 'text-destructive'
                 : 'text-gray-400 hover:text-gray-600'
-              }`}
+            }`}
           >
             <span className="material-symbols-outlined text-[18px]">
               thumb_down

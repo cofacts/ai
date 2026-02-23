@@ -5,6 +5,7 @@
 import type {
   CreateSessionRequest,
   CreateSessionResponse,
+  GetSessionResponse,
   ListSessionsResponse,
 } from './apiTypes'
 
@@ -25,4 +26,12 @@ export async function listSessions(): Promise<ListSessionsResponse> {
   const res = await fetch('/api/sessions')
   if (!res.ok) throw new Error(`Failed to list sessions: ${res.status}`)
   return res.json() as Promise<ListSessionsResponse>
+}
+
+export async function getSession(
+  sessionId: string,
+): Promise<GetSessionResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}`)
+  if (!res.ok) throw new Error(`Failed to get session: ${res.status}`)
+  return res.json() as Promise<GetSessionResponse>
 }

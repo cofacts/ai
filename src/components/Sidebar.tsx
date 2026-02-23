@@ -1,5 +1,5 @@
 import { Link, useParams } from '@tanstack/react-router'
-import { useSessions, getSessionTitle } from '@/hooks/useSessions'
+import { getSessionTitle, useSessions } from '@/hooks/useSessions'
 
 interface SidebarProps {
   isOpen: boolean
