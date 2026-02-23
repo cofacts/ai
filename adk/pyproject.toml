@@ -9,4 +9,7 @@ dependencies = [
     "google-adk",
     "google-genai",
     "httpx",
+    "langfuse",
+    "opentelemetry-sdk",
+    "openinference-instrumentation-google-adk",
 ]
