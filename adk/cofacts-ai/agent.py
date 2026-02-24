@@ -26,8 +26,12 @@ from .tools import (
     submit_cofacts_reply,
     resolve_vertex_redirect
 )
+from .instrumentation import setup_instrumentation
 
 load_dotenv()
+
+# Initialize Langfuse instrumentation for observability
+setup_instrumentation()
 
 
 async def append_grounding_sources(
