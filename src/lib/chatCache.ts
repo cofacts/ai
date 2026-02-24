@@ -246,7 +246,7 @@ export function applyEventToState(
   // 1. Writer draft updates
   if (event.author === 'writer' && text && event.partial) {
     draftResponse += text
-    return { ...prev, draftResponse }
+    // Don't return early — fall through to also update agent message text
   }
 
   // 2. User history replay deduplication
