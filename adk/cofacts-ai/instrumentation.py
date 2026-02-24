@@ -1,10 +1,7 @@
 import os
 import logging
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from openinference.instrumentation.google_adk import GoogleADKInstrumentor
-from langfuse.opentelemetry import LangfuseExporter
+from langfuse import get_client
 
 logger = logging.getLogger(__name__)
 
@@ -16,20 +13,10 @@ def setup_instrumentation():
         logger.warning("Langfuse credentials not found. Skipping instrumentation.")
         return
 
-    # Set up the tracer provider
-    trace_provider = TracerProvider()
+    langfuse = get_client()
 
-    # Configure Langfuse exporter
-    # It automatically picks up LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST from env
-    exporter = LangfuseExporter()
-
-    # Add the exporter to the tracer provider
-    trace_provider.add_span_processor(BatchSpanProcessor(exporter))
-
-    # Register the tracer provider globally
-    trace.set_tracer_provider(trace_provider)
-
-    # Instrument Google ADK
-    GoogleADKInstrumentor().instrument()
-
-    logger.info("Langfuse instrumentation initialized.")
+    if langfuse.auth_check():
+        GoogleADKInstrumentor().instrument()
+        logger.info("Langfuse instrumentation initialized.")
+    else:
+        logger.warning("Langfuse authentication failed. Skipping instrumentation.")
