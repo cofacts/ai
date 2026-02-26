@@ -77,12 +77,6 @@ jobs:
       - name: Configure Docker
         run: gcloud auth configure-docker asia-east1-docker.pkg.dev
 
-      - name: Create Artifact Registry Repository
-        run: |
-          gcloud artifacts repositories describe cofacts-ai --location=asia-east1 --project=${{ secrets.GC_PROJECT_ID }} || \
-          gcloud artifacts repositories create cofacts-ai --repository-format=docker \
-            --location=asia-east1 --description="Docker repository for cofacts-ai" --project=${{ secrets.GC_PROJECT_ID }}
-
       - name: Build and Push Images
         env:
           PROJECT_ID: ${{ secrets.GC_PROJECT_ID }}
