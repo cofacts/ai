@@ -1,0 +1,41 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: cofacts-ai
+  labels:
+    cloud.googleapis.com/location: asia-east1
+  annotations:
+    run.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/container-dependencies: '{"ingress":["backend"]}'
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+    spec:
+      containers:
+      - name: ingress
+        image: ${FRONTEND_IMAGE}
+        ports:
+        - containerPort: 3000
+        env:
+        - name: ADK_URL
+          value: "http://localhost:8000"
+        # Add other frontend environment variables here
+      - name: backend
+        image: ${BACKEND_IMAGE}
+        env:
+        - name: PORT
+          value: "8000"
+        # Add backend secrets and environment variables here
+        # - name: GOOGLE_API_KEY
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: GOOGLE_API_KEY
+        #       key: latest
+        startupProbe:
+          tcpSocket:
+            port: 8000
+  ${TRAFFIC_BLOCK}
