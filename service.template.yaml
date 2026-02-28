@@ -29,13 +29,28 @@ spec:
         env:
         - name: PORT
           value: "8000"
-        # Add backend secrets and environment variables here
-        # - name: GOOGLE_API_KEY
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: GOOGLE_API_KEY
-        #       key: latest
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: GOOGLE_API_KEY
+              key: latest
+        - name: LANGFUSE_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: LANGFUSE_PUBLIC_KEY
+              key: latest
+        - name: LANGFUSE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: LANGFUSE_SECRET_KEY
+              key: latest
+        - name: LANGFUSE_BASE_URL
+          value: "https://langfuse.cofacts.tw"
         startupProbe:
           tcpSocket:
             port: 8000
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 6
   ${TRAFFIC_BLOCK}
