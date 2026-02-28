@@ -1,0 +1,47 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: cofacts-ai
+  labels:
+    cloud.googleapis.com/location: asia-east1
+  annotations:
+    run.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/container-dependencies: '{"ingress":["backend"]}'
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+    spec:
+      containers:
+      - name: ingress
+        image: ${FRONTEND_IMAGE}
+        ports:
+        - containerPort: 3000
+        env:
+        - name: ADK_URL
+          value: "http://localhost:8000"
+        # Add other frontend environment variables here
+      - name: backend
+        image: ${BACKEND_IMAGE}
+        env:
+        - name: PORT
+          value: "8000"
+        - name: GOOGLE_API_KEY
+          value: "${GOOGLE_API_KEY}"
+        - name: LANGFUSE_PUBLIC_KEY
+          value: "${LANGFUSE_PUBLIC_KEY}"
+        - name: LANGFUSE_SECRET_KEY
+          value: "${LANGFUSE_SECRET_KEY}"
+        - name: LANGFUSE_BASE_URL
+          value: "https://langfuse.cofacts.tw"
+        startupProbe:
+          tcpSocket:
+            port: 8000
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 6
+  ${TRAFFIC_BLOCK}
