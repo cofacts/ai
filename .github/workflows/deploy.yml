@@ -121,6 +121,12 @@ jobs:
           CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         run: |
           envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${GOOGLE_API_KEY} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${CLOUDFLARE_TUNNEL_TOKEN}' < service.template.yaml > service.yaml
+
+          if [ -z "$CLOUDFLARE_TUNNEL_TOKEN" ]; then
+            echo "CLOUDFLARE_TUNNEL_TOKEN is empty, removing cloudflared sidecar from deployment."
+            sed -i '/- name: cloudflared/,/memory: "128Mi"/d' service.yaml
+          fi
+
           cat service.yaml
 
       - name: Deploy to Cloud Run
