@@ -18,6 +18,10 @@ spec:
       containers:
       - name: ingress
         image: ${FRONTEND_IMAGE}
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1024Mi"
         ports:
         - containerPort: 3000
         env:
@@ -26,6 +30,10 @@ spec:
         # Add other frontend environment variables here
       - name: backend
         image: ${BACKEND_IMAGE}
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "2048Mi"
         env:
         - name: PORT
           value: "8000"
