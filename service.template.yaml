@@ -14,6 +14,7 @@ spec:
         run.googleapis.com/container-dependencies: '{"ingress":["backend"]}'
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/cpu-throttling: "false"
     spec:
       containers:
       - name: ingress
@@ -52,4 +53,19 @@ spec:
           timeoutSeconds: 5
           periodSeconds: 10
           failureThreshold: 6
+      - name: cloudflared
+        image: cloudflare/cloudflared:latest
+        args: ["tunnel", "--no-autoupdate", "run"]
+        env:
+        - name: TUNNEL_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: CLOUDFLARE_TUNNEL_TOKEN
+              key: latest
+        - name: TUNNEL_URL
+          value: "http://localhost:8080"
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
   ${TRAFFIC_BLOCK}
