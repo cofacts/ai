@@ -118,8 +118,9 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         run: |
-          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${GOOGLE_API_KEY} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY}' < service.template.yaml > service.yaml
+          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${GOOGLE_API_KEY} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${CLOUDFLARE_TUNNEL_TOKEN}' < service.template.yaml > service.yaml
           cat service.yaml
 
       - name: Deploy to Cloud Run
