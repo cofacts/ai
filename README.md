@@ -1,12 +1,12 @@
-# CopilotKit <> ADK Starter
+# Cofacts.ai
 
-This is a starter template for building AI agents using Google's [ADK](https://google.github.io/adk-docs/) and [CopilotKit](https://copilotkit.ai). It provides a modern TanStack Start application with an integrated investment analyst agent that can research stocks, analyze market data, and provide investment insights.
+This is the web application for [Cofacts.ai](https://cofacts.ai), a chat-based AI assistant for collaborative fact-checking. It provides a modern TanStack Start application with an integrated multi-agent system powered by Google's [ADK](https://google.github.io/adk-docs/) that can research claims, verify sources, and help compose fact-check replies.
 
 ## Prerequisites
 
 - Node.js 18+
 - Python 3.12+
-- Google Makersuite API Key (for the ADK agent) (see https://makersuite.google.com/app/apikey)
+- Google AI Studio API Key (for the ADK agent) (see https://aistudio.google.com/app/apikey)
 - pnpm
 
 > **Note:** This repository includes a pnpm-lock.yaml file. Please ensure you have pnpm installed.
@@ -25,19 +25,21 @@ pnpm install
 pnpm install:agent
 ```
 
-> **Note:** This will automatically setup a `.venv` (virtual environment) inside the `agent` directory.
+> **Note:** This will automatically setup a `.venv` (virtual environment) inside the `adk` directory.
 >
 > To activate the virtual environment manually, you can run:
 >
 > ```bash
-> source agent/.venv/bin/activate
+> source adk/.venv/bin/activate
 > ```
 
-3. Set up your Google API key:
+3. Set up environment variables for the ADK agent:
 
 ```bash
-export GOOGLE_API_KEY="your-google-api-key-here"
+cp adk/cofacts-ai/.env.example adk/cofacts-ai/.env
 ```
+
+Edit `adk/cofacts-ai/.env` and fill in the required values (at minimum `GOOGLE_API_KEY`).
 
 4. Start the development server:
 
@@ -46,6 +48,21 @@ pnpm dev
 ```
 
 This will start both the UI and agent servers concurrently.
+
+## Deployment
+
+This project uses GitHub Actions for automated deployments to Google Cloud Run.
+
+### Staging Environment
+- **Trigger**: Every push or merge to the `master` branch.
+- **URL**: cofacts-ai-236494820908.asia-east1.run.app .
+- **Traffic**: The `master` version always receives 100% of the traffic.
+
+### PR Previews
+- **Trigger**: Every Pull Request (opened or updated).
+- **Behavior**: A dedicated revision is created for each PR with a unique tag.
+- **URL**: You can find the preview URL in the GitHub PR comments or the "Deployments" section of the PR sidebar.
+- **Isolation**: Each PR has its own isolated preview environment, and deployments to `master` will not interrupt existing PR previews.
 
 ## Available Scripts
 
@@ -62,23 +79,15 @@ The following scripts can also be run using pnpm:
 - `check` - Runs both Prettier and ESLint (format and lint)
 - `install:agent` - Installs Python dependencies for the agent using `uv`
 
-## Documentation
-
-The main UI component is in `app/routes/index.tsx`. You can:
-
-- Modify the theme colors and styling
-- Add new frontend actions
-- Customize the CopilotKit sidebar appearance
-
 ## 📚 Documentation
 
 - [ADK Documentation](https://google.github.io/adk-docs/) - Learn more about the ADK and its features
-- [CopilotKit Documentation](https://docs.copilotkit.ai) - Explore CopilotKit's capabilities
 - [TanStack Start Documentation](https://tanstack.com/start/latest) - Learn about TanStack Start features and API
+- [TanStack Query Documentation](https://tanstack.com/query/latest) - Learn about TanStack Query for data fetching
 
 ## Contributing
 
-Feel free to submit issues and enhancement requests! This starter is designed to be easily extensible.
+Feel free to submit issues and enhancement requests!
 
 ## License
 
@@ -99,6 +108,6 @@ If you see "I'm having trouble connecting to my tools", make sure:
 If you encounter Python import errors:
 
 ```bash
-cd agent
+cd adk
 uv sync
 ```
