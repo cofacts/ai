@@ -12,4 +12,4 @@ COPY --from=builder /app /app
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
-CMD ["adk", "web", "--port", "8000", "--host", "0.0.0.0", "cofacts-ai"]
+CMD ["adk", "web", "--port", "8000", "--host", "0.0.0.0", "."]
