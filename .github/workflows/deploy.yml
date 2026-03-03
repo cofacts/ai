@@ -96,22 +96,34 @@ jobs:
       - name: Prepare Traffic Block
         id: traffic
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            # Get current revision serving 100% traffic or latest ready revision
-            CURRENT_REV=$(gcloud run services describe cofacts-ai --region asia-east1 --format="value(status.traffic.first(percent=100).revisionName)" || echo "")
-            TAG="pr-${{ github.event.number }}"
+          # Fetch the current traffic state so we can preserve existing tags
+          CURRENT_TRAFFIC=$(gcloud run services describe cofacts-ai --region asia-east1 --format="json" 2>/dev/null || echo '{"status":{"traffic":[]}}')
 
-            if [ -z "$CURRENT_REV" ]; then
-              # First deployment or service doesn't exist, default to 100% to new
-              echo "TRAFFIC_BLOCK=traffic: [{percent: 100, latestRevision: true, tag: \"$TAG\"}]" >> $GITHUB_ENV
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            TAG="pr-${{ github.event.number }}"
+            # Find the revision currently handling 100% traffic
+            CURRENT_100_REV=$(echo "$CURRENT_TRAFFIC" | jq -r '(.status.traffic // []) | map(select(.percent == 100))[0].revisionName // empty')
+
+            if [ -z "$CURRENT_100_REV" ]; then
+              # First deployment or no 100% revision, default 100% to the new revision and tag it
+              TRAFFIC_JSON="[{\"latestRevision\": true, \"percent\": 100, \"tag\": \"$TAG\"}]"
             else
-              # JSON format for traffic block
-              echo "TRAFFIC_BLOCK=traffic: [{revisionName: \"$CURRENT_REV\", percent: 100}, {latestRevision: true, percent: 0, tag: \"$TAG\"}]" >> $GITHUB_ENV
+              # Extract all existing tags except the current PR tag so we update it safely
+              EXISTING_TAGS=$(echo "$CURRENT_TRAFFIC" | jq -c "[ (.status.traffic // [])[] | select(.tag != null and .tag != \"$TAG\") | {revisionName: .revisionName, tag: .tag, percent: 0} ]")
+
+              # Combine them together: maintain current 100% revision, tag the new revision, and keep existing tags
+              TRAFFIC_JSON=$(jq -n --arg rev "$CURRENT_100_REV" --arg tag "$TAG" --argjson extags "$EXISTING_TAGS" \
+                '[{"revisionName": $rev, "percent": 100}, {"latestRevision": true, "percent": 0, "tag": $tag}] + $extags')
             fi
           else
-            # Production: 100% to latest
-            echo "TRAFFIC_BLOCK=traffic: [{latestRevision: true, percent: 100}]" >> $GITHUB_ENV
+            # Master: Send 100% to the new revision, and preserve all existing tags by keeping them with 0% traffic
+            EXISTING_TAGS=$(echo "$CURRENT_TRAFFIC" | jq -c "[ (.status.traffic // [])[] | select(.tag != null) | {revisionName: .revisionName, tag: .tag, percent: 0} ]")
+
+            TRAFFIC_JSON=$(jq -n --argjson extags "$EXISTING_TAGS" \
+              '[{"latestRevision": true, "percent": 100}] + $extags')
           fi
+
+          echo "TRAFFIC_BLOCK=traffic: $TRAFFIC_JSON" >> $GITHUB_ENV
 
       - name: Generate Service YAML
         env:
