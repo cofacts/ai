@@ -112,14 +112,14 @@ jobs:
               EXISTING_TAGS=$(echo "$CURRENT_TRAFFIC" | jq -c "[ (.status.traffic // [])[] | select(.tag != null and .tag != \"$TAG\") | {revisionName: .revisionName, tag: .tag, percent: 0} ]")
 
               # Combine them together: maintain current 100% revision, tag the new revision, and keep existing tags
-              TRAFFIC_JSON=$(jq -n --arg rev "$CURRENT_100_REV" --arg tag "$TAG" --argjson extags "$EXISTING_TAGS" \
+              TRAFFIC_JSON=$(jq -n -c --arg rev "$CURRENT_100_REV" --arg tag "$TAG" --argjson extags "$EXISTING_TAGS" \
                 '[{"revisionName": $rev, "percent": 100}, {"latestRevision": true, "percent": 0, "tag": $tag}] + $extags')
             fi
           else
             # Master: Send 100% to the new revision, and preserve all existing tags by keeping them with 0% traffic
             EXISTING_TAGS=$(echo "$CURRENT_TRAFFIC" | jq -c "[ (.status.traffic // [])[] | select(.tag != null) | {revisionName: .revisionName, tag: .tag, percent: 0} ]")
 
-            TRAFFIC_JSON=$(jq -n --argjson extags "$EXISTING_TAGS" \
+            TRAFFIC_JSON=$(jq -n -c --argjson extags "$EXISTING_TAGS" \
               '[{"latestRevision": true, "percent": 100}] + $extags')
           fi
 
