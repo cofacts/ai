@@ -1,4 +1,11 @@
-adk/
 node_modules/
 .output/
 .git/
+packages/*/node_modules/
+packages/*/.output/
+packages/*/dist/
+dist/
+__pycache__
+*.pyc
+.venv
+.env

@@ -25,8 +25,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./adk
-          file: ./adk/Dockerfile
+          context: .
+          file: ./packages/adk/Dockerfile
           push: true
           tags: cofacts/adk:latest
           cache-from: type=gha
@@ -51,7 +51,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
+          file: ./packages/web/Dockerfile
           push: true
           tags: cofacts/site:latest
           cache-from: type=gha

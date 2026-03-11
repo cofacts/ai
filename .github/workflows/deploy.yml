@@ -83,11 +83,11 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           # Build frontend
-          docker build -t asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/frontend:$SHA -f Dockerfile .
+          docker build -t asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/frontend:$SHA -f packages/web/Dockerfile .
           docker push asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/frontend:$SHA
 
           # Build backend
-          docker build -t asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/backend:$SHA -f adk/Dockerfile adk
+          docker build -t asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/backend:$SHA -f packages/adk/Dockerfile .
           docker push asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/backend:$SHA
 
           echo "FRONTEND_IMAGE=asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/frontend:$SHA" >> $GITHUB_ENV

@@ -1,0 +1,13 @@
+{
+  "name": "@cofacts-ai/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./schemas": "./src/schemas.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  }
+}
