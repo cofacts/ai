@@ -1,4 +1,5 @@
 import { ADK_APP_NAME, ADK_USER_ID } from './adk'
+import { runChat } from './sessions.functions'
 import type { QueryClient } from '@tanstack/react-query'
 import type {
   AdkEvent,
@@ -36,8 +37,8 @@ export interface StartStreamOptions {
   appName?: string
   userId?: string
   payload?: {
-    new_message?: { role: string; parts: Array<{ text: string }> }
-    invocation_id?: string
+    newMessage?: { role: string; parts: Array<{ text: string }> }
+    invocationId?: string
   }
 }
 
@@ -88,58 +89,20 @@ export async function startChatStream({
 
   try {
     const body = {
-      app_name: appName,
-      user_id: userId,
-      session_id: sessionId,
+      appName,
+      userId,
+      sessionId,
       streaming: true,
       ...payload,
     }
 
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+    const stream = await runChat({
+      data: body,
       signal: controller.signal,
     })
 
-    if (!response.ok) {
-      throw new Error(
-        `Endpoint returned ${response.status}: ${response.statusText}`,
-      )
-    }
-
-    const reader = response.body?.getReader()
-    if (!reader) throw new Error('No response body')
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop() ?? ''
-
-      for (const part of parts) {
-        const lines = part.split('\n')
-        let data = ''
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            data += line.slice(6)
-          }
-        }
-        if (data) {
-          try {
-            const event = JSON.parse(data) as AdkEvent
-            processEventIntoCache(queryClient, sessionId, event)
-          } catch {
-            // Skip unparseable events
-          }
-        }
-      }
+    for await (const event of stream) {
+      processEventIntoCache(queryClient, sessionId, event)
     }
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
@@ -208,7 +171,7 @@ export function sendChatMessage(
     queryClient,
     sessionId,
     payload: {
-      new_message: {
+      newMessage: {
         role: 'user',
         parts: [{ text }],
       },

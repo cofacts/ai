@@ -17,3 +17,5 @@ venv/
 __pycache__/
 .venv/
 .adk
+cofacts.ai_ui_mockup
+.claude

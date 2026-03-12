@@ -61,7 +61,7 @@ export function useChat({ sessionId }: UseChatOptions) {
       startChatStream({
         queryClient,
         sessionId,
-        payload: { invocation_id: invocationId },
+        payload: { invocationId: invocationId },
       })
     },
     [queryClient, sessionId],

@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
-import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as AppSessionSessionIdRouteImport } from './routes/_app/session.$sessionId'
 
 const AppRoute = AppRouteImport.update({
@@ -23,11 +22,6 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
-const ApiChatRoute = ApiChatRouteImport.update({
-  id: '/api/chat',
-  path: '/api/chat',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
   id: '/session/$sessionId',
   path: '/session/$sessionId',
@@ -36,32 +30,28 @@ const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
-  '/api/chat': typeof ApiChatRoute
   '/session/$sessionId': typeof AppSessionSessionIdRoute
 }
 export interface FileRoutesByTo {
-  '/api/chat': typeof ApiChatRoute
   '/': typeof AppIndexRoute
   '/session/$sessionId': typeof AppSessionSessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
-  '/api/chat': typeof ApiChatRoute
   '/_app/': typeof AppIndexRoute
   '/_app/session/$sessionId': typeof AppSessionSessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/chat' | '/session/$sessionId'
+  fullPaths: '/' | '/session/$sessionId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/api/chat' | '/' | '/session/$sessionId'
-  id: '__root__' | '/_app' | '/api/chat' | '/_app/' | '/_app/session/$sessionId'
+  to: '/' | '/session/$sessionId'
+  id: '__root__' | '/_app' | '/_app/' | '/_app/session/$sessionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
-  ApiChatRoute: typeof ApiChatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -79,13 +69,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
-    }
-    '/api/chat': {
-      id: '/api/chat'
-      path: '/api/chat'
-      fullPath: '/api/chat'
-      preLoaderRoute: typeof ApiChatRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/_app/session/$sessionId': {
       id: '/_app/session/$sessionId'
@@ -111,7 +94,6 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
-  ApiChatRoute: ApiChatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
