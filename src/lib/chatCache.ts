@@ -76,7 +76,7 @@ export async function startChatStream({
         ...prev.messages,
         {
           id: streamingMsgId,
-          role: 'agent',
+          role: 'model',
           author: 'writer',
           text: '',
           isStreaming: true,
@@ -265,7 +265,7 @@ export function applyEventToState(
   if (toolCalls.length > 0) {
     const last = messages[messages.length - 1]
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (last && last.role === 'agent' && last.isStreaming) {
+    if (last && last.role === 'model' && last.isStreaming) {
       messages = [
         ...messages.slice(0, -1),
         {
@@ -278,7 +278,7 @@ export function applyEventToState(
         ...messages,
         {
           id: genId(),
-          role: 'agent',
+          role: 'model',
           author: event.author ?? 'writer',
           text: '',
           toolCalls,
@@ -295,7 +295,7 @@ export function applyEventToState(
     if (
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       last &&
-      last.role === 'agent' &&
+      last.role === 'model' &&
       last.isStreaming &&
       (last.author ?? 'writer') === (event.author ?? 'writer')
     ) {
@@ -312,7 +312,7 @@ export function applyEventToState(
         ...messages,
         {
           id: genId(),
-          role: 'agent',
+          role: 'model',
           author: event.author ?? 'writer',
           text,
           isStreaming: event.partial !== false,

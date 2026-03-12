@@ -24,7 +24,7 @@ export type AdkRunPayload = components['schemas']['RunAgentRequest']
 
 // ── Chat message types for UI ──────────────────────────────────────
 
-export type MessageRole = 'user' | 'agent'
+export type MessageRole = 'user' | 'model'
 
 export interface ToolCall {
   name: string
