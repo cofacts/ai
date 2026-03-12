@@ -66,9 +66,18 @@ export const createSession = createServerFn({ method: 'POST' })
     return { ok: true }
   })
 
+export type ChatInput = Omit<RunRequest, 'appName' | 'userId' | 'streaming'>
+
 export const runChat = createServerFn({ method: 'POST' })
-  .inputValidator((data: RunRequest) => data)
-  .handler(async function* ({ data: body }) {
+  .inputValidator((data: ChatInput) => data)
+  .handler(async function* ({ data: input }) {
+    const body: RunRequest = {
+      ...input,
+      appName: ADK_APP_NAME,
+      userId: ADK_USER_ID,
+      streaming: true,
+    }
+
     const { response } = await adkClient.POST('/run_sse', {
       parseAs: 'stream',
       body,

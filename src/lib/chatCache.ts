@@ -1,4 +1,3 @@
-import { ADK_APP_NAME, ADK_USER_ID } from './adk'
 import { runChat } from './sessions.functions'
 import type { QueryClient } from '@tanstack/react-query'
 import type {
@@ -34,8 +33,6 @@ const genId = () => `msg-${++messageIdCounter}-${Date.now()}`
 export interface StartStreamOptions {
   queryClient: QueryClient
   sessionId: string
-  appName?: string
-  userId?: string
   payload?: {
     newMessage?: { role: string; parts: Array<{ text: string }> }
     invocationId?: string
@@ -49,8 +46,6 @@ export interface StartStreamOptions {
 export async function startChatStream({
   queryClient,
   sessionId,
-  appName = ADK_APP_NAME,
-  userId = ADK_USER_ID,
   payload = {},
 }: StartStreamOptions) {
   const queryKey = ['chat', sessionId]
@@ -88,16 +83,11 @@ export async function startChatStream({
   })
 
   try {
-    const body = {
-      appName,
-      userId,
-      sessionId,
-      streaming: true,
-      ...payload,
-    }
-
     const stream = await runChat({
-      data: body,
+      data: {
+        sessionId,
+        ...payload,
+      },
       signal: controller.signal,
     })
 
