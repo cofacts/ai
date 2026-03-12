@@ -1,3 +1,4 @@
+import { createFileRoute } from '@tanstack/react-router'
 /**
  * SSE Proxy Server Route for ADK.
  *
@@ -9,26 +10,30 @@
  *
  * Sessions must be created beforehand via POST /api/sessions.
  */
-import { createFileRoute } from '@tanstack/react-router'
-import type { ChatRequest } from '@/lib/apiTypes'
+// Cannot import ChatRequest from apiTypes since we are deleting it. We can import it from adk-types instead.
+import type { components } from '@/lib/adk-types'
+import { adkClient } from '@/lib/adkClient'
 
-const ADK_INTERNAL_URL = process.env.ADK_URL || 'http://localhost:8000'
+type RunRequest = components['schemas']['RunAgentRequest']
 
 export const Route = createFileRoute('/api/chat')({
   server: {
     handlers: {
       POST: async ({ request }): Promise<Response> => {
-        const body = (await request.json()) as ChatRequest
+        const body = (await request.json()) as RunRequest
 
-        const adkResponse = await fetch(`${ADK_INTERNAL_URL}/run_sse`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        const { response: adkResponse } = await adkClient.POST(
+          '/run_sse',
+          {
+            parseAs: 'stream',
+            body,
+            signal: request.signal,
           },
-          body: JSON.stringify(body),
-          signal: request.signal,
-        })
+        )
 
+        // adkClient typings return `error` if HTTP status is not successful.
+        // But since `parseAs: 'stream'` returns Response directly, `error` might not be parsed,
+        // or response.ok handles it.
         if (!adkResponse.ok) {
           return new Response(
             JSON.stringify({

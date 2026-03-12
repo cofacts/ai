@@ -9,70 +9,18 @@ export const ADK_BASE_URL = 'http://localhost:8000'
 export const ADK_APP_NAME = 'cofacts_ai'
 export const ADK_USER_ID = 'anonymous'
 
-// ── Types ──────────────────────────────────────────────────────────
+import type { components } from './adk-types'
 
-export interface AdkPart {
-  text?: string
-  functionCall?: {
-    name: string
-    args: Record<string, unknown>
-  }
-  functionResponse?: {
-    name: string
-    response: Record<string, unknown>
-  }
-}
+// ── Types from OpenAPI Spec ────────────────────────────────────────
 
-export interface AdkContent {
-  role: string
-  parts: Array<AdkPart>
-}
+// We re-export these from the generated OpenAPI types so the UI code
+// doesn't have to change, but they stay perfectly in sync with ADK.
 
-export interface AdkEvent {
-  id?: string
-  invocation_id?: string
-  author?: string
-  content?: AdkContent
-  partial?: boolean
-  is_final_response?: boolean
-  actions?: {
-    artifact_delta?: Record<string, unknown>
-    state_delta?: Record<string, unknown>
-  }
-  grounding_metadata?: {
-    grounding_chunks?: Array<{
-      web?: {
-        uri?: string
-        title?: string
-      }
-    }>
-    search_entry_point?: {
-      rendered_content?: string
-    }
-  }
-  error_code?: string
-  error_message?: string
-}
-
-export interface AdkSession {
-  id: string
-  app_name: string
-  user_id: string
-  state: Record<string, unknown>
-  events: Array<AdkEvent>
-}
-
-export interface AdkRunPayload {
-  app_name: string
-  user_id: string
-  session_id: string
-  new_message?: {
-    role: string
-    parts: Array<{ text: string }>
-  }
-  invocation_id?: string
-  streaming?: boolean
-}
+export type AdkPart = components['schemas']['Part-Output']
+export type AdkContent = components['schemas']['Content-Output']
+export type AdkEvent = components['schemas']['Event-Output']
+export type AdkSession = components['schemas']['Session']
+export type AdkRunPayload = components['schemas']['RunAgentRequest']
 
 // ── Chat message types for UI ──────────────────────────────────────
 

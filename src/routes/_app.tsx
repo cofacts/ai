@@ -16,7 +16,6 @@ function AppLayout() {
   const [activeDrawerTab, setActiveDrawerTab] = useState<DrawerTab>('editor')
 
   const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), [])
-  const toggleDrawer = useCallback(() => setDrawerOpen((v) => !v), [])
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">

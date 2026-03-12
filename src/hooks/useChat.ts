@@ -9,7 +9,7 @@ import {
   sendChatMessage,
   startChatStream,
 } from '@/lib/chatCache'
-import { getSession } from '@/lib/api'
+import { getSession } from '@/lib/sessions.functions'
 
 interface UseChatOptions {
   sessionId: string
@@ -29,7 +29,7 @@ export function useChat({ sessionId }: UseChatOptions) {
       // When cache is cold (direct navigation), fetch from ADK.
       // If cache is populated (LandingPage -> Session), use it without refetch (staleTime: Infinity).
       queryFn: async () => {
-        const session = await getSession(sessionId)
+        const session = await getSession({ data: sessionId })
         return convertAdkSessionToChatState(session)
       },
       staleTime: Infinity,

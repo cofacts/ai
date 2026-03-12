@@ -234,8 +234,8 @@ export function applyEventToState(
   const toolCalls: Array<ToolCall> = event.content.parts
     .filter((p) => p.functionCall)
     .map((p) => ({
-      name: p.functionCall!.name,
-      args: p.functionCall!.args,
+      name: p.functionCall!.name ?? '',
+      args: p.functionCall!.args ?? {},
     }))
 
   // Logic from processEventIntoCache
@@ -323,9 +323,9 @@ export function applyEventToState(
   }
 
   // 5. Grounding metadata (Sources)
-  if (event.grounding_metadata?.grounding_chunks) {
+  if (event.groundingMetadata?.groundingChunks) {
     const newSources: Array<SourceItem> =
-      event.grounding_metadata.grounding_chunks
+      event.groundingMetadata.groundingChunks
         .filter((c) => c.web?.uri)
         .map((c) => {
           const url = c.web!.uri!
@@ -361,7 +361,7 @@ export function convertAdkSessionToChatState(
   session: AdkSession,
 ): ChatSessionState {
   let state = INITIAL_CHAT_STATE
-  for (const event of session.events) {
+  for (const event of session.events ?? []) {
     state = applyEventToState(state, event)
   }
 

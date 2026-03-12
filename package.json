@@ -13,7 +13,8 @@
     "format": "prettier",
     "check": "prettier --write . && eslint --fix",
     "install:agent": "uv sync --project adk",
-    "postinstall": "pnpm run install:agent"
+    "postinstall": "pnpm run install:agent",
+    "typegen": "openapi-typescript http://localhost:8000/openapi.json -o src/lib/adk-types.d.ts && sed -i '' 's/: unknown/: {}/g' src/lib/adk-types.d.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -30,6 +31,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.574.0",
     "nitro": "latest",
+    "openapi-fetch": "^0.17.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "shadcn": "^3.8.5",
@@ -49,6 +51,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^9.2.1",
     "jsdom": "^27.0.0",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.5.3",
     "typescript": "^5.7.2",
     "vite": "^7.1.7",
