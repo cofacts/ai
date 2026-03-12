@@ -1,0 +1,13 @@
+# Python virtual environment (macOS binaries won't work inside Linux container)
+.venv
+
+# ADK local state / cache
+.adk
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+
+# env files (injected at runtime)
+cofacts_ai/.env
