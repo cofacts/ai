@@ -16,3 +16,4 @@ todos.json
 venv/
 __pycache__/
 .venv/
+.adk
