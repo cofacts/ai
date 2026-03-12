@@ -6,7 +6,7 @@
  */
 
 export const ADK_BASE_URL = 'http://localhost:8000'
-export const ADK_APP_NAME = 'cofacts-ai'
+export const ADK_APP_NAME = 'cofacts_ai'
 export const ADK_USER_ID = 'anonymous'
 
 // ── Types ──────────────────────────────────────────────────────────

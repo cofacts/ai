@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { AdkSession } from '@/lib/adk'
 
 const ADK_INTERNAL_URL = process.env.ADK_URL || 'http://localhost:8000'
-const APP_NAME = 'cofacts-ai'
+const APP_NAME = 'cofacts_ai'
 const USER_ID = 'anonymous'
 
 export const Route = createFileRoute('/api/sessions/$sessionId')({

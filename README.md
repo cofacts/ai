@@ -36,10 +36,10 @@ pnpm install:agent
 3. Set up environment variables for the ADK agent:
 
 ```bash
-cp adk/cofacts-ai/.env.example adk/cofacts-ai/.env
+cp adk/cofacts_ai/.env.example adk/cofacts_ai/.env
 ```
 
-Edit `adk/cofacts-ai/.env` and fill in the required values (at minimum `GOOGLE_API_KEY`).
+Edit `adk/cofacts_ai/.env` and fill in the required values (at minimum `GOOGLE_API_KEY`).
 
 4. Start the development server:
 

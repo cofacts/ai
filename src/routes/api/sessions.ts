@@ -14,7 +14,7 @@ import type {
 } from '@/lib/apiTypes'
 
 const ADK_INTERNAL_URL = process.env.ADK_URL || 'http://localhost:8000'
-const APP_NAME = 'cofacts-ai'
+const APP_NAME = 'cofacts_ai'
 const USER_ID = 'anonymous'
 
 export const Route = createFileRoute('/api/sessions')({
