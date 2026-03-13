@@ -36,10 +36,10 @@ pnpm install:agent
 3. Set up environment variables for the ADK agent:
 
 ```bash
-cp adk/cofacts-ai/.env.example adk/cofacts-ai/.env
+cp adk/cofacts_ai/.env.example adk/cofacts_ai/.env
 ```
 
-Edit `adk/cofacts-ai/.env` and fill in the required values (at minimum `GOOGLE_API_KEY`).
+Edit `adk/cofacts_ai/.env` and fill in the required values (at minimum `GOOGLE_API_KEY`).
 
 4. Start the development server:
 
@@ -47,11 +47,40 @@ Edit `adk/cofacts-ai/.env` and fill in the required values (at minimum `GOOGLE_A
 pnpm dev
 ```
 
-This will start both the UI and agent servers concurrently.
+This will start both the UI and agent servers concurrently:
+
+- http://localhost:3000 for UI
+- http://localhost:8000 for ADK web
+- http://localhost:8000/docs for ADK API docs
 
 ## Deployment
 
 This project uses GitHub Actions for automated deployments to Google Cloud Run.
+
+### Local Docker Testing
+
+To build and test both Docker images locally (mirroring what the CI pipeline does):
+
+1. Make sure `adk/cofacts_ai/.env` exists and is filled in (see [Getting Started](#getting-started) step 3).
+
+2. Build and start the containers:
+
+```bash
+docker compose up --build
+```
+
+This will:
+- Build the **frontend** image from the root `Dockerfile`
+- Build the **backend** image from `adk/Dockerfile`
+- Start both containers, with the frontend waiting for the backend to be healthy
+
+3. Open http://localhost:3000 to test the application.
+
+To stop:
+
+```bash
+docker compose down
+```
 
 ### Staging Environment
 - **Trigger**: Every push or merge to the `master` branch.
