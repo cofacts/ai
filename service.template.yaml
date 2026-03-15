@@ -14,6 +14,7 @@ spec:
         run.googleapis.com/container-dependencies: '{"ingress":["backend"]}'
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/cloudsql-instances: industrious-eye-145611:asia-east1:cofacts
     spec:
       containers:
       - name: ingress
@@ -45,6 +46,8 @@ spec:
           value: "${LANGFUSE_SECRET_KEY}"
         - name: LANGFUSE_BASE_URL
           value: "https://langfuse.cofacts.tw"
+        - name: DATABASE_URL
+          value: "${DATABASE_URL}"
         startupProbe:
           tcpSocket:
             port: 8000

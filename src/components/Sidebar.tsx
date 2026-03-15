@@ -1,5 +1,12 @@
 import { Link, useParams } from '@tanstack/react-router'
+import { useCallback, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { getSessionTitle, useSessions } from '@/hooks/useSessions'
+import {
+  SESSION_TITLE_KEY,
+  listSessions,
+  updateSession,
+} from '@/lib/sessions.functions'
 
 interface SidebarProps {
   isOpen: boolean
@@ -12,6 +19,50 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     .sessionId
 
   const { data: sessions, isLoading } = useSessions()
+  const queryClient = useQueryClient()
+
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+
+  const handleStartEdit = useCallback(
+    (e: React.MouseEvent, sessionId: string, currentTitle: string) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setEditingSessionId(sessionId)
+      setEditTitle(currentTitle)
+    },
+    [],
+  )
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingSessionId(null)
+    setEditTitle('')
+  }, [])
+
+  const handleSaveEdit = useCallback(
+    async (sessionId: string) => {
+      if (!editTitle.trim()) {
+        handleCancelEdit()
+        return
+      }
+
+      try {
+        await updateSession({
+          data: {
+            sessionId,
+            stateDelta: { [SESSION_TITLE_KEY]: editTitle.trim() },
+          },
+        })
+        // Invalidate sessions query to refresh the list
+        await queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      } catch (err) {
+        console.error('Failed to update session title:', err)
+      } finally {
+        handleCancelEdit()
+      }
+    },
+    [editTitle, handleCancelEdit, queryClient],
+  )
 
   return (
     <>
@@ -70,28 +121,60 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           {sessions?.map((session) => {
             const isActive = currentSessionId === session.id
             const title = getSessionTitle(session)
+            const isEditing = editingSessionId === session.id
+
             return (
-              <Link
-                key={session.id}
-                to="/session/$sessionId"
-                params={{ sessionId: session.id }}
-                onClick={onClose}
-                className={`
-                  flex flex-col p-3 rounded-lg group transition-colors
-                  ${isActive ? 'bg-primary/10 text-text-main' : 'hover:bg-gray-50 text-text-muted'}
-                `}
-              >
-                <div className="flex-1 min-w-0">
-                  <div
-                    className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
+              <div key={session.id} className="relative group">
+                <Link
+                  to="/session/$sessionId"
+                  params={{ sessionId: session.id }}
+                  onClick={onClose}
+                  className={`
+                    flex flex-col p-3 rounded-lg transition-colors w-full
+                    ${isActive ? 'bg-primary/10 text-text-main' : 'hover:bg-gray-50 text-text-muted'}
+                  `}
+                >
+                  <div className="flex-1 min-w-0 pr-6">
+                    {isEditing ? (
+                      <input
+                        autoFocus
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onBlur={() => handleSaveEdit(session.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit(session.id)
+                          if (e.key === 'Escape') handleCancelEdit()
+                        }}
+                        className="w-full text-sm font-medium bg-white border border-primary rounded px-1 outline-none"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
+                      >
+                        {title}
+                      </div>
+                    )}
+                    <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
+                      {session.id.slice(0, 8)}…
+                    </div>
+                  </div>
+                </Link>
+
+                {!isEditing && (
+                  <button
+                    onClick={(e) => handleStartEdit(e, session.id, title)}
+                    className="absolute right-2 top-3 p-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-primary transition-opacity"
                   >
-                    {title}
-                  </div>
-                  <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
-                    {session.id.slice(0, 8)}…
-                  </div>
-                </div>
-              </Link>
+                    <span className="material-symbols-outlined text-sm">
+                      edit
+                    </span>
+                  </button>
+                )}
+              </div>
             )
           })}
         </div>
