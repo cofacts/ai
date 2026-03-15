@@ -217,7 +217,6 @@ export function applyEventToState(
   // 3. Tool calls
   if (toolCalls.length > 0) {
     const last = messages[messages.length - 1]
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (last && last.role === 'model' && last.isStreaming) {
       messages = [
         ...messages.slice(0, -1),
@@ -246,7 +245,6 @@ export function applyEventToState(
   if (text && event.content.role === 'model') {
     const last = messages[messages.length - 1]
     if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       last &&
       last.role === 'model' &&
       last.isStreaming &&
@@ -256,7 +254,7 @@ export function applyEventToState(
         ...messages.slice(0, -1),
         {
           ...last,
-          text: event.partial ? last.text + text : last.text + text,
+          text: last.text + text,
           isStreaming: event.partial !== false,
         },
       ]

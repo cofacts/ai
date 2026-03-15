@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - PORT=3000
       - ADK_URL=http://backend:8000
@@ -17,14 +17,20 @@ services:
       context: ./adk
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - '8000:8000'
     env_file:
       - ./adk/cofacts_ai/.env
     environment:
       - PORT=8000
       - LANGFUSE_BASE_URL=https://langfuse.cofacts.tw
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
       interval: 10s
       timeout: 5s
       retries: 6
