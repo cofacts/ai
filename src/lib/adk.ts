@@ -22,17 +22,9 @@ export type AdkRunPayload = components['schemas']['RunAgentRequest']
 
 export type MessageRole = 'user' | 'model'
 
-export interface ToolCall {
-  name: string
-  args?: Record<string, unknown>
-}
-
-export interface ChatMessage {
+export interface ChatMessage extends AdkContent {
   id: string
-  role: MessageRole
   author?: string
-  text: string
-  toolCalls?: Array<ToolCall>
   isStreaming?: boolean
   timestamp?: Date
 }
