@@ -229,7 +229,7 @@ export function applyEventToState(
         if (event.partial && part.text) {
           // Streaming text: append to last text part if it exists
           const lastPart = updatedParts[updatedParts.length - 1]
-          if (lastPart.text !== undefined) {
+          if (lastPart?.text !== undefined) {
             updatedParts[updatedParts.length - 1] = {
               ...lastPart,
               text: lastPart.text + part.text,
