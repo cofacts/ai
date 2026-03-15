@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { sendChatMessage } from '@/lib/chatCache'
-import { createSession } from '@/lib/api'
+import { createSession } from '@/lib/sessions.functions'
 
 export const Route = createFileRoute('/_app/')({
   component: LandingPage,
@@ -28,7 +28,7 @@ function LandingPage() {
 
       // 1. Create the session in ADK upfront
       try {
-        await createSession(sessionId)
+        await createSession({ data: sessionId })
       } catch (err) {
         setError(err instanceof Error ? err.message : '建立工作階段失敗')
         setIsLoading(false)

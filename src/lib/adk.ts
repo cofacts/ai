@@ -1,82 +1,26 @@
 /**
- * ADK (Agent Development Kit) client utilities.
+ * ADK (Agent Development Kit) shared utilities and types.
  *
- * Provides TypeScript types and helpers for communicating with the
- * ADK FastAPI backend running at localhost:8000.
+ * This file is safe to import on both the client and the server.
+ * It primarily re-exports types from the generated OpenAPI spec.
  */
 
-export const ADK_BASE_URL = 'http://localhost:8000'
-export const ADK_APP_NAME = 'cofacts_ai'
-export const ADK_USER_ID = 'anonymous'
+import type { components } from './adk-types'
 
-// ── Types ──────────────────────────────────────────────────────────
+// ── Types from OpenAPI Spec ────────────────────────────────────────
 
-export interface AdkPart {
-  text?: string
-  functionCall?: {
-    name: string
-    args: Record<string, unknown>
-  }
-  functionResponse?: {
-    name: string
-    response: Record<string, unknown>
-  }
-}
+// We re-export these from the generated OpenAPI types so the UI code
+// doesn't have to change, but they stay perfectly in sync with ADK.
 
-export interface AdkContent {
-  role: string
-  parts: Array<AdkPart>
-}
-
-export interface AdkEvent {
-  id?: string
-  invocation_id?: string
-  author?: string
-  content?: AdkContent
-  partial?: boolean
-  is_final_response?: boolean
-  actions?: {
-    artifact_delta?: Record<string, unknown>
-    state_delta?: Record<string, unknown>
-  }
-  grounding_metadata?: {
-    grounding_chunks?: Array<{
-      web?: {
-        uri?: string
-        title?: string
-      }
-    }>
-    search_entry_point?: {
-      rendered_content?: string
-    }
-  }
-  error_code?: string
-  error_message?: string
-}
-
-export interface AdkSession {
-  id: string
-  app_name: string
-  user_id: string
-  state: Record<string, unknown>
-  events: Array<AdkEvent>
-}
-
-export interface AdkRunPayload {
-  app_name: string
-  user_id: string
-  session_id: string
-  new_message?: {
-    role: string
-    parts: Array<{ text: string }>
-  }
-  invocation_id?: string
-  streaming?: boolean
-}
+export type AdkPart = components['schemas']['Part-Output']
+export type AdkContent = components['schemas']['Content-Output']
+export type AdkEvent = components['schemas']['Event-Output']
+export type AdkSession = components['schemas']['Session']
+export type AdkRunPayload = components['schemas']['RunAgentRequest']
 
 // ── Chat message types for UI ──────────────────────────────────────
 
-export type MessageRole = 'user' | 'agent'
+export type MessageRole = 'user' | 'model'
 
 export interface ToolCall {
   name: string
@@ -101,44 +45,4 @@ export interface SourceItem {
   thumbnailUrl?: string
   faviconUrl?: string
   adopted: boolean
-}
-
-// ── SSE Parsing ────────────────────────────────────────────────────
-
-/**
- * Parse a raw SSE text stream into individual event data strings.
- * Each SSE event is separated by a blank line and prefixed with `data: `.
- */
-export function parseSseLines(chunk: string): Array<string> {
-  const events: Array<string> = []
-  const lines = chunk.split('\n')
-  let currentData = ''
-
-  for (const line of lines) {
-    if (line.startsWith('data: ')) {
-      currentData += line.slice(6)
-    } else if (line === '' && currentData) {
-      events.push(currentData)
-      currentData = ''
-    }
-  }
-
-  // Handle case where there's remaining data without trailing newline
-  if (currentData) {
-    events.push(currentData)
-  }
-
-  return events
-}
-
-/**
- * Parse a raw SSE event data string into an AdkEvent object.
- */
-export function parseAdkEvent(data: string): AdkEvent | null {
-  try {
-    return JSON.parse(data) as AdkEvent
-  } catch {
-    console.warn('Failed to parse ADK event:', data)
-    return null
-  }
 }

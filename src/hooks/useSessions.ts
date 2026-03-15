@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { AdkSession } from '@/lib/adk'
-import { listSessions } from '@/lib/api'
+import { listSessions } from '@/lib/sessions.functions'
 
 export function useSessions() {
   return useQuery<Array<AdkSession>>({
