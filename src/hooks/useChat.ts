@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type {
-  ChatSessionState} from '@/lib/chatCache';
+import type { ChatSessionState } from '@/lib/chatCache'
 import {
   INITIAL_CHAT_STATE,
   abortControllers,

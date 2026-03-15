@@ -39,7 +39,7 @@ jobs:
       - name: Run Claude PR Action
         uses: anthropics/claude-code-action@v1
         env:
-          ANTHROPIC_VERTEX_PROJECT_ID: "${{ secrets.GC_PROJECT_ID }}"
-          CLOUD_ML_REGION: "us-east5"
+          ANTHROPIC_VERTEX_PROJECT_ID: '${{ secrets.GC_PROJECT_ID }}'
+          CLOUD_ML_REGION: 'us-east5'
         with:
-          use_vertex: "true"
+          use_vertex: 'true'

@@ -7,6 +7,8 @@ import type { components } from './adk-types'
 
 type RunRequest = components['schemas']['RunAgentRequest']
 
+export const SESSION_TITLE_KEY = 'title'
+
 export const listSessions = createServerFn({ method: 'GET' }).handler(
   async () => {
     const { data, error } = await adkClient.GET(
@@ -41,9 +43,14 @@ export const getSession = createServerFn({ method: 'GET' })
     return data
   })
 
+interface CreateSessionInput {
+  sessionId: string
+  initialState?: Record<string, any>
+}
+
 export const createSession = createServerFn({ method: 'POST' })
-  .inputValidator((sessionId: string) => sessionId)
-  .handler(async ({ data: sessionId }) => {
+  .inputValidator((input: CreateSessionInput) => input)
+  .handler(async ({ data: { sessionId, initialState } }) => {
     const { response } = await adkClient.POST(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
@@ -54,8 +61,9 @@ export const createSession = createServerFn({ method: 'POST' })
             session_id: sessionId,
           },
         },
-        // OpenAPI spec expects body for this POST request
-        body: {},
+        // In the updated ADK schema, the body for /sessions/{session_id} POST
+        // is expected to be the initial state (Record<string, any>).
+        body: initialState ?? {},
       },
     )
 
@@ -65,6 +73,33 @@ export const createSession = createServerFn({ method: 'POST' })
     }
 
     return { ok: true }
+  })
+
+interface UpdateSessionInput {
+  sessionId: string
+  stateDelta: Record<string, any>
+}
+
+export const updateSession = createServerFn({ method: 'PATCH' })
+  .inputValidator((input: UpdateSessionInput) => input)
+  .handler(async ({ data: { sessionId, stateDelta } }) => {
+    const { data, error } = await adkClient.PATCH(
+      '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
+      {
+        params: {
+          path: {
+            app_name: ADK_APP_NAME,
+            user_id: ADK_USER_ID,
+            session_id: sessionId,
+          },
+        },
+        body: {
+          stateDelta,
+        },
+      },
+    )
+    if (error) handleAdkError(error)
+    return data
   })
 
 export type ChatInput = Omit<RunRequest, 'appName' | 'userId' | 'streaming'>
