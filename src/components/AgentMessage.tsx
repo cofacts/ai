@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ChatMessage } from '@/lib/adk'
+import { langfuse } from '@/lib/langfuse'
 
 interface AgentMessageProps {
   message: ChatMessage
@@ -7,6 +8,21 @@ interface AgentMessageProps {
 
 export function AgentMessage({ message }: AgentMessageProps) {
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null)
+
+  const handleFeedback = (type: 'up' | 'down') => {
+    const isDeselect = feedbackGiven === type
+    const newFeedback = isDeselect ? null : type
+    setFeedbackGiven(newFeedback)
+
+    if (message.traceId) {
+      langfuse.score({
+        traceId: message.traceId,
+        name: 'user_feedback',
+        value: isDeselect ? 0 : type === 'up' ? 1 : -1,
+        dataType: 'NUMERIC',
+      })
+    }
+  }
 
   return (
     <div className="flex flex-col items-start w-full">
@@ -74,9 +90,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
       {!message.isStreaming && message.text && (
         <div className="flex items-center gap-3 pt-2 mt-4 border-t border-gray-100">
           <button
-            onClick={() =>
-              setFeedbackGiven(feedbackGiven === 'up' ? null : 'up')
-            }
+            onClick={() => handleFeedback('up')}
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               feedbackGiven === 'up'
                 ? 'text-primary'
@@ -88,9 +102,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
             </span>
           </button>
           <button
-            onClick={() =>
-              setFeedbackGiven(feedbackGiven === 'down' ? null : 'down')
-            }
+            onClick={() => handleFeedback('down')}
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               feedbackGiven === 'down'
                 ? 'text-destructive'

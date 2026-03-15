@@ -191,6 +191,8 @@ export function applyEventToState(
       args: p.functionCall!.args ?? {},
     }))
 
+  const traceId = event.customMetadata?.trace_id as string | undefined
+
   // Logic from processEventIntoCache
   let draftResponse = prev.draftResponse
   let messages = prev.messages
@@ -224,6 +226,7 @@ export function applyEventToState(
         {
           ...last,
           toolCalls: [...(last.toolCalls ?? []), ...toolCalls],
+          traceId: traceId ?? last.traceId,
         },
       ]
     } else {
@@ -237,6 +240,7 @@ export function applyEventToState(
           toolCalls,
           isStreaming: true,
           timestamp: new Date(),
+          traceId,
         },
       ]
     }
@@ -258,6 +262,7 @@ export function applyEventToState(
           ...last,
           text: event.partial ? last.text + text : last.text + text,
           isStreaming: event.partial !== false,
+          traceId: traceId ?? last.traceId,
         },
       ]
     } else {
@@ -270,6 +275,7 @@ export function applyEventToState(
           text,
           isStreaming: event.partial !== false,
           timestamp: new Date(),
+          traceId,
         },
       ]
     }

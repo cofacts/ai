@@ -29,6 +29,7 @@
     "@tanstack/router-plugin": "^1.132.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "langfuse": "^3.38.6",
     "lucide-react": "^0.574.0",
     "nitro": "latest",
     "openapi-fetch": "^0.17.0",

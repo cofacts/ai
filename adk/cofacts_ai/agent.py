@@ -19,6 +19,7 @@ from google.adk.models.llm_response import LlmResponse
 from google.adk.tools import url_context, google_search
 from google.adk.tools.agent_tool import AgentTool
 from datetime import datetime
+from opentelemetry import trace
 
 from .tools import (
     search_cofacts_database,
@@ -43,6 +44,16 @@ async def append_grounding_sources(
     Extracts sources from grounding metadata, resolves redirect URLs,
     and appends them as a markdown list.
     """
+    # 0. Capture Trace ID for frontend association
+    current_span = trace.get_current_span()
+    if current_span:
+        span_context = current_span.get_span_context()
+        if span_context.is_valid:
+            trace_id = trace.format_trace_id(span_context.trace_id)
+            if not llm_response.custom_metadata:
+                llm_response.custom_metadata = {}
+            llm_response.custom_metadata["trace_id"] = trace_id
+
     metadata = llm_response.grounding_metadata
     chunks = metadata.grounding_chunks
     if not chunks:
