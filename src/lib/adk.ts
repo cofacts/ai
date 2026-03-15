@@ -2,12 +2,8 @@
  * ADK (Agent Development Kit) client utilities.
  *
  * Provides TypeScript types and helpers for communicating with the
- * ADK FastAPI backend running at localhost:8000.
+ * ADK FastAPI backend.
  */
-
-export const ADK_BASE_URL = 'http://localhost:8000'
-export const ADK_APP_NAME = 'cofacts_ai'
-export const ADK_USER_ID = 'anonymous'
 
 import type { components } from './adk-types'
 
@@ -49,44 +45,4 @@ export interface SourceItem {
   thumbnailUrl?: string
   faviconUrl?: string
   adopted: boolean
-}
-
-// ── SSE Parsing ────────────────────────────────────────────────────
-
-/**
- * Parse a raw SSE text stream into individual event data strings.
- * Each SSE event is separated by a blank line and prefixed with `data: `.
- */
-export function parseSseLines(chunk: string): Array<string> {
-  const events: Array<string> = []
-  const lines = chunk.split('\n')
-  let currentData = ''
-
-  for (const line of lines) {
-    if (line.startsWith('data: ')) {
-      currentData += line.slice(6)
-    } else if (line === '' && currentData) {
-      events.push(currentData)
-      currentData = ''
-    }
-  }
-
-  // Handle case where there's remaining data without trailing newline
-  if (currentData) {
-    events.push(currentData)
-  }
-
-  return events
-}
-
-/**
- * Parse a raw SSE event data string into an AdkEvent object.
- */
-export function parseAdkEvent(data: string): AdkEvent | null {
-  try {
-    return JSON.parse(data) as AdkEvent
-  } catch {
-    console.warn('Failed to parse ADK event:', data)
-    return null
-  }
 }
