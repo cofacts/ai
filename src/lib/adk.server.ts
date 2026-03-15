@@ -1,5 +1,8 @@
 /**
- * Utility functions for server functions.
+ * ADK (Agent Development Kit) server-only utilities.
+ *
+ * These functions use Node.js/Server APIs (like process.env) and should
+ * only be imported within server functions or other .server.ts files.
  */
 
 const IS_DEV = process.env.NODE_ENV === 'development';

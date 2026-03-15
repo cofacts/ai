@@ -1,8 +1,8 @@
 /**
- * ADK (Agent Development Kit) client utilities.
+ * ADK (Agent Development Kit) shared utilities and types.
  *
- * Provides TypeScript types and helpers for communicating with the
- * ADK FastAPI backend.
+ * This file is safe to import on both the client and the server.
+ * It primarily re-exports types from the generated OpenAPI spec.
  */
 
 import type { components } from './adk-types'
