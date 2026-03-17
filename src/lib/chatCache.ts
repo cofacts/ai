@@ -5,7 +5,6 @@ import type {
   AdkSession,
   ChatMessage,
   SourceItem,
-  ToolCall,
 } from './adk'
 
 export interface ChatSessionState {
@@ -74,7 +73,7 @@ export async function startChatStream({
           id: streamingMsgId,
           role: 'model',
           author: 'writer',
-          text: '',
+          parts: [],
           isStreaming: true,
           timestamp: new Date(),
         },
@@ -149,7 +148,7 @@ export function sendChatMessage(
         {
           id: genId(),
           role: 'user',
-          text,
+          parts: [{ text }],
           timestamp: new Date(),
         },
       ],
@@ -179,17 +178,7 @@ export function applyEventToState(
 ): ChatSessionState {
   if (!event.content?.parts) return prev
 
-  const text = event.content.parts
-    .map((p) => p.text ?? '')
-    .filter(Boolean)
-    .join('')
-
-  const toolCalls: Array<ToolCall> = event.content.parts
-    .filter((p) => p.functionCall)
-    .map((p) => ({
-      name: p.functionCall!.name ?? '',
-      args: p.functionCall!.args ?? {},
-    }))
+  const eventParts = event.content.parts
 
   // Logic from processEventIntoCache
   let draftResponse = prev.draftResponse
@@ -197,66 +186,68 @@ export function applyEventToState(
   let sources = prev.sources
 
   // 1. Writer draft updates
-  if (event.author === 'writer' && text && event.partial) {
+  if (event.author === 'writer' && event.partial) {
+    const text = eventParts
+      .map((p) => p.text ?? '')
+      .filter(Boolean)
+      .join('')
     draftResponse += text
-    // Don't return early — fall through to also update agent message text
   }
 
   // 2. User history replay deduplication
-  if (event.content.role === 'user' && text) {
-    const exists = messages.some((m) => m.role === 'user' && m.text === text)
+  if (event.content.role === 'user') {
+    const exists = messages.some(
+      (m) =>
+        m.role === 'user' &&
+        JSON.stringify(m.parts) === JSON.stringify(eventParts),
+    )
     if (!exists) {
       messages = [
         ...messages,
-        { id: genId(), role: 'user', text, timestamp: new Date() },
+        {
+          id: genId(),
+          role: 'user',
+          parts: [...eventParts],
+          timestamp: new Date(),
+        },
       ]
     }
     return { ...prev, messages }
   }
 
-  // 3. Tool calls
-  if (toolCalls.length > 0) {
-    const last = messages[messages.length - 1]
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (last && last.role === 'model' && last.isStreaming) {
-      messages = [
-        ...messages.slice(0, -1),
-        {
-          ...last,
-          toolCalls: [...(last.toolCalls ?? []), ...toolCalls],
-        },
-      ]
-    } else {
-      messages = [
-        ...messages,
-        {
-          id: genId(),
-          role: 'model',
-          author: event.author ?? 'writer',
-          text: '',
-          toolCalls,
-          isStreaming: true,
-          timestamp: new Date(),
-        },
-      ]
-    }
-  }
-
-  // 4. Agent text
-  if (text && event.content.role === 'model') {
+  // 3. Agent parts (text & tool calls)
+  if (event.content.role === 'model') {
     const last = messages[messages.length - 1]
     if (
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      last &&
       last.role === 'model' &&
       last.isStreaming &&
-      (last.author ?? 'writer') === (event.author ?? 'writer')
+      (last.author || 'writer') === (event.author || 'writer')
     ) {
+      const updatedParts = [...(last.parts || [])]
+
+      for (const part of eventParts) {
+        if (event.partial && part.text) {
+          // Streaming text: append to last text part if it exists
+          const lastPart = updatedParts[updatedParts.length - 1]
+          if (lastPart?.text !== undefined) {
+            updatedParts[updatedParts.length - 1] = {
+              ...lastPart,
+              text: lastPart.text + part.text,
+            }
+          } else {
+            updatedParts.push({ ...part })
+          }
+        } else {
+          // Tool calls or final text parts: push as is
+          updatedParts.push({ ...part })
+        }
+      }
+
       messages = [
         ...messages.slice(0, -1),
         {
           ...last,
-          text: event.partial ? last.text + text : last.text + text,
+          parts: updatedParts,
           isStreaming: event.partial !== false,
         },
       ]
@@ -266,8 +257,8 @@ export function applyEventToState(
         {
           id: genId(),
           role: 'model',
-          author: event.author ?? 'writer',
-          text,
+          author: event.author || 'writer',
+          parts: [...eventParts],
           isStreaming: event.partial !== false,
           timestamp: new Date(),
         },
@@ -275,7 +266,7 @@ export function applyEventToState(
     }
   }
 
-  // 5. Grounding metadata (Sources)
+  // 4. Grounding metadata (Sources)
   if (event.groundingMetadata?.groundingChunks) {
     const newSources: Array<SourceItem> =
       event.groundingMetadata.groundingChunks
