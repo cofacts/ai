@@ -35,6 +35,7 @@ export interface ChatMessage {
   toolCalls?: Array<ToolCall>
   isStreaming?: boolean
   timestamp?: Date
+  traceId?: string
 }
 
 export interface SourceItem {
