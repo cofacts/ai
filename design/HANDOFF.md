@@ -2,10 +2,10 @@
 
 Hello! This document contains the full context, progress, and TODOs for the Cofacts Design System modernization project.
 
-The goal of this project is to create a robust, token-driven design system inside **Pencil** (`.pen` files), which can act as the source of truth for the codebase (`rumors-site`), specifically tracking both a foundational component library (`design.lib.pen`) and the final responsive mockups (`website.pen`).
+The goal of this project is to create a robust, token-driven design system inside **Pencil** (`.pen` files), which can act as the source of truth for the codebase (`rumors-site`), specifically tracking both a foundational component library (`design.lib.pen`) and the final responsive mockups (`list-pages.pen` and `detail-pages.pen`).
 
 ### ⚠️ IMPORTANT: Pencil MCP File Constraint ⚠️
-The Pencil MCP can only have **one `.pen` file active at a time**. When switching between `design.lib.pen` and `website.pen`, explicitly call `open_document` with the target file path before performing operations.
+The Pencil MCP can only have **one `.pen` file active at a time**. When switching between `.pen` files, explicitly call `open_document` with the target file path before performing operations.
 
 ---
 
@@ -30,23 +30,15 @@ The Pencil MCP can only have **one `.pen` file active at a time**. When switchin
 
 ## Pending Tasks (TODOs)
 
-1. **Finish Remaining Molecules in `design.lib.pen`**
-   - **ArticleReplySummary**: Username + reply type badge + text preview
-
-2. **Build Organisms in `design.lib.pen`**
+1. **Build Organisms in `design.lib.pen`**
    - **AppHeader**: Mobile (logo + NavTabs-Mobile + search) / Desktop (logo + NavTabs-Desktop + SearchInput-Expanded + user avatar)
    - **AppFooter**: 3-column + bottom bar
    - **AppSidebar**: Mobile drawer (dark bg, links, member-ribbon)
-   - **ArticleCard**: List item with info box, text preview, FeedbackControl
-   - **ReplyCard**: Reply in Latest Replies page
-   - **ReplyItem**: Reply within Article Detail
 
-3. **Create `website.penpot`**
+2. **Create Page Mockups (`list-pages.pen` & `detail-pages.pen`)**
    - After all components are ready, publish the library.
-   - Build 4 core RWD page mockups (375px mobile, 1440px desktop) using the components.
-
-4. **Codebase Implementation (Optional next step)**
-   - Enforce Tokens into `rumors-site` codebase using Tailwind CSS or updating `theme.tsx`.
+   - **`list-pages.pen`**: Build `article list` and `reply list` mockups (including specific components like `ArticleCard` and `ReplyCard`).
+   - **`detail-pages.pen`**: Build `article detail` and `reply detail` mockups (including specific components).
 
 ---
 
@@ -97,16 +89,10 @@ The Pencil MCP can only have **one `.pen` file active at a time**. When switchin
 
 ## Component Inventory Remaining (`design.lib.pen`)
 
-### Molecules
-- **ArticleReplySummary**: Username + reply type badge + text
-
 ### Organisms
 - **AppHeader**: Mobile (logo + tabs + menu) / Desktop (logo + tabs + search)
 - **AppFooter**: 3-column + bottom bar
 - **AppSidebar**: Mobile drawer
-- **ArticleCard**: List item with info box, text preview
-- **ReplyCard**: Reply in Latest Replies page
-- **ReplyItem**: Reply within Article Detail
 
 ---
 
@@ -175,5 +161,3 @@ All screenshots representing the 2019 baseline and the newer baseline designs ha
 <!-- slide -->
 ![New Article Detail mobile](./screenshots/new_article_detail_mobile.png)
 ````
-
-Good luck handling the Penpot MCP executions! The user is ready to continue.
