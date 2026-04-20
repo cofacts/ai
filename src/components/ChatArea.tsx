@@ -47,13 +47,14 @@ export function ChatArea({
           </div>
         )}
 
-        {messages.map((msg) =>
-          msg.role === 'user' ? (
-            <UserMessage key={msg.id} message={msg} />
-          ) : (
-            <AgentMessage key={msg.id} message={msg} />
-          ),
-        )}
+        {messages.map((msg) => {
+          if (msg.role === 'user') {
+            return msg.author === 'user'
+              ? <UserMessage key={msg.id} message={msg} />
+              : null // function response, or anything else; render nothing
+          }
+          return <AgentMessage key={msg.id} message={msg} />
+        })}
 
         {/* Extra space at the bottom */}
         <div className="h-4" />
