@@ -70,6 +70,7 @@ docker compose up --build
 ```
 
 This will:
+
 - Build the **frontend** image from the root `Dockerfile`
 - Build the **backend** image from `adk/Dockerfile`
 - Start both containers, with the frontend waiting for the backend to be healthy
@@ -83,11 +84,13 @@ docker compose down
 ```
 
 ### Staging Environment
+
 - **Trigger**: Every push or merge to the `master` branch.
 - **URL**: cofacts-ai-236494820908.asia-east1.run.app .
 - **Traffic**: The `master` version always receives 100% of the traffic.
 
 ### PR Previews
+
 - **Trigger**: Every Pull Request (opened or updated).
 - **Behavior**: A dedicated revision is created for each PR with a unique tag.
 - **URL**: You can find the preview URL in the GitHub PR comments or the "Deployments" section of the PR sidebar.

@@ -6,8 +6,6 @@ Each Article may have multiple ArticleReplies (fact-check responses from collabo
 and ReplyRequests (additional context provided by reporters or collaborators).
 """
 
-import json
-import asyncio
 from typing import Dict, List, Any, Optional
 import httpx
 
@@ -120,9 +118,7 @@ COMMON_ARTICLE_FIELDS = """
 
 
 async def _execute_cofacts_graphql(
-    query: str,
-    variables: Dict[str, Any],
-    operation_name: str = "GraphQL request"
+    query: str, variables: Dict[str, Any], operation_name: str = "GraphQL request"
 ) -> Dict[str, Any]:
     """
     Execute a GraphQL query against Cofacts API with standardized error handling.
@@ -139,13 +135,8 @@ async def _execute_cofacts_graphql(
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 "https://api.cofacts.tw/graphql",
-                json={
-                    "query": query,
-                    "variables": variables
-                },
-                headers={
-                    "Content-Type": "application/json"
-                }
+                json={"query": query, "variables": variables},
+                headers={"Content-Type": "application/json"},
             )
             response.raise_for_status()
 
@@ -154,28 +145,19 @@ async def _execute_cofacts_graphql(
             if "errors" in result:
                 return {
                     "error": f"GraphQL errors: {result['errors']}",
-                    "graphql_request": {
-                        "query": query,
-                        "variables": variables
-                    }
+                    "graphql_request": {"query": query, "variables": variables},
                 }
 
             return {
                 "success": True,
                 "data": result["data"],
-                "graphql_request": {
-                    "query": query,
-                    "variables": variables
-                }
+                "graphql_request": {"query": query, "variables": variables},
             }
 
     except Exception as e:
         return {
             "error": f"Failed to execute {operation_name}: {str(e)}",
-            "graphql_request": {
-                "query": query,
-                "variables": variables
-            }
+            "graphql_request": {"query": query, "variables": variables},
         }
 
 
@@ -186,7 +168,7 @@ async def search_cofacts_database(
     after: Optional[str] = None,
     reply_count_max: Optional[int] = None,
     days_back: Optional[int] = None,
-    order_by: str = "_score"
+    order_by: str = "_score",
 ) -> Dict[str, Any]:
     """
     Search the Cofacts database for articles using various filters.
@@ -233,10 +215,7 @@ async def search_cofacts_database(
         filter_obj = {}
 
         if query:
-            filter_obj["moreLikeThis"] = {
-                "like": query,
-                "minimumShouldMatch": "0"
-            }
+            filter_obj["moreLikeThis"] = {"like": query, "minimumShouldMatch": "0"}
 
         if article_ids:
             filter_obj["ids"] = article_ids
@@ -246,11 +225,12 @@ async def search_cofacts_database(
 
         if days_back is not None:
             from datetime import datetime, timedelta
+
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days_back)
             filter_obj["createdAt"] = {
                 "GTE": start_date.isoformat(),
-                "LTE": end_date.isoformat()
+                "LTE": end_date.isoformat(),
             }
 
         # Build orderBy based on order_by parameter
@@ -291,13 +271,13 @@ async def search_cofacts_database(
             "filter": filter_obj,
             "orderBy": order_by_obj,
             "first": limit,
-            "after": after
+            "after": after,
         }
 
         result = await _execute_cofacts_graphql(
             query=graphql_query,
             variables=variables,
-            operation_name="search Cofacts database"
+            operation_name="search Cofacts database",
         )
 
         if "error" in result:
@@ -306,22 +286,20 @@ async def search_cofacts_database(
         # Extract ListArticles data from the successful response
         return {
             "graphql_request": result["graphql_request"],
-            "data": result["data"]["ListArticles"]
+            "data": result["data"]["ListArticles"],
         }
 
     except Exception as e:
         return {
             "error": f"Failed to search Cofacts database: {str(e)}",
             "graphql_request": {
-                "query": graphql_query if 'graphql_query' in locals() else None,
-                "variables": variables if 'variables' in locals() else None
-            }
+                "query": graphql_query if "graphql_query" in locals() else None,
+                "variables": variables if "variables" in locals() else None,
+            },
         }
 
 
-async def get_single_cofacts_article(
-    article_id: str
-) -> Dict[str, Any]:
+async def get_single_cofacts_article(article_id: str) -> Dict[str, Any]:
     """
     Get a single article from Cofacts database by ID.
 
@@ -352,7 +330,7 @@ async def get_single_cofacts_article(
         result = await _execute_cofacts_graphql(
             query=graphql_query,
             variables=variables,
-            operation_name="get specific Cofacts article"
+            operation_name="get specific Cofacts article",
         )
 
         if "error" in result:
@@ -361,29 +339,26 @@ async def get_single_cofacts_article(
         article = result["data"]["GetArticle"]
         if not article:
             return {
-                "error": f"Article not found",
+                "error": "Article not found",
                 "article_id": article_id,
-                "graphql_request": result["graphql_request"]
+                "graphql_request": result["graphql_request"],
             }
 
         return {
             "article_id": article_id,
             "article": article,
-            "graphql_request": result["graphql_request"]
+            "graphql_request": result["graphql_request"],
         }
 
     except Exception as e:
         return {
             "error": f"Failed to get Cofacts article: {str(e)}",
-            "article_id": article_id
+            "article_id": article_id,
         }
 
 
 async def submit_cofacts_reply(
-    article_id: str,
-    reply_type: str,
-    text: str,
-    reference: str
+    article_id: str, reply_type: str, text: str, reference: str
 ) -> Dict[str, Any]:
     """
     Submit a fact-check reply to Cofacts (requires authentication).
@@ -404,37 +379,19 @@ async def submit_cofacts_reply(
         # Note: This requires authentication with Cofacts API
         # You'll need to implement proper OAuth or API key authentication
 
-        graphql_mutation = """
-        mutation CreateReply($text: String!, $type: ReplyTypeEnum!, $reference: String!) {
-          CreateReply(text: $text, type: $type, reference: $reference) {
-            id
-            text
-            type
-            reference
-            createdAt
-          }
-        }
-        """
-
-        variables = {
-            "text": text,
-            "type": reply_type,
-            "reference": reference
-        }
-
         # This is a placeholder - you'll need to implement proper authentication
         return {
             "message": "Reply submission requires authentication setup",
             "article_id": article_id,
             "reply_type": reply_type,
             "text_length": len(text),
-            "reference_length": len(reference)
+            "reference_length": len(reference),
         }
 
     except Exception as e:
         return {
             "error": f"Failed to submit Cofacts reply: {str(e)}",
-            "article_id": article_id
+            "article_id": article_id,
         }
 
 

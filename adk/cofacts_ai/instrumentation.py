@@ -5,6 +5,7 @@ from langfuse import get_client
 
 logger = logging.getLogger(__name__)
 
+
 def setup_instrumentation():
     """
     Sets up Langfuse instrumentation for Google ADK.

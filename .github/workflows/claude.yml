@@ -42,5 +42,5 @@ jobs:
         #  ANTHROPIC_VERTEX_PROJECT_ID: "${{ secrets.GC_PROJECT_ID }}"
         #  CLOUD_ML_REGION: "global"
         with:
-        #  use_vertex: "true"
+          #  use_vertex: "true"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

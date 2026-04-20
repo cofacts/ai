@@ -8,9 +8,8 @@ This module implements a hierarchical agent system with:
 - AI Proof-readers: Role-play different political perspectives to test reply effectiveness
 """
 
-from typing import Dict, Optional
+from typing import Optional
 import re
-import json
 
 from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
@@ -23,8 +22,7 @@ from datetime import datetime
 from .tools import (
     search_cofacts_database,
     get_single_cofacts_article,
-    submit_cofacts_reply,
-    resolve_vertex_redirect
+    resolve_vertex_redirect,
 )
 from .instrumentation import setup_instrumentation
 
@@ -35,8 +33,7 @@ setup_instrumentation()
 
 
 async def append_grounding_sources(
-    callback_context: CallbackContext,
-    llm_response: LlmResponse
+    callback_context: CallbackContext, llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
     """
     After-model callback to append grounding sources to the response.
@@ -65,7 +62,7 @@ async def append_grounding_sources(
 
             output_parts.append(f"**Source {len(seen_urls)}**: {title}")
             output_parts.append(f"- **URL**: {display_uri}")
-            output_parts.append("") # Extra newline
+            output_parts.append("")  # Extra newline
 
     # 2. Perform "markdown work" in response text (formerly resolve_investigator_urls)
     # Replace occurrences of grounding redirect URLs in the main text
@@ -77,12 +74,18 @@ async def append_grounding_sources(
                 if resolved_url != original_url:
                     # If the URL is already inside a markdown link [label](original),
                     # replace the entire markdown link with our resolved one.
-                    markdown_pattern = re.compile(r'\[[^\]]*\]\(' + re.escape(original_url) + r'\)')
+                    markdown_pattern = re.compile(
+                        r"\[[^\]]*\]\(" + re.escape(original_url) + r"\)"
+                    )
                     if markdown_pattern.search(part.text):
-                        part.text = markdown_pattern.sub(f"[{resolved_url}]({original_url})", part.text)
+                        part.text = markdown_pattern.sub(
+                            f"[{resolved_url}]({original_url})", part.text
+                        )
                     else:
                         # Otherwise just replace the raw URL
-                        part.text = part.text.replace(original_url, f"[{resolved_url}]({original_url})")
+                        part.text = part.text.replace(
+                            original_url, f"[{resolved_url}]({original_url})"
+                        )
 
     # 3. Append Search Widget if present (Policy requirement)
     if metadata.search_entry_point and metadata.search_entry_point.rendered_content:
@@ -133,7 +136,7 @@ ai_investigator = LlmAgent(
 
     Focus on providing comprehensive, well-sourced research content.
     """,
-    tools=[google_search]
+    tools=[google_search],
 )
 
 
@@ -182,7 +185,7 @@ ai_verifier = LlmAgent(
 
     This verification is critical for combating misinformation that relies on fake or misleading citations.
     """,
-    tools=[url_context]
+    tools=[url_context],
 )
 
 
@@ -228,7 +231,7 @@ ai_proofreader_kmt = LlmAgent(
 
     Provide respectful, measured analysis that helps ensure fact-checking is credible across political divides.
     """,
-    tools=[]
+    tools=[],
 )
 
 ai_proofreader_dpp = LlmAgent(
@@ -272,7 +275,7 @@ ai_proofreader_dpp = LlmAgent(
 
     Provide engaged, democratic analysis that helps ensure fact-checking resonates with progressive audiences.
     """,
-    tools=[]
+    tools=[],
 )
 
 ai_proofreader_tpp = LlmAgent(
@@ -316,7 +319,7 @@ ai_proofreader_tpp = LlmAgent(
 
     Provide rational, balanced analysis that helps ensure fact-checking appeals to moderate voters seeking practical solutions.
     """,
-    tools=[]
+    tools=[],
 )
 
 ai_proofreader_minor_parties = LlmAgent(
@@ -360,7 +363,7 @@ ai_proofreader_minor_parties = LlmAgent(
 
     Provide engaged, civic-minded analysis that helps ensure fact-checking includes diverse voices and perspectives.
     """,
-    tools=[]
+    tools=[],
 )
 
 
@@ -541,9 +544,8 @@ ai_writer = LlmAgent(
         AgentTool(agent=ai_proofreader_kmt),
         AgentTool(agent=ai_proofreader_dpp),
         AgentTool(agent=ai_proofreader_tpp),
-        AgentTool(agent=ai_proofreader_minor_parties)
+        AgentTool(agent=ai_proofreader_minor_parties),
     ],
 )
 
 root_agent = ai_writer
-
