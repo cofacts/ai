@@ -232,7 +232,7 @@ export function applyEventToState(
         {
           id: genId(),
           role: 'model',
-          author: event.author ?? 'writer',
+          author: event.author || 'writer',
           text: '',
           toolCalls,
           isStreaming: true,
@@ -250,7 +250,7 @@ export function applyEventToState(
       last &&
       last.role === 'model' &&
       last.isStreaming &&
-      (last.author ?? 'writer') === (event.author ?? 'writer')
+      (last.author || 'writer') === (event.author || 'writer')
     ) {
       messages = [
         ...messages.slice(0, -1),
@@ -266,7 +266,7 @@ export function applyEventToState(
         {
           id: genId(),
           role: 'model',
-          author: event.author ?? 'writer',
+          author: event.author || 'writer',
           text,
           isStreaming: event.partial !== false,
           timestamp: new Date(),
