@@ -1,7 +1,8 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
-  ChatSessionState} from '@/lib/chatCache';
+  ChatSessionState
+} from '@/lib/chatCache';
 import {
   INITIAL_CHAT_STATE,
   abortControllers,
@@ -78,7 +79,6 @@ export function useChat({ sessionId }: UseChatOptions) {
     messages: data.messages,
     isStreaming: data.isStreaming,
     error,
-    draftResponse: data.draftResponse,
     sources: data.sources,
     sendMessage,
     resumeRun,
