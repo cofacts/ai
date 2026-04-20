@@ -146,6 +146,7 @@ export function sendChatMessage(
         {
           id: genId(),
           role: 'user',
+          author: 'user',
           parts: [{ text }],
           timestamp: new Date(),
         },
