@@ -26,7 +26,8 @@ from .tools import (
     submit_cofacts_reply,
     resolve_vertex_redirect
 )
-from .instrumentation import setup_instrumentation
+from google.adk.apps.app import App
+from .instrumentation import setup_instrumentation, LangfuseTracingPlugin
 
 load_dotenv()
 
@@ -545,5 +546,9 @@ ai_writer = LlmAgent(
     ],
 )
 
-root_agent = ai_writer
+root_agent = App(
+    name="cofacts_ai",
+    root_agent=ai_writer,
+    plugins=[LangfuseTracingPlugin()],
+)
 

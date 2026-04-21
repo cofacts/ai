@@ -27,6 +27,7 @@ export interface ChatMessage extends AdkContent {
   author?: string
   isStreaming?: boolean
   timestamp?: Date
+  langfuseTraceId?: string
 }
 
 export interface SourceItem {

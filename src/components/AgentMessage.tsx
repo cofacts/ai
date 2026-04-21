@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatMessage } from '@/lib/adk'
+import { LangfuseWeb } from 'langfuse'
 
 interface AgentMessageProps {
   message: ChatMessage
@@ -9,6 +10,31 @@ interface AgentMessageProps {
 
 export function AgentMessage({ message }: AgentMessageProps) {
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null)
+
+  const langfuse = useMemo(
+    () =>
+      import.meta.env.VITE_LANGFUSE_PUBLIC_KEY
+        ? new LangfuseWeb({
+            publicKey: import.meta.env.VITE_LANGFUSE_PUBLIC_KEY,
+            baseUrl: import.meta.env.VITE_LANGFUSE_BASE_URL,
+          })
+        : null,
+    [],
+  )
+
+  const handleFeedback = (value: 'up' | 'down') => {
+    const next = feedbackGiven === value ? null : value
+    setFeedbackGiven(next)
+
+    if (langfuse && message.langfuseTraceId && next !== null) {
+      langfuse.score({
+        traceId: message.langfuseTraceId,
+        name: 'user-thumbs',
+        value: next === 'up' ? 1 : 0,
+        dataType: 'BOOLEAN',
+      })
+    }
+  }
 
   const fullText = useMemo(() => {
     return message.parts
@@ -80,9 +106,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
       {!message.isStreaming && fullText && (
         <div className="flex items-center gap-3 pt-2 mt-4 border-t border-gray-100 w-full">
           <button
-            onClick={() =>
-              setFeedbackGiven(feedbackGiven === 'up' ? null : 'up')
-            }
+            onClick={() => handleFeedback('up')}
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 'up'
               ? 'text-primary'
               : 'text-gray-400 hover:text-gray-600'
@@ -93,9 +117,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
             </span>
           </button>
           <button
-            onClick={() =>
-              setFeedbackGiven(feedbackGiven === 'down' ? null : 'down')
-            }
+            onClick={() => handleFeedback('down')}
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 'down'
               ? 'text-destructive'
               : 'text-gray-400 hover:text-gray-600'

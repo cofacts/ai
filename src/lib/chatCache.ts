@@ -201,6 +201,7 @@ export function applyEventToState(
           parts: [...eventParts],
           isStreaming: event.partial !== false,
           timestamp: new Date(),
+          langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as string | undefined,
         },
       ]
     } else if (!event.partial) {
