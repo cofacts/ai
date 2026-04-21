@@ -8,19 +8,15 @@ interface AgentMessageProps {
   message: ChatMessage
 }
 
+const langfuse = import.meta.env.VITE_LANGFUSE_PUBLIC_KEY
+  ? new LangfuseWeb({
+      publicKey: import.meta.env.VITE_LANGFUSE_PUBLIC_KEY,
+      baseUrl: import.meta.env.VITE_LANGFUSE_BASE_URL,
+    })
+  : null
+
 export function AgentMessage({ message }: AgentMessageProps) {
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null)
-
-  const langfuse = useMemo(
-    () =>
-      import.meta.env.VITE_LANGFUSE_PUBLIC_KEY
-        ? new LangfuseWeb({
-            publicKey: import.meta.env.VITE_LANGFUSE_PUBLIC_KEY,
-            baseUrl: import.meta.env.VITE_LANGFUSE_BASE_URL,
-          })
-        : null,
-    [],
-  )
 
   const handleFeedback = (value: 'up' | 'down') => {
     const next = feedbackGiven === value ? null : value
