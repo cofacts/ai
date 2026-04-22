@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatMessage } from '@/lib/adk'
@@ -31,13 +31,6 @@ export function AgentMessage({ message }: AgentMessageProps) {
       })
     }
   }
-
-  const fullText = useMemo(() => {
-    return message.parts
-      ?.map((p) => p.text ?? '')
-      .filter(Boolean)
-      .join('\n')
-  }, [message.parts])
 
   return (
     <div className="flex flex-col items-start w-full">
@@ -99,7 +92,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
       </div>
 
       {/* Feedback buttons (only show when not streaming) */}
-      {!message.isStreaming && fullText && (
+      {!message.isStreaming && (
         <div className="flex items-center gap-3 pt-2 mt-4 border-t border-gray-100 w-full">
           {message.langfuseTraceId !== undefined && (
             <>
@@ -128,7 +121,13 @@ export function AgentMessage({ message }: AgentMessageProps) {
             </>
           )}
           <button
-            onClick={() => navigator.clipboard.writeText(fullText)}
+            onClick={() => {
+              const textToCopy = message.parts
+                ?.map((p) => p.text ?? '')
+                .filter(Boolean)
+                .join('\n') ?? ''
+              navigator.clipboard.writeText(textToCopy)
+            }}
             className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100 ml-auto"
           >
             <span className="material-symbols-outlined text-[18px]">
