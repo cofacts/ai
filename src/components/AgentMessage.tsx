@@ -16,9 +16,9 @@ const langfuse = import.meta.env.VITE_LANGFUSE_PUBLIC_KEY
   : null
 
 export function AgentMessage({ message }: AgentMessageProps) {
-  const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null)
+  const [feedbackGiven, setFeedbackGiven] = useState<1 | -1 | null>(null)
 
-  const handleFeedback = (value: 'up' | 'down') => {
+  const handleFeedback = (value: 1 | -1) => {
     const next = feedbackGiven === value ? null : value
     setFeedbackGiven(next)
 
@@ -26,8 +26,8 @@ export function AgentMessage({ message }: AgentMessageProps) {
       langfuse.score({
         traceId: message.langfuseTraceId,
         name: 'user-thumbs',
-        value: next === 'up' ? 1 : 0,
-        dataType: 'BOOLEAN',
+        value: next,
+        dataType: 'NUMERIC',
       })
     }
   }
@@ -102,8 +102,8 @@ export function AgentMessage({ message }: AgentMessageProps) {
       {!message.isStreaming && fullText && (
         <div className="flex items-center gap-3 pt-2 mt-4 border-t border-gray-100 w-full">
           <button
-            onClick={() => handleFeedback('up')}
-            className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 'up'
+            onClick={() => handleFeedback(1)}
+            className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 1
               ? 'text-primary'
               : 'text-gray-400 hover:text-gray-600'
               }`}
@@ -113,8 +113,8 @@ export function AgentMessage({ message }: AgentMessageProps) {
             </span>
           </button>
           <button
-            onClick={() => handleFeedback('down')}
-            className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 'down'
+            onClick={() => handleFeedback(-1)}
+            className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === -1
               ? 'text-destructive'
               : 'text-gray-400 hover:text-gray-600'
               }`}
