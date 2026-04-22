@@ -31,15 +31,19 @@ export function ChatArea({
       {/* Messages area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 md:space-y-8 chat-container pb-0"
+        className="flex-1 overflow-y-auto p-4 md:p-6 chat-container pb-0"
       >
         {messages.map((msg, index) => {
+          const prevMsg: ChatMessage | undefined = messages[index - 1];
           const nextMsg: ChatMessage | undefined = messages[index + 1];
 
           return <React.Fragment key={msg.id}>
             {msg.author === 'user'
               ? <UserMessage message={msg} />
-              : <AgentMessage message={msg} />}
+              : <AgentMessage
+                message={msg}
+                showAvatar={msg.author !== prevMsg?.author}
+              />}
             {
               /* Show thumbs up/down when all below are true:
                 - Message has trace id

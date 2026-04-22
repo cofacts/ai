@@ -4,29 +4,32 @@ import type { ChatMessage } from '@/lib/adk'
 
 interface AgentMessageProps {
   message: ChatMessage
+  showAvatar?: boolean
 }
 
-export function AgentMessage({ message }: AgentMessageProps) {
+export function AgentMessage({ message, showAvatar = true }: AgentMessageProps) {
   return (
     <div className="flex flex-col items-start w-full">
       {/* Agent header */}
-      <div className="flex items-center gap-2 mb-2 md:mb-3">
-        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-          <span className="material-symbols-outlined text-sm text-yellow-700">
-            smart_toy
+      {showAvatar && (
+        <div className="flex items-center gap-2 mb-2 md:mb-3">
+          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+            <span className="material-symbols-outlined text-sm text-yellow-700">
+              smart_toy
+            </span>
+          </div>
+          <span className="text-sm font-semibold text-gray-900">
+            {message.author === 'investigator'
+              ? 'AI Investigator'
+              : message.author === 'verifier'
+                ? 'AI Verifier'
+                : 'Cofacts AI Agent'}
           </span>
         </div>
-        <span className="text-sm font-semibold text-gray-900">
-          {message.author === 'investigator'
-            ? 'AI Investigator'
-            : message.author === 'verifier'
-              ? 'AI Verifier'
-              : 'Cofacts AI Agent'}
-        </span>
-      </div>
+      )}
 
       {/* Message content */}
-      <div className="w-full text-text-main leading-7 text-sm max-w-none space-y-4">
+      <div className="w-full text-text-main leading-7 text-sm max-w-none space-y-2">
         {message.parts?.map((part, i) => {
           if (part.text) {
             return (
