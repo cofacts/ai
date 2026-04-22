@@ -164,10 +164,15 @@ export function applyEventToState(
 
   // console.info('applyEventToState', event);
 
-  const eventParts = event.content.parts
+  // Skip function responses
+  const eventParts = event.content.parts.filter(p => !p.functionResponse);
 
-  // event is user message, just append message
   if (event.content.role === 'user') {
+    // Don't insert user message if it's just a function response.
+    // We may store the map of function response as a separate map when we need tool response in UI.
+    if (eventParts.length === 0) return prev;
+
+    // event is user message, just append message
     return {
       ...prev, messages: [
         ...prev.messages,

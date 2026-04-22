@@ -1,37 +1,12 @@
-import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatMessage } from '@/lib/adk'
-import { LangfuseWeb } from 'langfuse'
 
 interface AgentMessageProps {
   message: ChatMessage
 }
 
-const langfuse = import.meta.env.VITE_LANGFUSE_PUBLIC_KEY
-  ? new LangfuseWeb({
-    publicKey: import.meta.env.VITE_LANGFUSE_PUBLIC_KEY,
-    baseUrl: import.meta.env.VITE_LANGFUSE_BASE_URL,
-  })
-  : null
-
 export function AgentMessage({ message }: AgentMessageProps) {
-  const [feedbackGiven, setFeedbackGiven] = useState<1 | -1 | null>(null)
-
-  const handleFeedback = (value: 1 | -1) => {
-    const next = feedbackGiven === value ? null : value
-    setFeedbackGiven(next)
-
-    if (langfuse && message.langfuseTraceId && next !== null) {
-      langfuse.score({
-        traceId: message.langfuseTraceId,
-        name: 'user-thumbs',
-        value: next,
-        dataType: 'NUMERIC',
-      })
-    }
-  }
-
   return (
     <div className="flex flex-col items-start w-full">
       {/* Agent header */}
@@ -90,52 +65,6 @@ export function AgentMessage({ message }: AgentMessageProps) {
           return null
         })}
       </div>
-
-      {/* Feedback buttons (only show when not streaming) */}
-      {!message.isStreaming && (
-        <div className="flex items-center gap-3 pt-2 mt-4 border-t border-gray-100 w-full">
-          {message.langfuseTraceId !== undefined && (
-            <>
-              <button
-                onClick={() => handleFeedback(1)}
-                className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === 1
-                  ? 'text-primary'
-                  : 'text-gray-400 hover:text-gray-600'
-                  }`}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  thumb_up
-                </span>
-              </button>
-              <button
-                onClick={() => handleFeedback(-1)}
-                className={`p-1 rounded hover:bg-gray-100 transition-colors ${feedbackGiven === -1
-                  ? 'text-destructive'
-                  : 'text-gray-400 hover:text-gray-600'
-                  }`}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  thumb_down
-                </span>
-              </button>
-            </>
-          )}
-          <button
-            onClick={() => {
-              const textToCopy = message.parts
-                ?.map((p) => p.text ?? '')
-                .filter(Boolean)
-                .join('\n') ?? ''
-              navigator.clipboard.writeText(textToCopy)
-            }}
-            className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100 ml-auto"
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              content_copy
-            </span>
-          </button>
-        </div>
-      )}
     </div>
   )
 }
