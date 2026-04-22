@@ -83,7 +83,10 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           # Build frontend
-          docker build -t asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/frontend:$SHA -f Dockerfile .
+          docker build \
+            --build-arg VITE_LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }} \
+            --build-arg VITE_LANGFUSE_BASE_URL="https://langfuse.cofacts.tw" \
+            -t asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/frontend:$SHA -f Dockerfile .
           docker push asia-east1-docker.pkg.dev/$PROJECT_ID/cofacts-ai/frontend:$SHA
 
           # Build backend

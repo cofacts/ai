@@ -33,13 +33,19 @@ pnpm install:agent
 > source adk/.venv/bin/activate
 > ```
 
-3. Set up environment variables for the ADK agent:
+3. Set up environment variables:
 
+For the ADK backend agent:
 ```bash
 cp adk/cofacts_ai/.env.example adk/cofacts_ai/.env
 ```
-
 Edit `adk/cofacts_ai/.env` and fill in the required values (at minimum `GOOGLE_API_KEY`).
+
+For the frontend UI (Vite / TanStack Start):
+```bash
+cp .env.example .env
+```
+Edit `.env` to configure your browser-safe variables (e.g. Langfuse keys).
 
 4. Start the development server:
 
