@@ -21,6 +21,7 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
 
     if (langfuse && next !== null) {
       langfuse.score({
+        id: `user-${traceId}`,
         traceId,
         name: 'user-thumbs',
         value: next,
