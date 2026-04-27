@@ -11,7 +11,7 @@ spec:
     metadata:
       annotations:
         run.googleapis.com/execution-environment: gen2
-        run.googleapis.com/container-dependencies: '{"ingress":["backend"]}'
+        run.googleapis.com/container-dependencies: '{"ingress":["backend"],"backend":["cloudsql-proxy"]}'
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "3"
     spec:
@@ -45,6 +45,8 @@ spec:
           value: "${LANGFUSE_SECRET_KEY}"
         - name: LANGFUSE_BASE_URL
           value: "https://langfuse.cofacts.tw"
+        - name: DATABASE_URL
+          value: "${DATABASE_URL}"
         startupProbe:
           tcpSocket:
             port: 8000
@@ -52,4 +54,17 @@ spec:
           timeoutSeconds: 5
           periodSeconds: 10
           failureThreshold: 6
+      - name: cloudsql-proxy
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
+        args:
+          - "--structured-logs"
+          - "--port=5432"
+          - "--auto-iam-authn"
+          - "industrious-eye-145611:asia-east1:cofacts"
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
   ${TRAFFIC_BLOCK}
