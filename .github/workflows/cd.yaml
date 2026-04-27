@@ -56,3 +56,6 @@ jobs:
           tags: cofacts/site:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            VITE_LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }}
+            VITE_LANGFUSE_BASE_URL=https://langfuse.cofacts.tw
