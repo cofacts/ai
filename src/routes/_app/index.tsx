@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { sendChatMessage } from '@/lib/chatCache'
-import { createSession } from '@/lib/sessions.functions'
+import { SESSION_TITLE_KEY, createSession } from '@/lib/sessions.functions'
 import { ChatInput } from '@/components/ChatInput'
 
 export const Route = createFileRoute('/_app/')({
@@ -24,14 +24,26 @@ function LandingPage() {
 
       const sessionId = crypto.randomUUID()
 
+      // Generate session title from the first message
+      const title = text.length > 40 ? text.slice(0, 40) + '...' : text
+
+      // 1. Create the session in ADK upfront
       try {
-        await createSession({ data: sessionId })
+        await createSession({
+          data: {
+            sessionId,
+            initialState: {
+              [SESSION_TITLE_KEY]: title,
+            },
+          },
+        })
       } catch (err) {
         setError(err instanceof Error ? err.message : '建立工作階段失敗')
         setIsLoading(false)
         return
       }
 
+      // 2. Instantly seed the cache and start the background stream fetch
       sendChatMessage(queryClient, sessionId, text)
 
       navigate({
