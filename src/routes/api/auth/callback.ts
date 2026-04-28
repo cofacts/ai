@@ -103,7 +103,12 @@ export const Route = createFileRoute('/api/auth/callback')({
           return new Response('Token exchange rejected', { status: 401 });
         }
 
-        const data = (await tokenRes.json()) as { token?: unknown };
+        let data: { token?: unknown };
+        try {
+          data = (await tokenRes.json()) as { token?: unknown };
+        } catch {
+          return new Response('Invalid token response', { status: 500 });
+        }
         if (typeof data.token !== 'string' || data.token.length === 0) {
           return new Response('Invalid token response', { status: 500 });
         }
