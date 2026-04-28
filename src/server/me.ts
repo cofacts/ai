@@ -8,10 +8,14 @@
 
 import { API_BASE } from './api-base';
 
+export type AvatarType = 'OpenPeeps' | 'Gravatar' | 'Facebook' | 'Github';
+
 export interface CofactsUser {
   id: string;
   name: string;
-  avatarUrl: string;
+  avatarUrl: string | null;
+  avatarType: AvatarType | null;
+  avatarData: string | null;
 }
 
 interface GetUserGraphQLResponse {
@@ -19,7 +23,8 @@ interface GetUserGraphQLResponse {
   errors?: unknown;
 }
 
-const GET_USER_QUERY = '{ GetUser { id name avatarUrl } }';
+const GET_USER_QUERY =
+  '{ GetUser { id name avatarUrl avatarType avatarData } }';
 
 export async function fetchMeWithToken(
   token: string,

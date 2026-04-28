@@ -10,10 +10,14 @@
 import { createContext, useContext, useState } from 'react'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 
+export type AvatarType = 'OpenPeeps' | 'Gravatar' | 'Facebook' | 'Github'
+
 export interface CofactsUser {
   id: string
   name: string
-  avatarUrl: string
+  avatarUrl: string | null
+  avatarType: AvatarType | null
+  avatarData: string | null
 }
 
 interface AuthState {
