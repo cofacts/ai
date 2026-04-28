@@ -1,7 +1,8 @@
 // Cofacts rumors-api base URL for server-side BFF code only.
 //
-// Resolved from the `API_URL` env var at process start, with a hardcoded
-// fallback for local development. This module must only be imported from
+// Resolved from the `COFACTS_API_URL` env var at process start. Missing
+// env throws on import — no silent fallback that could mask misconfigured
+// staging/prod deployments. This module must only be imported from
 // server-side code (`src/server/*`, `src/routes/api/*`); the client never
 // talks to rumors-api directly under the BFF model — it goes through
 // `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout` and
@@ -10,10 +11,13 @@
 // Trailing slashes are stripped so callers can safely concatenate paths
 // (e.g. `${API_BASE}/graphql`) without producing `//graphql`.
 
-const DEFAULT_API_URL = 'https://dev-api-db-v9.cofacts.tw';
-
 function resolveApiBase(): string {
-  const raw = process.env.API_URL ?? DEFAULT_API_URL;
+  const raw = process.env.COFACTS_API_URL;
+  if (!raw) {
+    throw new Error(
+      'COFACTS_API_URL env var is required (rumors-api base URL).',
+    );
+  }
   return raw.replace(/\/+$/, '');
 }
 
