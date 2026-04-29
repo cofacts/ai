@@ -2,12 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface ChatInputProps {
   onSend: (text: string) => void
+  onStop?: () => void
+  isStreaming?: boolean
   disabled?: boolean
   placeholder?: string
 }
 
 export function ChatInput({
   onSend,
+  onStop,
+  isStreaming,
   disabled,
   placeholder = '詢問後續問題或要求修改...',
 }: ChatInputProps) {
@@ -42,19 +46,25 @@ export function ChatInput({
               !e.nativeEvent.isComposing
             ) {
               e.preventDefault()
-              handleSubmit()
+              if (isStreaming) {
+                onStop?.()
+              } else {
+                handleSubmit()
+              }
             }
           }}
-          disabled={disabled}
+          disabled={disabled || isStreaming}
           className="w-full bg-transparent border-none focus:ring-0 p-3 pr-12 min-h-[50px] max-h-32 resize-none text-sm rounded-xl"
           placeholder={placeholder}
         />
         <button
-          onClick={handleSubmit}
-          disabled={!value.trim() || disabled}
+          onClick={isStreaming ? onStop : handleSubmit}
+          disabled={(!isStreaming && !value.trim()) || disabled}
           className="absolute right-2 bottom-2 p-1.5 bg-primary text-black rounded-lg hover:bg-primary-hover transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <span className="material-symbols-outlined text-sm">send</span>
+          <span className="material-symbols-outlined text-sm">
+            {isStreaming ? 'stop' : 'send'}
+          </span>
         </button>
       </div>
       <div className="text-center mt-2">
