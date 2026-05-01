@@ -3,10 +3,9 @@
 // Resolved from the `COFACTS_API_URL` env var at process start. Missing
 // env throws on import — no silent fallback that could mask misconfigured
 // staging/prod deployments. This module must only be imported from
-// server-side code (`src/server/*`, `src/routes/api/*`); the client never
-// talks to rumors-api directly under the BFF model — it goes through
-// `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout` and
-// `/api/graphql` instead.
+// server-side code (`src/server/*`, `src/routes/api/*`); the client reaches
+// rumors-api only through named server functions and the `/api/auth/*`
+// routes.
 //
 // Trailing slashes are stripped so callers can safely concatenate paths
 // (e.g. `${API_BASE}/graphql`) without producing `//graphql`.

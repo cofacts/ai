@@ -3,9 +3,11 @@
 // Tokens live ONLY in an HttpOnly `cofacts_session` cookie set by the server's
 // `/api/auth/callback` route. This module never sees the token, never touches
 // localStorage/sessionStorage, and never calls rumors-api directly. Auth-aware
-// data fetching goes through `/api/graphql`; user hydration is seeded by the
-// SSR root loader (`getCurrentUserServerFn`); the OAuth flow is initiated via
-// `/api/auth/login` (server-side proxy that hides the upstream URL).
+// data fetching goes through TanStack server functions (e.g.
+// `getCurrentUserServerFn`) which read the cookie and call rumors-api
+// server-side; user hydration is seeded by the SSR root loader; the OAuth
+// flow is initiated via `/api/auth/login` (server-side proxy that hides the
+// upstream URL).
 
 import { createContext, useContext, useState } from 'react'
 import { getCurrentUserServerFn } from '@/server/me.functions'
