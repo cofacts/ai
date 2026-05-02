@@ -36,7 +36,8 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   }
 
   const handleSaveEdit = async () => {
-    if (!editTitle.trim()) {
+    const trimmedTitle = editTitle.trim()
+    if (!trimmedTitle || trimmedTitle === title) {
       handleCancelEdit()
       return
     }
@@ -45,7 +46,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
       await updateSession({
         data: {
           sessionId: session.id,
-          name: editTitle.trim(),
+          name: trimmedTitle,
         },
       })
       await queryClient.invalidateQueries({ queryKey: ['sessions'] })
@@ -69,7 +70,8 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
               onChange={(e) => setEditTitle(e.target.value)}
               onBlur={handleSaveEdit}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveEdit()
+                // Blur triggers onBlur → handleSaveEdit, avoiding double invocation
+                if (e.key === 'Enter') e.currentTarget.blur()
                 if (e.key === 'Escape') handleCancelEdit()
               }}
               className="w-full text-sm font-medium bg-white border border-primary rounded px-1 outline-none"
