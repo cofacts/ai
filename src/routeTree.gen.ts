@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
 import { Route as AppSessionSessionIdRouteImport } from './routes/_app/session.$sessionId'
 
 const AppRoute = AppRouteImport.update({
@@ -22,6 +23,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiRunSseRoute = ApiRunSseRouteImport.update({
+  id: '/api/run-sse',
+  path: '/api/run-sse',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
   id: '/session/$sessionId',
   path: '/session/$sessionId',
@@ -30,28 +36,37 @@ const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/api/run-sse': typeof ApiRunSseRoute
   '/session/$sessionId': typeof AppSessionSessionIdRoute
 }
 export interface FileRoutesByTo {
+  '/api/run-sse': typeof ApiRunSseRoute
   '/': typeof AppIndexRoute
   '/session/$sessionId': typeof AppSessionSessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/api/run-sse': typeof ApiRunSseRoute
   '/_app/': typeof AppIndexRoute
   '/_app/session/$sessionId': typeof AppSessionSessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/session/$sessionId'
+  fullPaths: '/' | '/api/run-sse' | '/session/$sessionId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/session/$sessionId'
-  id: '__root__' | '/_app' | '/_app/' | '/_app/session/$sessionId'
+  to: '/api/run-sse' | '/' | '/session/$sessionId'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/api/run-sse'
+    | '/_app/'
+    | '/_app/session/$sessionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  ApiRunSseRoute: typeof ApiRunSseRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -69,6 +84,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/api/run-sse': {
+      id: '/api/run-sse'
+      path: '/api/run-sse'
+      fullPath: '/api/run-sse'
+      preLoaderRoute: typeof ApiRunSseRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/session/$sessionId': {
       id: '/_app/session/$sessionId'
@@ -94,6 +116,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  ApiRunSseRoute: ApiRunSseRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

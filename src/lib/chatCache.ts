@@ -1,4 +1,3 @@
-import { runChat } from './sessions.functions'
 import type { QueryClient } from '@tanstack/react-query'
 import type {
   AdkEvent,
@@ -65,20 +64,60 @@ export async function startChatStream({
   })
 
   try {
-    const stream = await runChat({
-      data: {
-        sessionId,
-        ...payload,
-      },
+    const response = await fetch('/api/run-sse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
+      body: JSON.stringify({ sessionId, ...payload }),
     })
 
-    for await (const event of stream) {
-      processEventIntoCache(queryClient, sessionId, event)
+    if (!response.ok) {
+      throw new Error(`ADK request failed: HTTP ${response.status}`)
+    }
+
+    // Parse the ADK SSE stream directly from response.body.
+    // Unlike the old runChat server function approach, fetch's reader.read() throws
+    // AbortError immediately when controller.abort() is called — no intermediate
+    // layer to swallow it.
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split('\n\n')
+        buffer = parts.pop() ?? ''
+
+        for (const part of parts) {
+          const lines = part.split('\n')
+          let data = ''
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              data += line.slice(6)
+            }
+          }
+          if (data) {
+            try {
+              processEventIntoCache(
+                queryClient,
+                sessionId,
+                JSON.parse(data) as AdkEvent,
+              )
+            } catch {
+              // Skip unparseable events
+            }
+          }
+        }
+      }
+    } finally {
+      reader.cancel()
     }
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      // Expected when a stream is canceled
+    if (controller.signal.aborted) {
       return
     }
     const errorMessage = err instanceof Error ? err.message : 'Unknown error'
@@ -89,9 +128,13 @@ export async function startChatStream({
     })
     console.error(`SSE stream error for session ${sessionId}:`, err)
   } finally {
-    // Mark all streaming messages as complete
+    // Mark all streaming messages as complete.
+    // Guard against the race where a new stream has already started for this
+    // session (e.g. the user sent a new message while this one was streaming):
+    // in that case the new stream owns the state and we must not reset it.
     queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => {
       if (!prev) return INITIAL_CHAT_STATE
+      if (abortControllers.get(sessionId) !== controller) return prev
       return {
         ...prev,
         isStreaming: false,
