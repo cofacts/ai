@@ -1,7 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { ADK_APP_NAME, ADK_USER_ID, adkClient } from './adkClient'
-import { handleAdkError, handleAdkResponseError } from './adk.server'
 import type { AdkEvent } from './adk'
 import type { components } from './adk-types'
 
@@ -17,7 +16,10 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
         },
       },
     )
-    if (error) handleAdkError(error)
+    if (error) {
+      const { handleAdkError } = await import('./adk.server')
+      handleAdkError(error)
+    }
     return data
   },
 )
@@ -37,7 +39,10 @@ export const getSession = createServerFn({ method: 'GET' })
         },
       },
     )
-    if (error) handleAdkError(error)
+    if (error) {
+      const { handleAdkError } = await import('./adk.server')
+      handleAdkError(error)
+    }
     return data
   })
 
@@ -61,6 +66,7 @@ export const createSession = createServerFn({ method: 'POST' })
 
     // 409 Conflict => already exists, which is fine for our use case.
     if (!response.ok && response.status !== 409) {
+      const { handleAdkResponseError } = await import('./adk.server')
       handleAdkResponseError(response)
     }
 
@@ -86,6 +92,7 @@ export const runChat = createServerFn({ method: 'POST' })
     })
 
     if (!response.ok) {
+      const { handleAdkResponseError } = await import('./adk.server')
       handleAdkResponseError(response)
     }
 

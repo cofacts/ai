@@ -1,14 +1,13 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type {
-  ChatSessionState
-} from '@/lib/chatCache';
+import type { ChatSessionState } from '@/lib/chatCache'
 import {
   INITIAL_CHAT_STATE,
   abortControllers,
   convertAdkSessionToChatState,
   sendChatMessage,
   startChatStream,
+  updateChatDraft,
 } from '@/lib/chatCache'
 import { getSession } from '@/lib/sessions.functions'
 
@@ -75,13 +74,25 @@ export function useChat({ sessionId }: UseChatOptions) {
     abortControllers.get(sessionId)?.abort()
   }, [sessionId])
 
+  /**
+   * Update the draft message for this session.
+   */
+  const setDraft = useCallback(
+    (draft: string) => {
+      updateChatDraft(queryClient, sessionId, draft)
+    },
+    [queryClient, sessionId],
+  )
+
   return {
     messages: data.messages,
     isStreaming: data.isStreaming,
+    draft: data.draft,
     error,
     sources: data.sources,
     sendMessage,
     resumeRun,
     stopGeneration,
+    setDraft,
   }
 }

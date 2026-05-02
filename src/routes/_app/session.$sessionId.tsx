@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { createFileRoute, useParams } from '@tanstack/react-router'
 import { ChatArea } from '@/components/ChatArea'
 import { useChat } from '@/hooks/useChat'
@@ -8,7 +9,22 @@ export const Route = createFileRoute('/_app/session/$sessionId')({
 
 function SessionPage() {
   const { sessionId } = useParams({ from: '/_app/session/$sessionId' })
-  const { messages, isStreaming, error, sendMessage } = useChat({ sessionId })
+  const { messages, isStreaming, error, sendMessage, draft, setDraft } =
+    useChat({ sessionId })
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isStreaming || draft !== '') {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [isStreaming, draft])
 
   return (
     <>
@@ -28,6 +44,8 @@ function SessionPage() {
         messages={messages}
         isStreaming={isStreaming}
         onSendMessage={sendMessage}
+        draft={draft}
+        onDraftChange={setDraft}
       />
     </>
   )

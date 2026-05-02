@@ -4,15 +4,26 @@ interface ChatInputProps {
   onSend: (text: string) => void
   disabled?: boolean
   placeholder?: string
+  value?: string
+  onChange?: (value: string) => void
 }
 
 export function ChatInput({
   onSend,
   disabled,
   placeholder = '詢問後續問題或要求修改...',
+  value: controlledValue,
+  onChange,
 }: ChatInputProps) {
-  const [value, setValue] = useState('')
+  const [localValue, setLocalValue] = useState(controlledValue ?? '')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Update local value when controlled value changes (e.g. session switch)
+  useEffect(() => {
+    if (controlledValue !== undefined) {
+      setLocalValue(controlledValue)
+    }
+  }, [controlledValue])
 
   // Auto-resize textarea
   useEffect(() => {
@@ -20,21 +31,25 @@ export function ChatInput({
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 128)}px`
-  }, [value])
+  }, [localValue])
 
   const handleSubmit = useCallback(() => {
-    if (!value.trim() || disabled) return
-    onSend(value.trim())
-    setValue('')
-  }, [value, disabled, onSend])
+    if (!localValue.trim() || disabled) return
+    onSend(localValue.trim())
+    setLocalValue('')
+    onChange?.('')
+  }, [localValue, disabled, onSend, onChange])
 
   return (
     <div className="px-3 md:px-4 pb-3 md:pb-4 pt-2 bg-white shrink-0 z-10">
       <div className="relative rounded-xl shadow-sm border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-primary focus-within:border-primary transition-all">
         <textarea
           ref={textareaRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
+          value={localValue}
+          onChange={(e) => {
+            setLocalValue(e.target.value)
+            onChange?.(e.target.value)
+          }}
           onKeyDown={(e) => {
             if (
               e.key === 'Enter' &&
@@ -51,7 +66,7 @@ export function ChatInput({
         />
         <button
           onClick={handleSubmit}
-          disabled={!value.trim() || disabled}
+          disabled={!localValue.trim() || disabled}
           className="absolute right-2 bottom-2 p-1.5 bg-primary text-black rounded-lg hover:bg-primary-hover transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <span className="material-symbols-outlined text-sm">send</span>

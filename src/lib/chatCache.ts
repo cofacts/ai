@@ -1,17 +1,13 @@
 import { runChat } from './sessions.functions'
 import type { QueryClient } from '@tanstack/react-query'
-import type {
-  AdkEvent,
-  AdkSession,
-  ChatMessage,
-  SourceItem,
-} from './adk'
+import type { AdkEvent, AdkSession, ChatMessage, SourceItem } from './adk'
 
 export interface ChatSessionState {
   messages: Array<ChatMessage>
   isStreaming: boolean
   error: string | null
   sources: Array<SourceItem>
+  draft: string
 }
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
@@ -19,6 +15,7 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   isStreaming: false,
   error: null,
   sources: [],
+  draft: '',
 }
 
 // Global registry of abort controllers per session to prevent duplicate streams
@@ -107,6 +104,21 @@ export async function startChatStream({
 }
 
 /**
+ * Updates the draft message for a specific session.
+ */
+export function updateChatDraft(
+  queryClient: QueryClient,
+  sessionId: string,
+  draft: string,
+) {
+  const queryKey = ['chat', sessionId]
+  queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => {
+    if (!prev) return { ...INITIAL_CHAT_STATE, draft }
+    return { ...prev, draft }
+  })
+}
+
+/**
  * Sends a message from the user, updating the cache immediately
  * and triggering the background SSE stream.
  */
@@ -126,6 +138,7 @@ export function sendChatMessage(
     if (!prev) return INITIAL_CHAT_STATE
     return {
       ...prev,
+      draft: '',
       messages: [
         ...prev.messages,
         {
@@ -165,16 +178,17 @@ export function applyEventToState(
   // console.info('applyEventToState', event);
 
   // Skip function responses
-  const eventParts = event.content.parts.filter(p => !p.functionResponse);
+  const eventParts = event.content.parts.filter((p) => !p.functionResponse)
 
   if (event.content.role === 'user') {
     // Don't insert user message if it's just a function response.
     // We may store the map of function response as a separate map when we need tool response in UI.
-    if (eventParts.length === 0) return prev;
+    if (eventParts.length === 0) return prev
 
     // event is user message, just append message
     return {
-      ...prev, messages: [
+      ...prev,
+      messages: [
         ...prev.messages,
         {
           id: genId(),
@@ -183,7 +197,7 @@ export function applyEventToState(
           parts: [...eventParts],
           timestamp: new Date(),
         },
-      ]
+      ],
     }
   }
 
@@ -192,7 +206,8 @@ export function applyEventToState(
   // Agent parts (text & tool calls)
   if (event.content.role === 'model') {
     const last = messages[messages.length - 1]
-    const isLastStillStreaming = last?.role === 'model' &&
+    const isLastStillStreaming =
+      last?.role === 'model' &&
       last?.isStreaming &&
       (last?.author || 'writer') === (event.author || 'writer')
 
@@ -206,7 +221,9 @@ export function applyEventToState(
           parts: [...eventParts],
           isStreaming: event.partial !== false,
           timestamp: new Date(),
-          langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as string | undefined,
+          langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as
+            | string
+            | undefined,
         },
       ]
     } else if (!event.partial) {
@@ -259,7 +276,7 @@ export function applyEventToState(
   }
 
   // Grounding metadata (Sources)
-  let sources = prev.sources;
+  let sources = prev.sources
   if (event.groundingMetadata?.groundingChunks) {
     const newSources: Array<SourceItem> =
       event.groundingMetadata.groundingChunks
