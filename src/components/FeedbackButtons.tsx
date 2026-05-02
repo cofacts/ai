@@ -101,7 +101,10 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
           </button>
         </PopoverTrigger>
         <PopoverContent align="start">
-          <FeedbackPopoverContent onSubmit={handleCommentSubmit} />
+          <FeedbackPopoverContent
+            isPositive={feedbackGiven === 1}
+            onSubmit={handleCommentSubmit}
+          />
         </PopoverContent>
       </Popover>
     </div>
