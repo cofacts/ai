@@ -80,7 +80,7 @@ interface UpdateSessionInput {
   stateDelta: Record<string, any>
 }
 
-export const updateSession = createServerFn({ method: 'PATCH' })
+export const updateSession = createServerFn({ method: 'POST' })
   .inputValidator((input: UpdateSessionInput) => input)
   .handler(async ({ data: { sessionId, stateDelta } }) => {
     const { data, error } = await adkClient.PATCH(

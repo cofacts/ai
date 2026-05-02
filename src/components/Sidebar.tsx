@@ -1,12 +1,8 @@
 import { Link, useParams } from '@tanstack/react-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { getSessionTitle, useSessions } from '@/hooks/useSessions'
-import {
-  SESSION_TITLE_KEY,
-  listSessions,
-  updateSession,
-} from '@/lib/sessions.functions'
+import { SESSION_TITLE_KEY, updateSession } from '@/lib/sessions.functions'
 
 interface SidebarProps {
   isOpen: boolean
