@@ -18,7 +18,6 @@ from google.adk.apps import App
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_response import LlmResponse
-from google.adk.sessions import DatabaseSessionService
 from google.adk.tools import url_context, google_search
 from google.adk.tools.agent_tool import AgentTool
 from datetime import datetime
@@ -548,20 +547,9 @@ ai_writer = LlmAgent(
     ],
 )
 
-# Initialize Session Service
-db_url = os.getenv("DATABASE_URL")
-if not db_url:
-    # Local/CI: Initialize with SQLite at adk/.adk/sessions.db
-    db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".adk", "sessions.db"))
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    db_url = f"sqlite+aiosqlite:///{db_path}"
-
-session_service = DatabaseSessionService(db_url=db_url)
-
 app = App(
     name="cofacts-ai",
     root_agent=ai_writer,
-    session_service=session_service,
     plugins=[LangfuseTracingPlugin()],
 )
 
