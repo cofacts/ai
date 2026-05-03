@@ -31,6 +31,7 @@ function SessionPage() {
         isStreaming={isStreaming}
         onSendMessage={sendMessage}
         onStop={stopGeneration}
+        sessionId={sessionId}
       />
     </>
   )
