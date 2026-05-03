@@ -133,8 +133,14 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          # Cofacts.ai's PostgreSQL connection string
+          # postgresql+asyncpg://<sa>%40<project>.iam@localhost/<db>
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Service account that is dedicated to Cofacts.ai
+          # <name>@<project>.iam.gserviceaccount.com
+          SERVICE_ACCOUNT_EMAIL: ${{ secrets.SERVICE_ACCOUNT_EMAIL }}
         run: |
-          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${GOOGLE_API_KEY} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY}' < service.template.yaml > service.yaml
+          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${GOOGLE_API_KEY} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${DATABASE_URL} ${SERVICE_ACCOUNT_EMAIL}' < service.template.yaml > service.yaml
           cat service.yaml
 
       - name: Deploy to Cloud Run

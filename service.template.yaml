@@ -15,6 +15,7 @@ spec:
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "3"
     spec:
+      serviceAccountName: ${SERVICE_ACCOUNT_EMAIL}
       containers:
       - name: ingress
         image: ${FRONTEND_IMAGE}
