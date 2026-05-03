@@ -552,7 +552,7 @@ ai_writer = LlmAgent(
 db_url = os.getenv("DATABASE_URL")
 if not db_url:
     # Local/CI: Initialize with SQLite at adk/.adk/sessions.db
-    db_path = os.path.abspath("adk/.adk/sessions.db")
+    db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".adk", "sessions.db"))
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     db_url = f"sqlite+aiosqlite:///{db_path}"
 
