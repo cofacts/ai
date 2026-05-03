@@ -8,7 +8,6 @@ This module implements a hierarchical agent system with:
 - AI Proof-readers: Role-play different political perspectives to test reply effectiveness
 """
 
-import os
 from typing import Dict, Optional
 import re
 import json
@@ -552,5 +551,3 @@ app = App(
     root_agent=ai_writer,
     plugins=[LangfuseTracingPlugin()],
 )
-
-root_agent = ai_writer
