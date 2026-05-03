@@ -61,7 +61,7 @@ spec:
           - "--structured-logs"
           - "--port=5432"
           - "--auto-iam-authn"
-          - "industrious-eye-145611:asia-east1:cofacts"
+          - "${GC_PROJECT_ID}:asia-east1:cofacts"
         resources:
           limits:
             cpu: "500m"

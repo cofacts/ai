@@ -139,8 +139,9 @@ jobs:
           # Service account that is dedicated to Cofacts.ai (<name>@<project>.iam.gserviceaccount.com)
           # GC_SERVICE_ACCOUNT has been configured so that it can act as SERVICE_ACCOUNT_EMAIL.
           SERVICE_ACCOUNT_EMAIL: ${{ secrets.SERVICE_ACCOUNT_EMAIL }}
+          GC_PROJECT_ID: ${{ secrets.GC_PROJECT_ID }}
         run: |
-          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${GOOGLE_API_KEY} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${DATABASE_URL} ${SERVICE_ACCOUNT_EMAIL}' < service.template.yaml > service.yaml
+          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${GOOGLE_API_KEY} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${DATABASE_URL} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID}' < service.template.yaml > service.yaml
           cat service.yaml
 
       - name: Deploy to Cloud Run
