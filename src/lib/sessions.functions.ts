@@ -1,11 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
-import { getRequest } from '@tanstack/react-start/server'
 import { ADK_APP_NAME, ADK_USER_ID, adkClient } from './adkClient'
 import { handleAdkError, handleAdkResponseError } from './adk-errors'
-import type { AdkEvent } from './adk'
-import type { components } from './adk-types'
-
-type RunRequest = components['schemas']['RunAgentRequest']
 
 const SESSION_TITLE_KEY = 'title'
 
@@ -117,60 +112,4 @@ export const updateSession = createServerFn({ method: 'POST' })
     )
     if (error) handleAdkError(error)
     return data
-  })
-
-export type ChatInput = Omit<RunRequest, 'appName' | 'userId' | 'streaming'>
-
-export const runChat = createServerFn({ method: 'POST' })
-  .inputValidator((data: ChatInput) => data)
-  .handler(async function* ({ data: input }) {
-    const body: RunRequest = {
-      ...input,
-      appName: ADK_APP_NAME,
-      userId: ADK_USER_ID,
-      streaming: true,
-    }
-
-    const { response } = await adkClient.POST('/run_sse', {
-      parseAs: 'stream',
-      body,
-      signal: getRequest().signal,
-    })
-
-    if (!response.ok) {
-      handleAdkResponseError(response)
-    }
-
-    const reader = response.body?.getReader()
-    if (!reader) throw new Error('No response body from ADK')
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop() ?? ''
-
-      for (const part of parts) {
-        const lines = part.split('\n')
-        let data = ''
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            data += line.slice(6)
-          }
-        }
-        if (data) {
-          try {
-            yield JSON.parse(data) as AdkEvent
-          } catch {
-            // Skip unparseable events
-          }
-        }
-      }
-    }
   })

@@ -8,7 +8,9 @@ export const Route = createFileRoute('/_app/session/$sessionId')({
 
 function SessionPage() {
   const { sessionId } = useParams({ from: '/_app/session/$sessionId' })
-  const { messages, isStreaming, error, sendMessage } = useChat({ sessionId })
+  const { messages, isStreaming, error, sendMessage, stopGeneration } = useChat(
+    { sessionId },
+  )
 
   return (
     <>
@@ -28,6 +30,7 @@ function SessionPage() {
         messages={messages}
         isStreaming={isStreaming}
         onSendMessage={sendMessage}
+        onStop={stopGeneration}
       />
     </>
   )
