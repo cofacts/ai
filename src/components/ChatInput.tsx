@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker } from '@tanstack/react-router'
 
+// Map of draft messages by sessionId
 const drafts = new Map<string, string>()
 
 interface ChatInputProps {
