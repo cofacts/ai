@@ -1,9 +1,119 @@
 import { Link, useParams } from '@tanstack/react-router'
-import { getSessionTitle, useSessions } from '@/hooks/useSessions'
+import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import type { SessionListItem } from '@/lib/sessions.functions'
+import { useSessions } from '@/hooks/useSessions'
+import { updateSession } from '@/lib/sessions.functions'
 
 interface SidebarProps {
   isOpen: boolean
   onClose: () => void
+}
+
+interface SessionItemProps {
+  session: SessionListItem
+  isActive: boolean
+  onClose: () => void
+}
+
+function SessionItem({ session, isActive, onClose }: SessionItemProps) {
+  const queryClient = useQueryClient()
+  const [isEditing, setIsEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+
+  const title = session.name
+
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsEditing(true)
+    setEditTitle(title)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditTitle('')
+  }
+
+  const handleSaveEdit = async () => {
+    const trimmedTitle = editTitle.trim()
+    if (!trimmedTitle || trimmedTitle === title) {
+      handleCancelEdit()
+      return
+    }
+
+    try {
+      await updateSession({
+        data: {
+          sessionId: session.id,
+          name: trimmedTitle,
+        },
+      })
+      await queryClient.invalidateQueries({ queryKey: ['sessions'] })
+    } catch (err) {
+      console.error('Failed to update session title:', err)
+    } finally {
+      handleCancelEdit()
+    }
+  }
+
+  return (
+    <div className="relative group">
+      {isEditing ? (
+        <div
+          className={`flex flex-col p-3 rounded-lg ${isActive ? 'bg-primary/10 text-text-main' : 'text-text-muted'}`}
+        >
+          <div className="flex-1 min-w-0 pr-6">
+            <input
+              autoFocus
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onBlur={handleSaveEdit}
+              onKeyDown={(e) => {
+                // Blur triggers onBlur → handleSaveEdit, avoiding double invocation
+                if (e.key === 'Enter') e.currentTarget.blur()
+                if (e.key === 'Escape') handleCancelEdit()
+              }}
+              className="w-full text-sm font-medium bg-white border border-primary rounded px-1 outline-none"
+            />
+            <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
+              {session.id.slice(0, 8)}…
+            </div>
+          </div>
+        </div>
+      ) : (
+        <Link
+          to="/session/$sessionId"
+          params={{ sessionId: session.id }}
+          onClick={onClose}
+          className={`
+            flex flex-col p-3 rounded-lg transition-colors w-full
+            ${isActive ? 'bg-primary/10 text-text-main' : 'hover:bg-gray-50 text-text-muted'}
+          `}
+        >
+          <div className="flex-1 min-w-0 pr-6">
+            <div
+              className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
+            >
+              {title}
+            </div>
+            <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
+              {session.id.slice(0, 8)}…
+            </div>
+          </div>
+        </Link>
+      )}
+
+      {!isEditing && (
+        <button
+          onClick={handleStartEdit}
+          className="absolute right-2 top-3 p-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-primary transition-opacity"
+        >
+          <span className="material-symbols-outlined text-sm">edit</span>
+        </button>
+      )}
+    </div>
+  )
 }
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
@@ -67,33 +177,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           )}
 
-          {sessions?.map((session) => {
-            const isActive = currentSessionId === session.id
-            const title = getSessionTitle(session)
-            return (
-              <Link
-                key={session.id}
-                to="/session/$sessionId"
-                params={{ sessionId: session.id }}
-                onClick={onClose}
-                className={`
-                  flex flex-col p-3 rounded-lg group transition-colors
-                  ${isActive ? 'bg-primary/10 text-text-main' : 'hover:bg-gray-50 text-text-muted'}
-                `}
-              >
-                <div className="flex-1 min-w-0">
-                  <div
-                    className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
-                  >
-                    {title}
-                  </div>
-                  <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
-                    {session.id.slice(0, 8)}…
-                  </div>
-                </div>
-              </Link>
-            )
-          })}
+          {sessions?.map((session) => (
+            <SessionItem
+              key={session.id}
+              session={session}
+              isActive={currentSessionId === session.id}
+              onClose={onClose}
+            />
+          ))}
         </div>
 
         {/* Footer */}

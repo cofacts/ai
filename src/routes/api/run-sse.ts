@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { ADK_APP_NAME, ADK_USER_ID, adkClient } from '@/lib/adkClient'
-import { handleAdkResponseError } from '@/lib/adk.server'
+import { handleAdkResponseError } from '@/lib/adk-errors'
 import type { components } from '@/lib/adk-types'
 
 type RunRequest = components['schemas']['RunAgentRequest']

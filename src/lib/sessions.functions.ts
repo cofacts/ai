@@ -1,6 +1,14 @@
 import { createServerFn } from '@tanstack/react-start'
 import { ADK_APP_NAME, ADK_USER_ID, adkClient } from './adkClient'
-import { handleAdkError, handleAdkResponseError } from './adk.server'
+import { handleAdkError, handleAdkResponseError } from './adk-errors'
+
+const SESSION_TITLE_KEY = 'title'
+
+export interface SessionListItem {
+  id: string
+  name: string
+  lastUpdateTime: number
+}
 
 export const listSessions = createServerFn({ method: 'GET' }).handler(
   async () => {
@@ -13,7 +21,18 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
       },
     )
     if (error) handleAdkError(error)
-    return data
+    return (data ?? []).map((session): SessionListItem => {
+      const stateTitle = session.state?.[SESSION_TITLE_KEY]
+      const name =
+        typeof stateTitle === 'string' && stateTitle
+          ? stateTitle
+          : (session.events
+              ?.find(
+                (e) => e.content?.role === 'user' && e.content.parts?.[0]?.text,
+              )
+              ?.content?.parts?.[0]?.text?.slice(0, 40) ?? session.id)
+      return { id: session.id, name, lastUpdateTime: session.lastUpdateTime }
+    })
   },
 )
 
@@ -36,9 +55,14 @@ export const getSession = createServerFn({ method: 'GET' })
     return data
   })
 
+interface CreateSessionInput {
+  sessionId: string
+  name?: string
+}
+
 export const createSession = createServerFn({ method: 'POST' })
-  .inputValidator((sessionId: string) => sessionId)
-  .handler(async ({ data: sessionId }) => {
+  .inputValidator((input: CreateSessionInput) => input)
+  .handler(async ({ data: { sessionId, name } }) => {
     const { response } = await adkClient.POST(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
@@ -49,8 +73,9 @@ export const createSession = createServerFn({ method: 'POST' })
             session_id: sessionId,
           },
         },
-        // OpenAPI spec expects body for this POST request
-        body: {},
+        // In the updated ADK schema, the body for /sessions/{session_id} POST
+        // is expected to be the initial state (Record<string, any>).
+        body: name ? { [SESSION_TITLE_KEY]: name } : {},
       },
     )
 
@@ -62,3 +87,29 @@ export const createSession = createServerFn({ method: 'POST' })
     return { ok: true }
   })
 
+interface UpdateSessionInput {
+  sessionId: string
+  name: string
+}
+
+export const updateSession = createServerFn({ method: 'POST' })
+  .inputValidator((input: UpdateSessionInput) => input)
+  .handler(async ({ data: { sessionId, name } }) => {
+    const { data, error } = await adkClient.PATCH(
+      '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
+      {
+        params: {
+          path: {
+            app_name: ADK_APP_NAME,
+            user_id: ADK_USER_ID,
+            session_id: sessionId,
+          },
+        },
+        body: {
+          stateDelta: { [SESSION_TITLE_KEY]: name },
+        },
+      },
+    )
+    if (error) handleAdkError(error)
+    return data
+  })

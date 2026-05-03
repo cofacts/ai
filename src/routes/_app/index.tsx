@@ -24,14 +24,26 @@ function LandingPage() {
 
       const sessionId = crypto.randomUUID()
 
+      // Generate session title from the first message
+      const title = text.length > 40 ? text.slice(0, 40) + '...' : text
+
+      // 1. Create the session in ADK upfront
       try {
-        await createSession({ data: sessionId })
+        await createSession({
+          data: {
+            sessionId,
+            name: title,
+          },
+        })
       } catch (err) {
         setError(err instanceof Error ? err.message : '建立工作階段失敗')
         setIsLoading(false)
         return
       }
 
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+
+      // 2. Instantly seed the cache and start the background stream fetch
       sendChatMessage(queryClient, sessionId, text)
 
       navigate({
