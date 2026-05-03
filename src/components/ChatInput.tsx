@@ -18,11 +18,9 @@ export function ChatInput({
   isStreaming,
   disabled,
   placeholder = '詢問後續問題或要求修改...',
-  sessionId,
+  sessionId = '', // ChatInput without sessionId will connect to empty sessionId
 }: ChatInputProps) {
-  const [value, setValue] = useState(() =>
-    sessionId ? (drafts.get(sessionId) ?? '') : '',
-  )
+  const [value, setValue] = useState(() => drafts.get(sessionId) ?? '')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Auto-resize textarea
@@ -36,10 +34,8 @@ export function ChatInput({
   const handleChange = useCallback(
     (newValue: string) => {
       setValue(newValue)
-      if (sessionId) {
-        if (newValue) drafts.set(sessionId, newValue)
-        else drafts.delete(sessionId)
-      }
+      if (newValue) drafts.set(sessionId, newValue)
+      else drafts.delete(sessionId)
     },
     [sessionId],
   )
@@ -51,7 +47,7 @@ export function ChatInput({
 
   const handleSubmit = useCallback(() => {
     if (!value.trim() || disabled) return
-    if (sessionId) drafts.delete(sessionId)
+    drafts.delete(sessionId)
     onSend(value.trim())
     setValue('')
   }, [value, disabled, onSend, sessionId])
