@@ -66,6 +66,4 @@ spec:
           limits:
             cpu: "500m"
             memory: "256Mi"
-        securityContext:
-          runAsNonRoot: true
   ${TRAFFIC_BLOCK}
