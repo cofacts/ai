@@ -9,7 +9,7 @@
 // flow is initiated via the `login` server function (which hides the upstream
 // rumors-api origin).
 
-import { createContext, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 import type { CofactsUser } from '@/server/me.functions'
 import { LoginModal } from '@/components/LoginModal'
@@ -42,12 +42,12 @@ export function AuthProvider({
     undefined,
   )
 
-  function login(redirectTo?: string) {
+  const login = useCallback((redirectTo?: string) => {
     setPendingRedirect(redirectTo)
     setLoginModalOpen(true)
-  }
+  }, [])
 
-  async function logout() {
+  const logout = useCallback(async () => {
     setIsLoading(true)
     try {
       await fetch('/api/auth/logout', {
@@ -59,9 +59,9 @@ export function AuthProvider({
     }
     setUser(null)
     setIsLoading(false)
-  }
+  }, [])
 
-  async function refreshUser() {
+  const refreshUser = useCallback(async () => {
     setIsLoading(true)
     try {
       const fresh = await getCurrentUserServerFn()
@@ -71,12 +71,15 @@ export function AuthProvider({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
+
+  const value = useMemo<AuthState>(
+    () => ({ user, isLoading, login, logout, refreshUser }),
+    [user, isLoading, login, logout, refreshUser],
+  )
 
   return (
-    <AuthContext.Provider
-      value={{ user, isLoading, login, logout, refreshUser }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
       <LoginModal
         open={isLoginModalOpen}
