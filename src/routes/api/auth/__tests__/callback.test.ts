@@ -56,6 +56,15 @@ function encodeState(nonce: string, redirectPath: string): string {
 
 const NONCE = 'fixed-test-nonce-aaaaaaaaaaaaaaaa';
 
+function makeJwt(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'none' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return `${header}.${body}.`;
+}
+
+const FUTURE_EXP = Math.floor(Date.now() / 1000) + 3600;
+const FUTURE_JWT = makeJwt({ exp: FUTURE_EXP });
+
 describe('GET /api/auth/callback', () => {
   const setCookieMock = vi.mocked(setCookie);
   const getCookieMock = vi.mocked(getCookie);
@@ -74,7 +83,7 @@ describe('GET /api/auth/callback', () => {
 
   test('happy path: matching nonce → exchanges code, sets session, clears state cookie, 302-redirects', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ token: 'jwt-abc' }), {
+      new Response(JSON.stringify({ token: FUTURE_JWT }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -95,8 +104,8 @@ describe('GET /api/auth/callback', () => {
     expect(setCookieMock).toHaveBeenNthCalledWith(
       1,
       SESSION_COOKIE_NAME,
-      'jwt-abc',
-      buildSessionCookieAttrs(),
+      FUTURE_JWT,
+      buildSessionCookieAttrs(new Date(FUTURE_EXP * 1000)),
     );
     expect(setCookieMock).toHaveBeenNthCalledWith(
       2,
@@ -202,7 +211,7 @@ describe('GET /api/auth/callback', () => {
 
   test('non-same-origin redirect path (state.r="http://evil") falls back to "/"', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ token: 'jwt-xyz' }), {
+      new Response(JSON.stringify({ token: FUTURE_JWT }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -217,7 +226,7 @@ describe('GET /api/auth/callback', () => {
 
   test('protocol-relative redirect path (state.r="//evil") falls back to "/"', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ token: 'jwt-xyz' }), {
+      new Response(JSON.stringify({ token: FUTURE_JWT }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -243,5 +252,27 @@ describe('GET /api/auth/callback', () => {
     );
     expect(res.status).toBe(500);
     expect(setCookieMock).not.toHaveBeenCalled();
+  });
+
+  test('JWT without exp claim → session cookie has no expires (browser drops on close)', async () => {
+    const jwt = makeJwt({ sub: 'user-1' });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ token: jwt }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const state = encodeState(NONCE, '/');
+    await invoke(
+      `https://app.example.com/api/auth/callback?code=abc&state=${state}`,
+    );
+
+    expect(setCookieMock).toHaveBeenNthCalledWith(
+      1,
+      SESSION_COOKIE_NAME,
+      jwt,
+      buildSessionCookieAttrs(),
+    );
   });
 });

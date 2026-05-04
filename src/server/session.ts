@@ -2,8 +2,8 @@
 // Pure string/object helpers with no framework coupling — TanStack Start route
 // handlers (callback / logout / graphql proxy) import these and pass the result
 // to h3's setCookie / getCookie themselves.
-// Attributes: HttpOnly + Secure + SameSite=Lax + Path=/ + Max-Age=14d, matching
-// rumors-api's COOKIE_MAXAGE default (1209600 seconds).
+// Attributes: HttpOnly + Secure + SameSite=Lax + Path=/. Lifetime is pinned by
+// the callback to the JWT's `exp` claim so cookie and token expire in lockstep.
 
 export const SESSION_COOKIE_NAME = 'cofacts_session';
 
@@ -18,23 +18,23 @@ export interface CookieAttrs {
   secure: true;
   sameSite: 'lax';
   path: '/';
-  maxAge: number;
+  // Only used by buildClearSessionCookieAttrs (maxAge: 0 deletes the cookie).
+  // Live session cookies pin lifetime via `expires` to stay in sync with the JWT.
+  maxAge?: number;
+  expires?: Date;
 }
-
-/** 14 days in seconds, matching rumors-api COOKIE_MAXAGE default. */
-export const SESSION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
 
 /** 5 minutes — long enough for any realistic OAuth round-trip, short enough
  *  that a leaked nonce cookie has minimal replay window. */
 export const OAUTH_STATE_MAX_AGE_SECONDS = 5 * 60;
 
-export function buildSessionCookieAttrs(): CookieAttrs {
+export function buildSessionCookieAttrs(expires?: Date): CookieAttrs {
   return {
     httpOnly: true,
     secure: true,
     sameSite: 'lax',
     path: '/',
-    maxAge: SESSION_MAX_AGE_SECONDS,
+    expires,
   };
 }
 

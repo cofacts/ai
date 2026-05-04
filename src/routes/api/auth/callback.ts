@@ -17,6 +17,7 @@ import { timingSafeEqual } from 'node:crypto';
 
 import { createFileRoute } from '@tanstack/react-router';
 import { getCookie, setCookie } from '@tanstack/react-start/server';
+import { decodeJwt } from 'jose';
 
 import { API_BASE } from '@/server/api-base';
 import {
@@ -113,7 +114,18 @@ export const Route = createFileRoute('/api/auth/callback')({
           return new Response('Invalid token response', { status: 500 });
         }
 
-        setCookie(SESSION_COOKIE_NAME, data.token, buildSessionCookieAttrs());
+        // Pin the session cookie's lifetime to the JWT's `exp` claim so
+        // browser and server agree on when the session ends. Edge cases:
+        //   - exp absent  → undefined → session cookie (browser drops on close)
+        //   - exp in past → past Date → browser immediately drops the cookie
+        //   - decodeJwt throws on malformed token → 500
+        const { exp } = decodeJwt(data.token);
+        const expires = exp ? new Date(exp * 1000) : undefined;
+        setCookie(
+          SESSION_COOKIE_NAME,
+          data.token,
+          buildSessionCookieAttrs(expires),
+        );
         setCookie(
           OAUTH_STATE_COOKIE_NAME,
           '',
