@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
+import { Route as ApiAuthLogoutRouteImport } from './routes/api/auth/logout'
+import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as AppSessionSessionIdRouteImport } from './routes/_app/session.$sessionId'
 
 const AppRoute = AppRouteImport.update({
@@ -28,6 +30,16 @@ const ApiRunSseRoute = ApiRunSseRouteImport.update({
   path: '/api/run-sse',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthLogoutRoute = ApiAuthLogoutRouteImport.update({
+  id: '/api/auth/logout',
+  path: '/api/auth/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
+  id: '/api/auth/callback',
+  path: '/api/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
   id: '/session/$sessionId',
   path: '/session/$sessionId',
@@ -38,11 +50,15 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/api/run-sse': typeof ApiRunSseRoute
   '/session/$sessionId': typeof AppSessionSessionIdRoute
+  '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
 }
 export interface FileRoutesByTo {
   '/api/run-sse': typeof ApiRunSseRoute
   '/': typeof AppIndexRoute
   '/session/$sessionId': typeof AppSessionSessionIdRoute
+  '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -50,23 +66,39 @@ export interface FileRoutesById {
   '/api/run-sse': typeof ApiRunSseRoute
   '/_app/': typeof AppIndexRoute
   '/_app/session/$sessionId': typeof AppSessionSessionIdRoute
+  '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/run-sse' | '/session/$sessionId'
+  fullPaths:
+    | '/'
+    | '/api/run-sse'
+    | '/session/$sessionId'
+    | '/api/auth/callback'
+    | '/api/auth/logout'
   fileRoutesByTo: FileRoutesByTo
-  to: '/api/run-sse' | '/' | '/session/$sessionId'
+  to:
+    | '/api/run-sse'
+    | '/'
+    | '/session/$sessionId'
+    | '/api/auth/callback'
+    | '/api/auth/logout'
   id:
     | '__root__'
     | '/_app'
     | '/api/run-sse'
     | '/_app/'
     | '/_app/session/$sessionId'
+    | '/api/auth/callback'
+    | '/api/auth/logout'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   ApiRunSseRoute: typeof ApiRunSseRoute
+  ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
+  ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -90,6 +122,20 @@ declare module '@tanstack/react-router' {
       path: '/api/run-sse'
       fullPath: '/api/run-sse'
       preLoaderRoute: typeof ApiRunSseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/logout': {
+      id: '/api/auth/logout'
+      path: '/api/auth/logout'
+      fullPath: '/api/auth/logout'
+      preLoaderRoute: typeof ApiAuthLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/callback': {
+      id: '/api/auth/callback'
+      path: '/api/auth/callback'
+      fullPath: '/api/auth/callback'
+      preLoaderRoute: typeof ApiAuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/session/$sessionId': {
@@ -117,6 +163,8 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   ApiRunSseRoute: ApiRunSseRoute,
+  ApiAuthCallbackRoute: ApiAuthCallbackRoute,
+  ApiAuthLogoutRoute: ApiAuthLogoutRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
