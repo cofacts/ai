@@ -10,6 +10,7 @@ interface ChatAreaProps {
   isStreaming: boolean
   onSendMessage: (text: string) => void
   onStop?: () => void
+  sessionId?: string
 }
 
 export function ChatArea({
@@ -17,6 +18,7 @@ export function ChatArea({
   isStreaming,
   onSendMessage,
   onStop,
+  sessionId,
 }: ChatAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -85,6 +87,8 @@ export function ChatArea({
         onSend={onSendMessage}
         onStop={onStop}
         isStreaming={isStreaming}
+        key={sessionId} // Reset input when session changes
+        sessionId={sessionId}
       />
     </>
   )

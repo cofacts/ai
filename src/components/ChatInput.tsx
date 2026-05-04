@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useBlocker } from '@tanstack/react-router'
+
+// Map of draft messages by sessionId
+const drafts = new Map<string, string>()
 
 interface ChatInputProps {
   onSend: (text: string) => void
@@ -6,6 +10,7 @@ interface ChatInputProps {
   isStreaming?: boolean
   disabled?: boolean
   placeholder?: string
+  sessionId?: string
 }
 
 export function ChatInput({
@@ -14,8 +19,9 @@ export function ChatInput({
   isStreaming,
   disabled,
   placeholder = '詢問後續問題或要求修改...',
+  sessionId = '', // ChatInput without sessionId will connect to empty sessionId
 }: ChatInputProps) {
-  const [value, setValue] = useState('')
+  const [value, setValue] = useState(() => drafts.get(sessionId) ?? '')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Auto-resize textarea
@@ -26,11 +32,26 @@ export function ChatInput({
     el.style.height = `${Math.min(el.scrollHeight, 128)}px`
   }, [value])
 
+  const handleChange = useCallback(
+    (newValue: string) => {
+      setValue(newValue)
+      if (newValue) drafts.set(sessionId, newValue)
+      else drafts.delete(sessionId)
+    },
+    [sessionId],
+  )
+
+  useBlocker({
+    shouldBlockFn: () => false,
+    enableBeforeUnload: () => isStreaming || !!value.trim(),
+  })
+
   const handleSubmit = useCallback(() => {
     if (!value.trim() || disabled) return
+    drafts.delete(sessionId)
     onSend(value.trim())
     setValue('')
-  }, [value, disabled, onSend])
+  }, [value, disabled, onSend, sessionId])
 
   return (
     <div className="px-3 md:px-4 pb-3 md:pb-4 pt-2 bg-white shrink-0 z-10">
@@ -38,7 +59,7 @@ export function ChatInput({
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
           onKeyDown={(e) => {
             if (
               e.key === 'Enter' &&
