@@ -12,7 +12,7 @@ import { AuthProvider } from '@/lib/auth'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 
 export const Route = createRootRoute({
-  loader: async () => ({ initialUser: await getCurrentUserServerFn() }),
+  loader: async () => ({ serverLoadedUser: await getCurrentUserServerFn() }),
   head: () => ({
     meta: [
       {
@@ -70,7 +70,7 @@ const queryClient = new QueryClient({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
-  const { initialUser } = Route.useLoaderData()
+  const { serverLoadedUser } = Route.useLoaderData()
   return (
     <html lang="zh-TW">
       <head>
@@ -78,7 +78,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <QueryClientProvider client={queryClient}>
-          <AuthProvider initialUser={initialUser}>
+          <AuthProvider serverLoadedUser={serverLoadedUser}>
             {children}
           </AuthProvider>
           <ReactQueryDevtools />

@@ -28,12 +28,14 @@ const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({
   children,
-  initialUser,
+  serverLoadedUser,
 }: {
   children: React.ReactNode
-  initialUser?: CofactsUser | null
+  serverLoadedUser?: CofactsUser | null
 }) {
-  const [user, setUser] = useState<CofactsUser | null>(initialUser ?? null)
+  const [user, setUser] = useState<CofactsUser | null>(
+    serverLoadedUser ?? null,
+  )
   const [isLoading, setIsLoading] = useState(false)
   const [isLoginModalOpen, setLoginModalOpen] = useState(false)
   const [pendingRedirect, setPendingRedirect] = useState<string | undefined>(
