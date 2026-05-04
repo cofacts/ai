@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ResponseEditor } from './ResponseEditor'
 import { SourceLinkage } from './SourceLinkage'
-import type { DrawerTab } from '@/routes/_app'
 import type { SourceItem } from '@/lib/adk'
+
+export type DrawerTab = 'editor' | 'sources'
 
 interface RightDrawerProps {
   isOpen: boolean
