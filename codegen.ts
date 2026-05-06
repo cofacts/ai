@@ -6,6 +6,9 @@ const config: CodegenConfig = {
   generates: {
     './src/server/gql/': {
       preset: 'client',
+      presetConfig: {
+        fragmentMasking: false,
+      },
     },
   },
   ignoreNoDocuments: true,
