@@ -13,6 +13,7 @@ import re
 import json
 
 from dotenv import load_dotenv
+from google.adk.apps import App
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_response import LlmResponse
@@ -26,7 +27,6 @@ from .tools import (
     submit_cofacts_reply,
     resolve_vertex_redirect
 )
-from google.adk.apps.app import App
 from .instrumentation import setup_instrumentation, LangfuseTracingPlugin
 
 load_dotenv()
@@ -551,4 +551,3 @@ app = App(
     root_agent=ai_writer,
     plugins=[LangfuseTracingPlugin()],
 )
-

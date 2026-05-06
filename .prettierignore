@@ -1,3 +1,5 @@
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
+# ${TRAFFIC_BLOCK} is a block-level template variable that makes this invalid YAML until substituted
+service.template.yaml

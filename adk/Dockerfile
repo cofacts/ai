@@ -12,4 +12,5 @@ COPY --from=builder /app /app
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
-CMD ["adk", "api_server", "--port", "8000", "--host", "0.0.0.0", "."]
+ENV DATABASE_URL=sqlite+aiosqlite:////tmp/sessions.db
+CMD exec adk api_server --port 8000 --host 0.0.0.0 --session_service_uri=$DATABASE_URL .
