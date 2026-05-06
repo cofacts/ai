@@ -43,3 +43,4 @@ jobs:
          CLOUD_ML_REGION: "global"
         with:
           use_vertex: "true"
+          allowed_tools: "Bash(git merge:*),Bash(git commit:*),Bash(git push:*)"
