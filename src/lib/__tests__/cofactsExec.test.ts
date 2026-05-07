@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { getApiBase } from '@/server/api-base'
-import { cofactsExec } from '../cofacts-exec'
+import { cofactsExec } from '../cofactsExec'
 import { graphql } from '@/server/gql'
 
 vi.mock('@tanstack/react-start/server', () => ({

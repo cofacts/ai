@@ -6,7 +6,7 @@
 
 import { createServerFn } from '@tanstack/react-start'
 
-import { cofactsExec } from '@/lib/cofacts-exec'
+import { cofactsExec } from '@/lib/cofactsExec'
 import { graphql } from './gql'
 import type { GetCurrentUserQuery } from './gql/graphql'
 
