@@ -3,11 +3,13 @@ import { ADK_APP_NAME, ADK_USER_ID, adkClient } from './adkClient'
 import { handleAdkError, handleAdkResponseError } from './adk-errors'
 
 const SESSION_TITLE_KEY = 'title'
+const SESSION_LAST_OPENED_KEY = 'lastOpenedAt'
 
 export interface SessionListItem {
   id: string
   name: string
   lastUpdateTime: number
+  lastOpenedAt?: number
 }
 
 export const listSessions = createServerFn({ method: 'GET' }).handler(
@@ -31,7 +33,13 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
                 (e) => e.content?.role === 'user' && e.content.parts?.[0]?.text,
               )
               ?.content?.parts?.[0]?.text?.slice(0, 40) ?? session.id)
-      return { id: session.id, name, lastUpdateTime: session.lastUpdateTime }
+      const lastOpenedAt = session.state?.[SESSION_LAST_OPENED_KEY]
+      return {
+        id: session.id,
+        name,
+        lastUpdateTime: session.lastUpdateTime,
+        lastOpenedAt: typeof lastOpenedAt === 'number' ? lastOpenedAt : undefined,
+      }
     })
   },
 )
@@ -112,4 +120,26 @@ export const updateSession = createServerFn({ method: 'POST' })
     )
     if (error) handleAdkError(error)
     return data
+  })
+
+export const markSessionOpened = createServerFn({ method: 'POST' })
+  .inputValidator((sessionId: string) => sessionId)
+  .handler(async ({ data: sessionId }) => {
+    const { error } = await adkClient.PATCH(
+      '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
+      {
+        params: {
+          path: {
+            app_name: ADK_APP_NAME,
+            user_id: ADK_USER_ID,
+            session_id: sessionId,
+          },
+        },
+        body: {
+          stateDelta: { [SESSION_LAST_OPENED_KEY]: Date.now() },
+        },
+      },
+    )
+    if (error) handleAdkError(error)
+    return { ok: true }
   })

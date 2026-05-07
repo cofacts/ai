@@ -22,6 +22,17 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const [editTitle, setEditTitle] = useState('')
 
   const title = session.name
+  const hasNew =
+    !isActive &&
+    session.lastUpdateTime > 0 &&
+    session.lastUpdateTime > (session.lastOpenedAt ?? 0)
+
+  const lastActiveLabel = session.lastUpdateTime
+    ? new Date(session.lastUpdateTime * 1000).toLocaleDateString('zh-TW', {
+        month: 'short',
+        day: 'numeric',
+      })
+    : '—'
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -76,8 +87,8 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
               }}
               className="w-full text-sm font-medium bg-white border border-primary rounded px-1 outline-none"
             />
-            <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
-              {session.id.slice(0, 8)}…
+            <div className="text-xs text-text-muted truncate mt-0.5 text-left">
+              {lastActiveLabel}
             </div>
           </div>
         </div>
@@ -92,13 +103,18 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
           `}
         >
           <div className="flex-1 min-w-0 pr-6">
-            <div
-              className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
-            >
-              {title}
+            <div className="flex items-center gap-1.5">
+              {hasNew && (
+                <span className="shrink-0 h-2 w-2 rounded-full bg-primary" />
+              )}
+              <div
+                className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
+              >
+                {title}
+              </div>
             </div>
-            <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
-              {session.id.slice(0, 8)}…
+            <div className="text-xs text-text-muted truncate mt-0.5 text-left">
+              {lastActiveLabel}
             </div>
           </div>
         </Link>
@@ -121,7 +137,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const currentSessionId = (params as Record<string, string | undefined>)
     .sessionId
 
-  const { data: sessions, isLoading } = useSessions()
+  const { data: rawSessions, isLoading } = useSessions()
+  const sessions = rawSessions
+    ?.slice()
+    .sort((a, b) => b.lastUpdateTime - a.lastUpdateTime)
 
   return (
     <>
