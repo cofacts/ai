@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { SessionListItem } from '@/lib/chatSessions.functions'
 import { useSessions } from '@/hooks/useSessions'
 import { updateSession } from '@/lib/chatSessions.functions'
+import { getLastOpenedTime } from '@/lib/sessionOpenedTime'
 
 interface SidebarProps {
   isOpen: boolean
@@ -25,7 +26,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const hasNew =
     !isActive &&
     session.lastUpdateTime > 0 &&
-    session.lastUpdateTime > (session.lastOpenedAt ?? 0)
+    session.lastUpdateTime > getLastOpenedTime(session.id)
 
   const lastActiveLabel = session.lastUpdateTime
     ? new Date(session.lastUpdateTime * 1000).toLocaleDateString('zh-TW', {

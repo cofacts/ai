@@ -1,9 +1,8 @@
 import { createFileRoute, useParams } from '@tanstack/react-router'
 import { useEffect } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
 import { useChat } from '@/hooks/useChat'
-import { markSessionOpened } from '@/lib/sessions.functions'
+import { setLastOpenedTime } from '@/lib/sessionOpenedTime'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
@@ -11,16 +10,13 @@ export const Route = createFileRoute('/_app/session/$sessionId')({
 
 function SessionPage() {
   const { sessionId } = useParams({ from: '/_app/session/$sessionId' })
-  const queryClient = useQueryClient()
   const { messages, isStreaming, error, sendMessage, stopGeneration } = useChat(
     { sessionId },
   )
 
   useEffect(() => {
-    markSessionOpened({ data: sessionId }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ['sessions'] })
-    })
-  }, [sessionId, queryClient])
+    setLastOpenedTime(sessionId)
+  }, [sessionId])
 
   return (
     <>
