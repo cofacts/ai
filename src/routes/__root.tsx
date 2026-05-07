@@ -6,7 +6,6 @@ import {
 } from '@tanstack/react-router'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import appCss from '../styles.css?url'
 import { AuthProvider } from '@/lib/auth'
 import { getCurrentUserServerFn } from '@/server/me.functions'
@@ -60,15 +59,6 @@ export const Route = createRootRoute({
   shellComponent: RootDocument,
 })
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: Infinity,
-      gcTime: Infinity,
-    },
-  },
-})
-
 function RootDocument({ children }: { children: React.ReactNode }) {
   const { serverLoadedUser } = Route.useLoaderData()
   return (
@@ -77,12 +67,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider serverLoadedUser={serverLoadedUser}>
-            {children}
-          </AuthProvider>
-          <ReactQueryDevtools />
-        </QueryClientProvider>
+        <AuthProvider serverLoadedUser={serverLoadedUser}>
+          {children}
+        </AuthProvider>
+        <ReactQueryDevtools />
         <Scripts />
       </body>
     </html>
