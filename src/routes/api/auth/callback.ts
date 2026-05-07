@@ -55,8 +55,20 @@ function decodeState(state: string): DecodedState | null {
   return null;
 }
 
-function safeRedirectPath(path: string): string {
-  return path.startsWith('/') && !path.startsWith('//') ? path : '/';
+function safeRedirectPath(path: string, origin: string): string {
+  // Backslashes are folded into forward slashes by WHATWG URL parsing, so a
+  // value like `/\\evil.com/x` resolves to `https://evil.com/x` even though
+  // it starts with `/`. Resolve against the page origin and require the
+  // result to stay same-origin.
+  if (path.includes('\\')) return '/';
+  if (!path.startsWith('/') || path.startsWith('//')) return '/';
+  try {
+    const resolved = new URL(path, origin);
+    if (resolved.origin !== origin) return '/';
+    return resolved.pathname + resolved.search + resolved.hash;
+  } catch {
+    return '/';
+  }
 }
 
 function noncesMatch(a: string, b: string): boolean {
@@ -88,7 +100,7 @@ export const Route = createFileRoute('/api/auth/callback')({
           return new Response('State mismatch', { status: 401 });
         }
 
-        const redirectPath = safeRedirectPath(decoded.redirectPath);
+        const redirectPath = safeRedirectPath(decoded.redirectPath, url.origin);
 
         let tokenRes: Response;
         try {

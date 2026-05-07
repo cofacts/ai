@@ -223,6 +223,21 @@ describe('GET /api/auth/callback', () => {
     expect(res.headers.get('Location')).toBe('https://app.example.com/');
   });
 
+  test('backslash-prefixed redirect path (state.r="/\\\\evil.com/x") falls back to "/"', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ token: FUTURE_JWT }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const state = encodeState(NONCE, '/\\evil.com/x');
+    const res = await invoke(
+      `https://app.example.com/api/auth/callback?code=abc&state=${state}`,
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://app.example.com/');
+  });
+
   test('invalid token response (no token field) → 500, no cookie set', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({}), {

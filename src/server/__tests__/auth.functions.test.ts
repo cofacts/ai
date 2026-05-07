@@ -39,6 +39,14 @@ describe('sanitizeRedirectPath', () => {
     expect(sanitizeRedirectPath('//evil.com/x', ORIGIN)).toBe('/');
   });
 
+  test('rejects backslash-prefixed path that URL parses cross-origin', () => {
+    expect(sanitizeRedirectPath('/\\evil.com/x', ORIGIN)).toBe('/');
+  });
+
+  test('rejects mixed slash-backslash path', () => {
+    expect(sanitizeRedirectPath('/\\\\evil.com/x', ORIGIN)).toBe('/');
+  });
+
   test('rejects cross-origin URL', () => {
     expect(sanitizeRedirectPath('https://evil.com/x', ORIGIN)).toBe('/');
   });

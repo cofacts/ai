@@ -45,6 +45,10 @@ export function sanitizeRedirectPath(
   redirectTo: string,
   origin: string,
 ): string {
+  // WHATWG URL parsing folds backslashes into forward slashes, so e.g.
+  // `/\\evil.com/x` resolves to `https://evil.com/x`. Reject the input
+  // outright instead of trusting startsWith('/').
+  if (redirectTo.includes('\\')) return '/';
   if (redirectTo.startsWith('//')) return '/';
   if (redirectTo.startsWith('/')) return redirectTo;
   try {
