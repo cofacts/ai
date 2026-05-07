@@ -53,10 +53,14 @@ export function sanitizeRedirectPath(
   return '/';
 }
 
+export interface Nonce {
+  n: string;
+  r: string;
+}
+
 export function encodeState(nonce: string, redirectPath: string): string {
-  return Buffer.from(JSON.stringify({ n: nonce, r: redirectPath })).toString(
-    'base64url',
-  );
+  const payload: Nonce = { n: nonce, r: redirectPath };
+  return Buffer.from(JSON.stringify(payload)).toString('base64url');
 }
 
 export function resolveOriginFromHeaders(request: Request): string {

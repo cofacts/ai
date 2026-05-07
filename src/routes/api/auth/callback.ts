@@ -20,6 +20,7 @@ import { getCookie, setCookie } from '@tanstack/react-start/server';
 import { decodeJwt } from 'jose';
 
 import { getApiBase } from '@/server/api-base';
+import type { Nonce } from '@/server/auth.functions';
 import {
   OAUTH_STATE_COOKIE_NAME,
   SESSION_COOKIE_NAME,
@@ -44,7 +45,7 @@ function decodeState(state: string): DecodedState | null {
       typeof (parsed as { n: unknown }).n === 'string' &&
       typeof (parsed as { r: unknown }).r === 'string'
     ) {
-      const { n, r } = parsed as { n: string; r: string };
+      const { n, r } = parsed as Nonce;
       if (n.length === 0) return null;
       return { nonce: n, redirectPath: r };
     }
