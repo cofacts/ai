@@ -13,11 +13,13 @@ This is the web application for [Cofacts.ai](https://cofacts.ai), a chat-based A
 
 ## Getting Started
 
-1. Install dependencies:
+1. Install Node.js dependencies:
 
 ```bash
 pnpm install
 ```
+
+> **Note:** This will *not* install Python dependencies. You must run the next step manually.
 
 2. Install Python dependencies for the ADK agent:
 

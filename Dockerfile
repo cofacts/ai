@@ -3,9 +3,9 @@ FROM node:22-alpine AS builder
 RUN corepack enable pnpm
 WORKDIR /app
 
-# Install deps (skip postinstall that would try to run uv)
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --ignore-scripts
+# Install deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY . .
