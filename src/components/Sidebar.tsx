@@ -22,14 +22,15 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const [editTitle, setEditTitle] = useState('')
 
   const title = session.name
-  const lastActivityTime = session.lastEventTime ?? session.lastUpdateTime
+  const lastActivityTime = session.lastEventTime ?? 0
   const hasNew =
     !isActive &&
     lastActivityTime > 0 &&
     lastActivityTime > (session.lastOpenedAt ?? 0)
 
-  const lastActiveLabel = lastActivityTime
-    ? new Date(lastActivityTime * 1000).toLocaleDateString('zh-TW', {
+  const lastDisplayTime = session.lastEventTime ?? session.lastUpdateTime
+  const lastActiveLabel = lastDisplayTime
+    ? new Date(lastDisplayTime * 1000).toLocaleDateString('zh-TW', {
         month: 'short',
         day: 'numeric',
       })
@@ -141,11 +142,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { data: rawSessions, isLoading } = useSessions()
   const sessions = rawSessions
     ?.slice()
-    .sort(
-      (a, b) =>
-        (b.lastEventTime ?? b.lastUpdateTime) -
-        (a.lastEventTime ?? a.lastUpdateTime),
-    )
+    .sort((a, b) => (b.lastEventTime ?? 0) - (a.lastEventTime ?? 0))
 
   return (
     <>
