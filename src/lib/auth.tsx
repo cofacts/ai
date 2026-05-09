@@ -12,14 +12,25 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
+import type { QueryClient } from '@tanstack/react-query'
+import type { CofactsUser } from '@/server/me.functions'
 import { logout as logoutServerFn } from '@/server/auth.functions'
 import { getCurrentUserServerFn } from '@/server/me.functions'
-import type { CofactsUser } from '@/server/me.functions'
 import { LoginModal } from '@/components/LoginModal'
 
 export type { CofactsUser }
 
 const ME_QUERY_KEY = ['me'] as const
+
+// Drop user-scoped caches so the previous user's session list and chat
+// messages cannot be read by an anonymous viewer in the same tab. Both
+// queries use staleTime/gcTime: Infinity, so removeQueries (not invalidate)
+// is required for immediate eviction.
+export function clearUserScopedCache(queryClient: QueryClient) {
+  queryClient.setQueryData(ME_QUERY_KEY, null)
+  queryClient.removeQueries({ queryKey: ['sessions'] })
+  queryClient.removeQueries({ queryKey: ['chat'] })
+}
 
 interface AuthState {
   user: CofactsUser | null
@@ -58,7 +69,7 @@ export function AuthProvider({
     } catch {
       // best-effort: clear local state even if the network call fails
     }
-    queryClient.setQueryData(ME_QUERY_KEY, null)
+    clearUserScopedCache(queryClient)
   }, [callLogout, queryClient])
 
   const value = useMemo<AuthState>(
