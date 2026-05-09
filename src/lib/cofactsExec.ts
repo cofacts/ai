@@ -15,7 +15,7 @@ import { getCookie } from '@tanstack/react-start/server'
 import { print } from 'graphql'
 
 import { getApiBase } from '@/server/api-base'
-import { SESSION_COOKIE_NAME } from '@/server/session'
+import { SESSION_COOKIE_NAME } from '@/server/sessionCookie'
 
 interface GraphQLResponse<TResult> {
   data?: TResult | null

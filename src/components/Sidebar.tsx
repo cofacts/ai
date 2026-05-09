@@ -1,9 +1,9 @@
 import { Link, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { SessionListItem } from '@/lib/sessions.functions'
+import type { SessionListItem } from '@/lib/chatSessions.functions'
 import { useSessions } from '@/hooks/useSessions'
-import { updateSession } from '@/lib/sessions.functions'
+import { updateSession } from '@/lib/chatSessions.functions'
 
 interface SidebarProps {
   isOpen: boolean

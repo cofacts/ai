@@ -4,7 +4,7 @@ import {
   SESSION_COOKIE_NAME,
   buildClearSessionCookieAttrs,
   buildSessionCookieAttrs,
-} from '../session';
+} from '../sessionCookie';
 
 describe('session cookie helpers', () => {
   test('exposes the expected cookie name', () => {

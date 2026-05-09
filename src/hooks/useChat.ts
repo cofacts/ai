@@ -10,7 +10,7 @@ import {
   sendChatMessage,
   startChatStream,
 } from '@/lib/chatCache'
-import { getSession } from '@/lib/sessions.functions'
+import { getSession } from '@/lib/chatSessions.functions'
 
 interface UseChatOptions {
   sessionId: string

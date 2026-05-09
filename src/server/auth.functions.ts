@@ -32,7 +32,7 @@ import {
   SESSION_COOKIE_NAME,
   buildClearSessionCookieAttrs,
   buildOAuthStateCookieAttrs,
-} from './session';
+} from './sessionCookie';
 
 export const ALLOWED_PROVIDERS = ['github', 'facebook', 'google'] as const;
 export type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number];

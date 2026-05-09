@@ -10,7 +10,7 @@ import {
   SESSION_COOKIE_NAME,
   buildClearOAuthStateCookieAttrs,
   buildSessionCookieAttrs,
-} from '@/server/session';
+} from '@/server/sessionCookie';
 
 
 vi.mock('@tanstack/react-start/server', () => ({

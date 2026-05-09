@@ -26,7 +26,7 @@ import {
   SESSION_COOKIE_NAME,
   buildClearOAuthStateCookieAttrs,
   buildSessionCookieAttrs,
-} from '@/server/session';
+} from '@/server/sessionCookie';
 
 interface DecodedState {
   nonce: string;

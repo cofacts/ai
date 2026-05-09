@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import type { SessionListItem } from '@/lib/sessions.functions'
-import { listSessions } from '@/lib/sessions.functions'
+import type { SessionListItem } from '@/lib/chatSessions.functions'
+import { listSessions } from '@/lib/chatSessions.functions'
 
 export function useSessions() {
   return useQuery<Array<SessionListItem>>({
