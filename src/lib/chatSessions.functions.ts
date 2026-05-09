@@ -51,6 +51,7 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
           typeof lastOpenedAt === 'number' ? lastOpenedAt : undefined,
       }
     })
+    .sort((a, b) => (b.lastEventTime ?? 0) - (a.lastEventTime ?? 0))
   },
 )
 

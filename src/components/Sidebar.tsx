@@ -138,10 +138,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const currentSessionId = (params as Record<string, string | undefined>)
     .sessionId
 
-  const { data: rawSessions, isLoading } = useSessions()
-  const sessions = rawSessions
-    ?.slice()
-    .sort((a, b) => (b.lastEventTime ?? 0) - (a.lastEventTime ?? 0))
+  const { data: sessions, isLoading } = useSessions()
 
   return (
     <>
