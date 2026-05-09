@@ -35,7 +35,6 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
           value: 0,
           dataType: 'NUMERIC',
           comment: '',
-          metadata: { userId: user?.id ?? null },
         })
       }
     } else {
@@ -48,7 +47,6 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
           name: 'user-thumbs',
           value: next,
           dataType: 'NUMERIC',
-          metadata: { userId: user?.id ?? null },
         })
       }
     }
@@ -64,7 +62,6 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
         value: feedbackGiven,
         dataType: 'NUMERIC',
         comment,
-        metadata: { userId: user?.id ?? null },
       })
     }
   }
