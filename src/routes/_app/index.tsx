@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import { ChatInput } from '@/components/ChatInput'
+import { LoginPrompt } from '@/components/LoginPrompt'
+import { useAuth } from '@/lib/auth'
 
 export const Route = createFileRoute('/_app/')({
   component: LandingPage,
@@ -12,6 +14,7 @@ export const Route = createFileRoute('/_app/')({
 function LandingPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -71,13 +74,21 @@ function LandingPage() {
 
       {/* Input */}
       <div className="max-w-2xl w-full mt-8">
-        <ChatInput
-          onSend={handleSend}
-          disabled={isLoading}
-          placeholder="貼上想查核的訊息，或輸入 Cofacts 文章連結 (https://cofacts.tw/article/...)..."
-        />
-        {error && (
-          <div className="mt-2 text-sm text-red-500 text-center">{error}</div>
+        {user ? (
+          <>
+            <ChatInput
+              onSend={handleSend}
+              disabled={isLoading}
+              placeholder="貼上想查核的訊息，或輸入 Cofacts 文章連結 (https://cofacts.tw/article/...)..."
+            />
+            {error && (
+              <div className="mt-2 text-sm text-red-500 text-center">
+                {error}
+              </div>
+            )}
+          </>
+        ) : (
+          <LoginPrompt message="登入後即可開始與 Cofacts.ai 對話" />
         )}
       </div>
     </div>

@@ -3,7 +3,9 @@ import { UserMessage } from './UserMessage'
 import { AgentMessage } from './AgentMessage'
 import { FeedbackButtons } from './FeedbackButtons'
 import { ChatInput } from './ChatInput'
+import { LoginPrompt } from './LoginPrompt'
 import type { ChatMessage } from '@/lib/adk'
+import { useAuth } from '@/lib/auth'
 
 interface ChatAreaProps {
   messages: Array<ChatMessage>
@@ -20,6 +22,7 @@ export function ChatArea({
   onStop,
   sessionId,
 }: ChatAreaProps) {
+  const { user } = useAuth()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom on new messages
@@ -83,13 +86,17 @@ export function ChatArea({
       </div>
 
       {/* Input area */}
-      <ChatInput
-        onSend={onSendMessage}
-        onStop={onStop}
-        isStreaming={isStreaming}
-        key={sessionId} // Reset input when session changes
-        sessionId={sessionId}
-      />
+      {user ? (
+        <ChatInput
+          onSend={onSendMessage}
+          onStop={onStop}
+          isStreaming={isStreaming}
+          key={sessionId} // Reset input when session changes
+          sessionId={sessionId}
+        />
+      ) : (
+        <LoginPrompt message="登入後即可繼續與 Cofacts.ai 對話" />
+      )}
     </>
   )
 }
