@@ -1,6 +1,9 @@
 import { createFileRoute, useParams } from '@tanstack/react-router'
+import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
 import { useChat } from '@/hooks/useChat'
+import { markSessionOpened } from '@/lib/chatSessions.functions'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
@@ -8,9 +11,21 @@ export const Route = createFileRoute('/_app/session/$sessionId')({
 
 function SessionPage() {
   const { sessionId } = useParams({ from: '/_app/session/$sessionId' })
+  const queryClient = useQueryClient()
   const { messages, isStreaming, error, sendMessage, stopGeneration } = useChat(
     { sessionId },
   )
+
+  useEffect(() => {
+    if (isStreaming) {
+      // Don't trigger ADK state update when streaming;
+      // otherwise when the stream ends, the session will be stale.
+      return
+    }
+    markSessionOpened({ data: sessionId }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+    })
+  }, [sessionId, queryClient, isStreaming])
 
   return (
     <>

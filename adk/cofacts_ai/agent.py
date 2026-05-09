@@ -11,6 +11,7 @@ This module implements a hierarchical agent system with:
 from typing import Dict, Optional
 import re
 import json
+import time
 
 from dotenv import load_dotenv
 from google.adk.apps import App
@@ -33,6 +34,17 @@ load_dotenv()
 
 # Initialize Langfuse instrumentation for observability
 setup_instrumentation()
+
+# lastEventTime: records when the agent turn last completed, used by the sidebar
+# for sorting and unread-dot logic. We cannot rely on ADK's built-in lastUpdateTime
+# because any session state PATCH (including the client writing lastOpenedAt)
+# bumps it, which would cause sidebar reordering on every session open.
+SESSION_LAST_EVENT_TIME_KEY = 'lastEventTime'
+
+
+async def update_last_event_time(callback_context: CallbackContext) -> None:
+    """Records the current time in session state after each ai_writer agent turn."""
+    callback_context.state[SESSION_LAST_EVENT_TIME_KEY] = time.time()
 
 
 async def append_grounding_sources(
@@ -380,6 +392,7 @@ ai_writer = LlmAgent(
     name="writer",
     model="gemini-2.5-pro",
     description="AI agent that orchestrates fact-checking process and composes final fact-check replies for Cofacts.",
+    after_agent_callback=update_last_event_time,
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
 

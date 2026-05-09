@@ -145,6 +145,8 @@ export async function startChatStream({
     })
     if (abortControllers.get(sessionId) === controller) {
       abortControllers.delete(sessionId)
+      // Refresh session list so lastEventTime (written by agent callback) is picked up immediately.
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
     }
   }
 }

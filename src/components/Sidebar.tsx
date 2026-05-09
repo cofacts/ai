@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { SessionListItem } from '@/lib/chatSessions.functions'
 import { useSessions } from '@/hooks/useSessions'
-import { updateSession } from '@/lib/chatSessions.functions'
+import { updateSessionTitle } from '@/lib/chatSessions.functions'
 
 interface SidebarProps {
   isOpen: boolean
@@ -20,8 +20,20 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const queryClient = useQueryClient()
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
+  const { title, lastEventTime, lastOpenedAt, lastUpdateTime } = session
 
-  const title = session.name
+  const hasNew =
+    !isActive &&
+    lastEventTime !== undefined &&
+    lastEventTime > (lastOpenedAt ?? lastUpdateTime)
+
+  const lastActiveLabel =
+    lastEventTime !== undefined
+      ? new Date(lastEventTime * 1000).toLocaleDateString('zh-TW', {
+          month: 'short',
+          day: 'numeric',
+        })
+      : '—'
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -43,10 +55,10 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
     }
 
     try {
-      await updateSession({
+      await updateSessionTitle({
         data: {
           sessionId: session.id,
-          name: trimmedTitle,
+          title: trimmedTitle,
         },
       })
       await queryClient.invalidateQueries({ queryKey: ['sessions'] })
@@ -76,8 +88,8 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
               }}
               className="w-full text-sm font-medium bg-white border border-primary rounded px-1 outline-none"
             />
-            <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
-              {session.id.slice(0, 8)}…
+            <div className="text-xs text-text-muted truncate mt-0.5 text-left">
+              {lastActiveLabel}
             </div>
           </div>
         </div>
@@ -92,13 +104,18 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
           `}
         >
           <div className="flex-1 min-w-0 pr-6">
-            <div
-              className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
-            >
-              {title}
+            <div className="flex items-center gap-1.5">
+              {hasNew && (
+                <span className="shrink-0 h-2 w-2 rounded-full bg-primary" />
+              )}
+              <div
+                className={`text-sm font-medium truncate text-left ${!isActive ? 'group-hover:text-text-main' : ''}`}
+              >
+                {title}
+              </div>
             </div>
-            <div className="text-xs text-text-muted truncate mt-0.5 text-left font-mono">
-              {session.id.slice(0, 8)}…
+            <div className="text-xs text-text-muted truncate mt-0.5 text-left">
+              {lastActiveLabel}
             </div>
           </div>
         </Link>
