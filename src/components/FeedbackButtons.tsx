@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { LangfuseWeb } from 'langfuse'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { FeedbackPopoverContent } from './FeedbackPopoverContent'
+import { useAuth } from '@/lib/auth'
 
 const langfuse = import.meta.env.VITE_LANGFUSE_PUBLIC_KEY
   ? new LangfuseWeb({
@@ -15,6 +16,7 @@ interface FeedbackButtonsProps {
 }
 
 export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
+  const { user } = useAuth()
   const [feedbackGiven, setFeedbackGiven] = useState<1 | -1 | null>(null)
   const [isPopoverOpen, setIsPopoverOpen] = useState(false)
 
@@ -33,6 +35,7 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
           value: 0,
           dataType: 'NUMERIC',
           comment: '',
+          metadata: { userId: user?.id ?? null },
         })
       }
     } else {
@@ -45,6 +48,7 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
           name: 'user-thumbs',
           value: next,
           dataType: 'NUMERIC',
+          metadata: { userId: user?.id ?? null },
         })
       }
     }
@@ -60,6 +64,7 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
         value: feedbackGiven,
         dataType: 'NUMERIC',
         comment,
+        metadata: { userId: user?.id ?? null },
       })
     }
   }
