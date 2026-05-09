@@ -4,8 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import { ChatInput } from '@/components/ChatInput'
-import { LoginPrompt } from '@/components/LoginPrompt'
-import { useAuth } from '@/lib/auth'
+import { WelcomeHero } from '@/components/WelcomeHero'
 
 export const Route = createFileRoute('/_app/')({
   component: LandingPage,
@@ -14,7 +13,6 @@ export const Route = createFileRoute('/_app/')({
 function LandingPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { user } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -58,39 +56,15 @@ function LandingPage() {
   )
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6">
-      {/* Welcome */}
-      <div className="max-w-2xl w-full text-center space-y-6">
-        <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-white font-bold text-2xl mx-auto shadow-lg">
-          C
-        </div>
-        <h1 className="text-2xl font-bold text-text-main">
-          歡迎使用 Cofacts.ai
-        </h1>
-        <p className="text-text-muted leading-relaxed">
-          貼上可疑訊息或 Cofacts 文章連結，AI 協助您進行查核、撰寫回應。
-        </p>
-      </div>
-
-      {/* Input */}
-      <div className="max-w-2xl w-full mt-8">
-        {user ? (
-          <>
-            <ChatInput
-              onSend={handleSend}
-              disabled={isLoading}
-              placeholder="貼上想查核的訊息，或輸入 Cofacts 文章連結 (https://cofacts.tw/article/...)..."
-            />
-            {error && (
-              <div className="mt-2 text-sm text-red-500 text-center">
-                {error}
-              </div>
-            )}
-          </>
-        ) : (
-          <LoginPrompt message="登入後即可開始與 Cofacts.ai 對話" />
-        )}
-      </div>
-    </div>
+    <WelcomeHero>
+      <ChatInput
+        onSend={handleSend}
+        disabled={isLoading}
+        placeholder="貼上想查核的訊息，或輸入 Cofacts 文章連結 (https://cofacts.tw/article/...)..."
+      />
+      {error && (
+        <div className="mt-2 text-sm text-red-500 text-center">{error}</div>
+      )}
+    </WelcomeHero>
   )
 }

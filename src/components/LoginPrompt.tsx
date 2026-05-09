@@ -1,12 +1,10 @@
 import { useAuth } from '@/lib/auth'
 
 interface LoginPromptProps {
-  message?: string
+  message: string
 }
 
-export function LoginPrompt({
-  message = '登入後即可開始與 Cofacts.ai 對話',
-}: LoginPromptProps) {
+export function LoginPrompt({ message }: LoginPromptProps) {
   const { login } = useAuth()
   return (
     <div className="border-t border-border-subtle bg-white p-4 flex flex-col items-center gap-3">
