@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ADK_APP_NAME, ADK_USER_ID, adkClient } from '@/lib/adkClient'
-import { handleAdkResponseError } from '@/lib/adk-errors'
 import type { components } from '@/lib/adk-types'
+import { ADK_APP_NAME, adkClient } from '@/lib/adkClient'
+import { handleAdkResponseError } from '@/lib/adk-errors'
+import { UnauthorizedError, resolveAdkUserIdOrThrow } from '@/server/adkUser'
 
 type RunRequest = components['schemas']['RunAgentRequest']
 type ChatInput = Omit<RunRequest, 'appName' | 'userId' | 'streaming'>
@@ -18,6 +19,19 @@ export const Route = createFileRoute('/api/run-sse')({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        let userId: string
+        try {
+          userId = await resolveAdkUserIdOrThrow()
+        } catch (err) {
+          if (err instanceof UnauthorizedError) {
+            return new Response(JSON.stringify({ error: err.message }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          }
+          throw err
+        }
+
         const input = (await request.json()) as ChatInput
 
         const { response } = await adkClient.POST('/run_sse', {
@@ -25,7 +39,7 @@ export const Route = createFileRoute('/api/run-sse')({
           body: {
             ...input,
             appName: ADK_APP_NAME,
-            userId: ADK_USER_ID,
+            userId,
             streaming: true,
           },
           // When the client aborts the fetch, request.signal fires (via srvx),
