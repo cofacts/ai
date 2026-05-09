@@ -17,17 +17,15 @@ function SessionPage() {
   )
 
   useEffect(() => {
+    if (isStreaming) {
+      // Don't trigger ADK state update when streaming;
+      // otherwise when the stream ends, the session will be stale.
+      return
+    }
     markSessionOpened({ data: sessionId }).then(() => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
     })
-  }, [
-    sessionId,
-    queryClient,
-
-    // Re-run when messages.length changes so new messages received while the user
-    // is viewing the session are also marked as read.
-    messages.length,
-  ])
+  }, [sessionId, queryClient, isStreaming])
 
   return (
     <>
