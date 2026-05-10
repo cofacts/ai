@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { components } from '@/lib/adk-types'
 import { ADK_APP_NAME, adkClient } from '@/lib/adkClient'
 import { handleAdkResponseError } from '@/lib/adk-errors'
-import { UnauthorizedError, resolveAdkUserIdOrThrow } from '@/server/adkUser'
+import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
 
 type RunRequest = components['schemas']['RunAgentRequest']
 type ChatInput = Omit<RunRequest, 'appName' | 'userId' | 'streaming'>
@@ -23,12 +23,7 @@ export const Route = createFileRoute('/api/run-sse')({
         try {
           userId = await resolveAdkUserIdOrThrow()
         } catch (err) {
-          if (err instanceof UnauthorizedError) {
-            return new Response(JSON.stringify({ error: err.message }), {
-              status: 401,
-              headers: { 'Content-Type': 'application/json' },
-            })
-          }
+          if (err instanceof Response) return err
           throw err
         }
 
