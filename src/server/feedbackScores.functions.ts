@@ -1,5 +1,4 @@
 import { createServerFn } from '@tanstack/react-start'
-import { setResponseStatus } from '@tanstack/react-start/server'
 import { resolveAdkUserIdOrThrow } from './adkUser'
 
 const SCORE_NAME = 'user-thumbs'
@@ -9,14 +8,8 @@ export interface FeedbackScore {
   comment: string | null
 }
 
-export class LangfuseFetchError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly statusText: string,
-  ) {
-    super(`Langfuse scores fetch failed: ${status} ${statusText}`)
-    this.name = 'LangfuseFetchError'
-  }
+function langfuseUpstreamFailed(status: number, statusText: string): Error {
+  return new Error(`Langfuse upstream failed: ${status} ${statusText}`)
 }
 
 interface LangfuseScore {
@@ -75,7 +68,7 @@ export async function fetchFeedbackForTrace(
     headers: { Authorization: `Basic ${auth}` },
   })
   if (!response.ok) {
-    throw new LangfuseFetchError(response.status, response.statusText)
+    throw langfuseUpstreamFailed(response.status, response.statusText)
   }
   const body = (await response.json()) as LangfuseScoresResponse
 
@@ -91,12 +84,70 @@ export const getFeedbackForTrace = createServerFn({ method: 'GET' })
   .inputValidator((traceId: string) => traceId)
   .handler(async ({ data: traceId }): Promise<FeedbackScore> => {
     const userId = await resolveAdkUserIdOrThrow()
-    try {
-      return await fetchFeedbackForTrace(traceId, userId)
-    } catch (err) {
-      if (err instanceof LangfuseFetchError) {
-        setResponseStatus(502)
-      }
-      throw err
+    return await fetchFeedbackForTrace(traceId, userId)
+  })
+
+export interface SubmitFeedbackInput {
+  traceId: string
+  value: 1 | -1 | 0
+  comment?: string
+}
+
+function isSubmitFeedbackInput(raw: unknown): raw is SubmitFeedbackInput {
+  if (!raw || typeof raw !== 'object') return false
+  const obj = raw as Record<string, unknown>
+  if (typeof obj.traceId !== 'string' || obj.traceId.length === 0) return false
+  if (obj.value !== 1 && obj.value !== -1 && obj.value !== 0) return false
+  if (obj.comment !== undefined && typeof obj.comment !== 'string') return false
+  return true
+}
+
+export async function postFeedbackForTrace(
+  input: SubmitFeedbackInput,
+): Promise<void> {
+  const baseUrl = process.env.LANGFUSE_BASE_URL
+  const publicKey = process.env.LANGFUSE_PUBLIC_KEY
+  const secretKey = process.env.LANGFUSE_SECRET_KEY
+  if (!baseUrl || !publicKey || !secretKey) return
+
+  const url = new URL('/api/public/v2/scores', baseUrl)
+  const auth = Buffer.from(`${publicKey}:${secretKey}`).toString('base64')
+  // Deterministic id makes repeated submissions for the same trace upsert
+  // (Langfuse merges scores by id within the project), so toggling thumbs
+  // overwrites the previous value instead of accumulating duplicates.
+  const body: Record<string, unknown> = {
+    id: `user-${input.traceId}`,
+    traceId: input.traceId,
+    name: SCORE_NAME,
+    value: input.value,
+    dataType: 'NUMERIC',
+  }
+  if (input.comment !== undefined) body.comment = input.comment
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    throw langfuseUpstreamFailed(response.status, response.statusText)
+  }
+}
+
+export const submitFeedbackForTrace = createServerFn({ method: 'POST' })
+  .inputValidator((raw: unknown): SubmitFeedbackInput => {
+    if (!isSubmitFeedbackInput(raw)) {
+      throw new Error('Invalid feedback submission payload')
     }
+    return raw
+  })
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    // Re-resolve identity per submission so an expired cookie/JWT triggers
+    // a 401 here instead of silently posting under a stale user id.
+    await resolveAdkUserIdOrThrow()
+    await postFeedbackForTrace(data)
+    return { ok: true }
   })
