@@ -3,32 +3,23 @@
 // `GetUser` round-trip (which is rate-limited). Falls through to 401 on missing
 // cookie or any verify failure (bad signature, expired, wrong alg, missing claims).
 //
-// Auth failure throws `Response`: TanStack Start's serverFn handler passes
-// thrown Response objects through verbatim, and the client deserializer hands
-// the same Response to the caller, so HTTP status survives the RPC boundary.
+// Auth failure throws `new Error(AUTH_EXPIRED_MESSAGE)` so the serverFn
+// client re-throws it on the caller side, letting React Query's onError fire
+// and the global auth-expired handler prompt re-login.
 
 import { getCookie } from '@tanstack/react-start/server'
 
+import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
 import { SESSION_COOKIE_NAME } from './sessionCookie'
 import { verifySessionToken } from './jwt'
 
-function unauthorized(): Response {
-  return new Response(
-    JSON.stringify({ message: 'Authentication required' }),
-    {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    },
-  )
-}
-
 export async function resolveAdkUserIdOrThrow(): Promise<string> {
   const token = getCookie(SESSION_COOKIE_NAME)
-  if (!token) throw unauthorized()
+  if (!token) throw new Error(AUTH_EXPIRED_MESSAGE)
   try {
     const { userId } = await verifySessionToken(token)
     return userId
   } catch {
-    throw unauthorized()
+    throw new Error(AUTH_EXPIRED_MESSAGE)
   }
 }

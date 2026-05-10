@@ -9,6 +9,7 @@ vi.mock('../jwt', () => ({
 }))
 
 import { getCookie } from '@tanstack/react-start/server'
+import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
 import { verifySessionToken } from '../jwt'
 import { resolveAdkUserIdOrThrow } from '../adkUser'
 
@@ -34,40 +35,25 @@ describe('resolveAdkUserIdOrThrow', () => {
     expect(mockedVerify).toHaveBeenCalledWith('valid-token')
   })
 
-  test('throws a 401 Response when cookie is missing', async () => {
+  test('throws AUTH_EXPIRED Error when cookie is missing', async () => {
     mockedGetCookie.mockReturnValueOnce(undefined)
 
     await expect(resolveAdkUserIdOrThrow()).rejects.toSatisfy(
-      (err: unknown) => err instanceof Response && err.status === 401,
+      (err: unknown) =>
+        err instanceof Error && err.message === AUTH_EXPIRED_MESSAGE,
     )
     expect(mockedVerify).not.toHaveBeenCalled()
   })
 
-  test('throws a 401 Response when verify fails', async () => {
+  test('throws AUTH_EXPIRED Error when verify fails', async () => {
     mockedGetCookie.mockReturnValueOnce('bad-token')
     mockedVerify.mockRejectedValueOnce(
       new Error('signature verification failed'),
     )
 
     await expect(resolveAdkUserIdOrThrow()).rejects.toSatisfy(
-      (err: unknown) => err instanceof Response && err.status === 401,
+      (err: unknown) =>
+        err instanceof Error && err.message === AUTH_EXPIRED_MESSAGE,
     )
-  })
-
-  test('the thrown 401 Response carries a JSON message body', async () => {
-    mockedGetCookie.mockReturnValueOnce(undefined)
-
-    let thrown: unknown
-    try {
-      await resolveAdkUserIdOrThrow()
-    } catch (err) {
-      thrown = err
-    }
-
-    expect(thrown).toBeInstanceOf(Response)
-    const response = thrown as Response
-    expect(response.headers.get('Content-Type')).toBe('application/json')
-    const body = (await response.json()) as { message?: string }
-    expect(body.message).toBeTypeOf('string')
   })
 })

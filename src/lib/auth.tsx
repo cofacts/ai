@@ -9,14 +9,23 @@
 // flow is initiated via the `login` server function (which hides the upstream
 // rumors-api origin).
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import type { QueryClient } from '@tanstack/react-query'
 import type { CofactsUser } from '@/server/me.functions'
 import { logout as logoutServerFn } from '@/server/auth.functions'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 import { LoginModal } from '@/components/LoginModal'
+import { AUTH_EXPIRED_EVENT } from './authExpired'
 
 export type { CofactsUser }
 
@@ -50,6 +59,7 @@ export function AuthProvider({
   serverLoadedUser?: CofactsUser | null
 }) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const callLogout = useServerFn(logoutServerFn)
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null)
 
@@ -59,6 +69,17 @@ export function AuthProvider({
     initialData: serverLoadedUser ?? null,
     staleTime: Infinity,
   })
+
+  // Open LoginModal whenever any client-side call detects 401. The redirect
+  // target is the current pathname so the user lands back where they were
+  // after re-authenticating.
+  useEffect(() => {
+    const onAuthExpired = () => {
+      setPendingRedirect(router.state.location.pathname)
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
+  }, [router])
 
   const login = useCallback((redirectTo?: string) => {
     setPendingRedirect(redirectTo ?? '')

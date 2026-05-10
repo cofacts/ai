@@ -1,20 +1,32 @@
-import { QueryClient } from '@tanstack/react-query'
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
 import { createRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 
 import { routeTree } from './routeTree.gen'
+import {
+  handleAuthExpired,
+  isAuthExpiredError,
+} from './lib/authExpired'
 
-// Create a fresh router + QueryClient per request. Keeping the QueryClient
-// module-scoped would let one user's SSR-populated cache (e.g. ['me']) leak
-// into the next request's render under Nitro's long-lived process.
 export const getRouter = () => {
-  const queryClient = new QueryClient({
+  // Fresh router + QueryClient per request: a module-scoped QueryClient would
+  // let one user's SSR-populated cache (e.g. ['me']) leak into the next
+  // request's render under Nitro's long-lived process.
+  let queryClient: QueryClient
+  const onError = (err: unknown) => {
+    if (isAuthExpiredError(err)) {
+      handleAuthExpired(queryClient)
+    }
+  }
+  queryClient = new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: Infinity,
         gcTime: Infinity,
       },
     },
+    queryCache: new QueryCache({ onError }),
+    mutationCache: new MutationCache({ onError }),
   })
 
   const router = createRouter({

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { components } from '@/lib/adk-types'
 import { ADK_APP_NAME, adkClient } from '@/lib/adkClient'
 import { handleAdkResponseError } from '@/lib/adk-errors'
+import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
 import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
 
 type RunRequest = components['schemas']['RunAgentRequest']
@@ -23,7 +24,15 @@ export const Route = createFileRoute('/api/run-sse')({
         try {
           userId = await resolveAdkUserIdOrThrow()
         } catch (err) {
-          if (err instanceof Response) return err
+          if (err instanceof Error && err.message === AUTH_EXPIRED_MESSAGE) {
+            return new Response(
+              JSON.stringify({ message: 'Authentication required' }),
+              {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            )
+          }
           throw err
         }
 

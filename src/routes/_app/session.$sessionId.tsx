@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
 import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
+import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
@@ -22,9 +23,13 @@ function SessionPage() {
       // otherwise when the stream ends, the session will be stale.
       return
     }
-    markSessionOpened({ data: sessionId }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ['sessions'] })
-    })
+    markSessionOpened({ data: sessionId })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      })
+      .catch((err) => {
+        if (isAuthExpiredError(err)) handleAuthExpired(queryClient)
+      })
   }, [sessionId, queryClient, isStreaming])
 
   return (

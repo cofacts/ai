@@ -5,6 +5,7 @@ import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import { ChatInput } from '@/components/ChatInput'
 import { WelcomeHero } from '@/components/WelcomeHero'
+import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
 
 export const Route = createFileRoute('/_app/')({
   component: LandingPage,
@@ -37,6 +38,11 @@ function LandingPage() {
           },
         })
       } catch (err) {
+        if (isAuthExpiredError(err)) {
+          handleAuthExpired(queryClient)
+          setIsLoading(false)
+          return
+        }
         setError(err instanceof Error ? err.message : '建立工作階段失敗')
         setIsLoading(false)
         return
