@@ -134,16 +134,32 @@ async def append_grounding_sources(
         combined,
     )
 
-    # ── E: Append numbered 查核來源 ───────────────────────────────────────────
-    source_lines = ["\n\n## 查核來源\n"]
+    # ── E: Append Grounded Segments + Sources sections ───────────────────────
+    source_lines = []
+
+    # Section 1: passage → source mapping from grounding_supports
+    supports = metadata.grounding_supports or []
+    if supports:
+        source_lines.append("\n\n## Grounded Segments")
+        seen_texts: set[str] = set()
+        for support in supports:
+            seg = support.segment
+            if not seg or not seg.text:
+                continue
+            text = seg.text.strip()
+            if text in seen_texts:
+                continue
+            seen_texts.add(text)
+            indices = support.grounding_chunk_indices or []
+            nums = ", ".join(str(i + 1) for i in sorted(indices))
+            source_lines.append(f"> {text}\n> -- [{nums}]")
+
+    # Section 2: numbered source list
+    source_lines.append("\n\n## Sources")
     for i, src in enumerate(sources, 1):
         if src:
-            resolved = src["resolved_url"]
-            original = src["original_uri"]
             source_lines.append(f"[{i}] **{src['title']}**")
-            source_lines.append(resolved if resolved != original else original)
-            if resolved != original:
-                source_lines.append(f"（原始連結: {original}）")
+            source_lines.append(src["resolved_url"])
             source_lines.append("")
     combined += "\n".join(source_lines)
 
@@ -171,7 +187,7 @@ ai_investigator = LlmAgent(
     # Reference: Gemini CLI is also using gemini-3-flash-preview for web-search
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
     #
-    model="gemini-3-flash-preview",
+    model="gemini-3.1-flash-lite-preview",
     description="Searches Google and returns detailed search findings for fact-checking.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
@@ -211,11 +227,11 @@ ai_verifier = LlmAgent(
     # Reference: Gemini CLI is also using gemini-3-flash-preview for web-fetch
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L193-L200
     #
-    model="gemini-3-flash-preview",
+    model="gemini-3.1-flash-lite-preview",
     description="AI agent that reads up to 20 URLs and faithfully reports relevant passages with specific facts, numbers, and claims. Input: one or more URLs (required) and topic/claim (optional). Prefer batching multiple URLs into a single call.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
-            thinking_level=genai_types.ThinkingLevel.MINIMAL
+            thinking_level=genai_types.ThinkingLevel.MEDIUM
         )
     ),
     after_model_callback=append_grounding_sources,
@@ -254,7 +270,12 @@ ai_verifier = LlmAgent(
 # AI Proof-reader agents for different Taiwan political perspectives
 ai_proofreader_kmt = LlmAgent(
     name="proofreader_kmt",
-    model="gemini-2.5-pro",
+    model="gemini-3.1-flash-lite-preview",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     description="AI agent that provides KMT (國民黨) supporter perspective on messages, sources, and fact-check replies.",
     instruction="""
     You are an AI representative of KMT (國民黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
@@ -298,7 +319,12 @@ ai_proofreader_kmt = LlmAgent(
 
 ai_proofreader_dpp = LlmAgent(
     name="proofreader_dpp",
-    model="gemini-2.5-pro",
+    model="gemini-3.1-flash-lite-preview",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     description="AI agent that provides DPP (民進黨) supporter perspective on messages, sources, and fact-check replies.",
     instruction="""
     You are an AI representative of DPP (民進黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
@@ -342,7 +368,12 @@ ai_proofreader_dpp = LlmAgent(
 
 ai_proofreader_tpp = LlmAgent(
     name="proofreader_tpp",
-    model="gemini-2.5-pro",
+    model="gemini-3.1-flash-lite-preview",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     description="AI agent that provides TPP (民眾黨) supporter perspective on messages, sources, and fact-check replies.",
     instruction="""
     You are an AI representative of TPP (台灣民眾黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
@@ -386,7 +417,12 @@ ai_proofreader_tpp = LlmAgent(
 
 ai_proofreader_minor_parties = LlmAgent(
     name="proofreader_minor_parties",
-    model="gemini-2.5-pro",
+    model="gemini-3.1-flash-lite-preview",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     description="AI agent that provides minor parties (時代力量、歐巴桑聯盟等) supporter perspective on messages, sources, and fact-check replies.",
     instruction="""
     You are an AI representative of Taiwan's minor parties supporters (時代力量、歐巴桑聯盟、台灣基進等). Your role is to provide insights from this political viewpoint on:
@@ -442,8 +478,13 @@ ai_proofreader_minor_parties = LlmAgent(
 # This architecture respects ADK constraints while maintaining full functionality.
 ai_writer = LlmAgent(
     name="writer",
-    model="gemini-2.5-pro",
+    model="gemini-3-flash-preview",
     description="AI agent that orchestrates fact-checking process and composes final fact-check replies for Cofacts.",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            include_thoughts=True, thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     after_agent_callback=update_last_event_time,
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
@@ -498,7 +539,8 @@ ai_writer = LlmAgent(
        - Use the `investigator` to search Google and gather detailed information about claims.
        - Use the `verifier` to confirm factual claims by reading content from provided URLs. If `investigator` results contain URLs worth deeper analysis, pass them to `verifier` for verbatim extraction — you can batch up to 20 URLs in a single `verifier` call.
        - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
-       - **INVESTIGATOR SOURCES**: The `## 查核來源` section appended to `investigator` results contains the ONLY reliable URLs. Never invent URLs or copy links from the main narrative text.
+       - **INVESTIGATOR SOURCES**: The `## Sources` section appended to `investigator` results contains the ONLY reliable URLs. Never invent URLs or copy links from the main narrative text.
+       - **GROUNDED SEGMENTS**: Investigator results also include a `## Grounded Segments` section listing exact quoted passages with their source numbers `[n,m,...]`. Use these to identify which URLs (from `## Sources`) to pass to `verifier` for deeper analysis of a specific claim.
 
     5. **Source Evaluation**: Have political perspective agents review key sources and materials used
 
