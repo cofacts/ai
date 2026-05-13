@@ -48,6 +48,20 @@ async def update_last_event_time(callback_context: CallbackContext) -> None:
     callback_context.state[SESSION_LAST_EVENT_TIME_KEY] = time.time()
 
 
+_RECITATION_RETRY_RESPONSE = LlmResponse(
+    content=genai_types.Content(
+        role="model",
+        parts=[
+            genai_types.Part(
+                text=(
+                    "[SYSTEM] The previous search was blocked by a copyright filter (RECITATION). "
+                    "Please retry immediately using different or more specific search terms to find the same information."
+                )
+            )
+        ],
+    )
+)
+
 _GROUNDING_RETRY_RESPONSE = LlmResponse(
     content=genai_types.Content(
         role="model",
@@ -74,7 +88,10 @@ async def append_grounding_sources(
     - Strips hallucinated (non-grounding) URLs that the LLM invented from training data
     - Appends a numbered ## 查核來源 list resolved from grounding_chunks
     - If grounding metadata is missing (intermittent), injects a retry instruction for the writer
+    - If response was blocked by copyright filter (RECITATION), injects a retry with different terms
     """
+    if llm_response.error_code == "RECITATION":
+        return _RECITATION_RETRY_RESPONSE
     if not llm_response.grounding_metadata:
         return _GROUNDING_RETRY_RESPONSE
     metadata = llm_response.grounding_metadata
