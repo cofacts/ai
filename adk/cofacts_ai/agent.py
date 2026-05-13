@@ -187,7 +187,7 @@ ai_investigator = LlmAgent(
     # Reference: Gemini CLI is also using gemini-3-flash-preview for web-search
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
     #
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3-flash-preview",
     description="Searches Google and returns detailed search findings for fact-checking.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
@@ -227,7 +227,7 @@ ai_verifier = LlmAgent(
     # Reference: Gemini CLI is also using gemini-3-flash-preview for web-fetch
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L193-L200
     #
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3-flash-preview",
     description="AI agent that reads up to 20 URLs and faithfully reports relevant passages with specific facts, numbers, and claims. Input: one or more URLs (required) and topic/claim (optional). Prefer batching multiple URLs into a single call.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
