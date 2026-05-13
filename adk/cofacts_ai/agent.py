@@ -49,34 +49,24 @@ async def update_last_event_time(callback_context: CallbackContext) -> None:
     callback_context.state[SESSION_LAST_EVENT_TIME_KEY] = time.time()
 
 
-_RECITATION_RETRY_RESPONSE = LlmResponse(
-    content=genai_types.Content(
-        role="model",
-        parts=[
-            genai_types.Part(
-                text=(
-                    "[SYSTEM] The previous search was blocked by a copyright filter (RECITATION). "
-                    "Please retry immediately using different or more specific search terms to find the same information."
-                )
-            )
-        ],
-    )
+_RECITATION_RETRY_TEXT = (
+    "[SYSTEM] The previous search was blocked by a copyright filter (RECITATION). "
+    "Please retry immediately using different or more specific search terms to find the same information."
 )
 
-_GROUNDING_RETRY_RESPONSE = LlmResponse(
-    content=genai_types.Content(
-        role="model",
-        parts=[
-            genai_types.Part(
-                text=(
-                    "[SYSTEM] Google Search returned no grounding metadata this time — "
-                    "source URLs cannot be verified. This is intermittent. "
-                    "Please call this tool again immediately."
-                )
-            )
-        ],
-    )
+_GROUNDING_RETRY_TEXT = (
+    "[SYSTEM] Google Search returned no grounding metadata this time — "
+    "source URLs cannot be verified. This is intermittent. "
+    "Please call this tool again immediately."
 )
+
+
+def _set_text_content(llm_response: LlmResponse, text: str) -> LlmResponse:
+    llm_response.content = genai_types.Content(
+        role="model",
+        parts=[genai_types.Part(text=text)],
+    )
+    return llm_response
 
 
 async def append_grounding_sources(
@@ -92,100 +82,102 @@ async def append_grounding_sources(
     - If response was blocked by copyright filter (RECITATION), injects a retry with different terms
     """
     if llm_response.error_code == "RECITATION":
-        return _RECITATION_RETRY_RESPONSE
+        return _set_text_content(llm_response, _RECITATION_RETRY_TEXT)
     if not llm_response.grounding_metadata:
-        return _GROUNDING_RETRY_RESPONSE
+        return _set_text_content(llm_response, _GROUNDING_RETRY_TEXT)
     metadata = llm_response.grounding_metadata
     chunks = metadata.grounding_chunks
     if not chunks:
-        return _GROUNDING_RETRY_RESPONSE
+        return _set_text_content(llm_response, _GROUNDING_RETRY_TEXT)
     if not llm_response.content or not llm_response.content.parts:
         return None
 
     # ── A: Resolve grounding chunks to real URLs ──────────────────────────────
-    # sources[i] is parallel to chunks[i]; citation number is i+1
-    sources = []
-    for chunk in chunks:
+    # Build sources_list and a chunk-index → sources_list-index mapping in one pass.
+    sources_list = []
+    chunk_to_src_idx: dict[int, int] = {}
+    for i, chunk in enumerate(chunks):
         if chunk.web and chunk.web.uri:
             resolved = await resolve_vertex_redirect(chunk.web.uri)
-            sources.append(
+            chunk_to_src_idx[i] = len(sources_list)
+            sources_list.append(
                 {
                     "title": chunk.web.title or "Unknown Source",
-                    "original_uri": chunk.web.uri,
-                    "resolved_url": resolved,
+                    "url": resolved,
                 }
             )
-        else:
-            sources.append(None)
 
-    sources_list = [
-        {"title": src["title"], "url": src["resolved_url"]}
-        for src in sources if src
-    ]
-
-    # ── B: Build combined text from all text parts ────────────────────────────
-    combined = "".join(p.text or "" for p in llm_response.content.parts)
+    # ── B: Build content from all text parts ─────────────────────────────────
+    content = "".join(p.text or "" for p in llm_response.content.parts)
 
     # ── C: Strip hallucinated (non-grounding) URLs ────────────────────────────
     # Markdown links with non-grounding URLs: keep the label text, drop the URL.
-    combined = re.sub(
+    content = re.sub(
         r"\[([^\]]+)\]\(https?://(?!vertexaisearch\.cloud\.google\.com)[^\)]+\)",
         r"\1",
-        combined,
+        content,
     )
     # Bare non-grounding URLs: remove entirely.
-    combined = re.sub(
+    content = re.sub(
         r"https?://(?!vertexaisearch\.cloud\.google\.com)\S+",
         "",
-        combined,
+        content,
     )
 
-    # ── E: Append Grounded Segments section ──────────────────────────────────
-    source_lines = []
-    supports = metadata.grounding_supports or []
-    if supports:
-        source_lines.append("\n\n## Grounded Segments")
-        seen_texts: set[str] = set()
-        for support in supports:
-            seg = support.segment
-            if not seg or not seg.text:
-                continue
-            text = seg.text.strip()
-            if text in seen_texts:
-                continue
-            seen_texts.add(text)
-            indices = support.grounding_chunk_indices or []
-            nums = ", ".join(str(i + 1) for i in sorted(indices))
-            source_lines.append(f"> {text}\n> -- [{nums}]")
-    combined += "\n".join(source_lines)
-
-    # ── F: Save Search Widget as artifact (Google policy compliance) ─────────
-    # Stored as an artifact rather than appended to LLM context to avoid ~2000
-    # tokens of HTML noise per investigator call.
-    if metadata.search_entry_point and metadata.search_entry_point.rendered_content:
-        filename = f"search-widget-{int(time.time() * 1000)}.html"
-        await callback_context.save_artifact(
-            filename=filename,
-            artifact=genai_types.Part(
-                inline_data=genai_types.Blob(
-                    mime_type="text/html",
-                    data=metadata.search_entry_point.rendered_content.encode("utf-8"),
-                )
-            ),
+    # ── E: Build grounded_segments as structured list ─────────────────────────
+    grounded_segments = []
+    seen_texts: set[str] = set()
+    for support in metadata.grounding_supports or []:
+        seg = support.segment
+        if not seg or not seg.text:
+            continue
+        text = seg.text.strip()
+        if text in seen_texts:
+            continue
+        seen_texts.add(text)
+        src_ids = sorted(
+            {
+                chunk_to_src_idx[i]
+                for i in (support.grounding_chunk_indices or [])
+                if i in chunk_to_src_idx
+            }
         )
+        grounded_segments.append({"text": text, "source_ids": src_ids})
 
     # ── Write back as JSON so writer's after_tool_callback gets structured output
-    serialized = json.dumps({"report": combined, "sources": sources_list}, ensure_ascii=False)
-    first_text_idx = next(
-        (i for i, p in enumerate(llm_response.content.parts) if p.text is not None),
-        0,
+    serialized = json.dumps(
+        {
+            "content": content,
+            "sources": sources_list,
+            "grounded_segments": grounded_segments,
+        },
+        ensure_ascii=False,
     )
-    llm_response.content.parts[first_text_idx].text = serialized
-    for i, part in enumerate(llm_response.content.parts):
-        if i != first_text_idx and part.text is not None:
-            part.text = ""
+    return _set_text_content(llm_response, serialized)
 
-    return llm_response
+
+async def save_search_widget(
+    callback_context: CallbackContext, llm_response: LlmResponse
+) -> Optional[LlmResponse]:
+    """Save Google Search Widget HTML as an ADK artifact (Google policy compliance)."""
+    metadata = llm_response.grounding_metadata
+    if not metadata:
+        return None
+    if not (
+        metadata.search_entry_point and metadata.search_entry_point.rendered_content
+    ):
+        return None
+    filename = f"search-widget-{int(time.time() * 1000)}.html"
+    await callback_context.save_artifact(
+        filename=filename,
+        artifact=genai_types.Part(
+            inline_data=genai_types.Blob(
+                mime_type="text/html",
+                data=metadata.search_entry_point.rendered_content.encode("utf-8"),
+            )
+        ),
+    )
+    return None
 
 
 # AI Web Searcher - Google Search snippet reporter
@@ -201,7 +193,7 @@ ai_investigator = LlmAgent(
             thinking_level=genai_types.ThinkingLevel.MEDIUM
         )
     ),
-    after_model_callback=append_grounding_sources,
+    after_model_callback=[append_grounding_sources, save_search_widget],
     instruction="""
     You are an AI Investigator for fact-checking. Search the web and faithfully report
     what search results say — do not draw conclusions or form opinions.
@@ -241,7 +233,7 @@ ai_verifier = LlmAgent(
             thinking_level=genai_types.ThinkingLevel.MEDIUM
         )
     ),
-    after_model_callback=append_grounding_sources,
+    after_model_callback=[append_grounding_sources, save_search_widget],
     instruction="""
     You are an AI Verifier that extracts verbatim source material from web pages for fact-checking.
 
@@ -565,7 +557,10 @@ ai_writer = LlmAgent(
        - Use the `investigator` to search Google and gather detailed information about claims.
        - Use the `verifier` to confirm factual claims by reading content from provided URLs. If `investigator` results contain URLs worth deeper analysis, pass them to `verifier` for verbatim extraction — you can batch up to 20 URLs in a single `verifier` call.
        - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
-       - **INVESTIGATOR SOURCES**: The `sources` list in the `investigator`/`verifier` response contains the ONLY reliable URLs. Each entry has `title` and `url`. Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
+       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator`/`verifier` return `{{"content": "...", "sources": [...], "grounded_segments": [...]}}`.
+         `sources` is a list of `{{"title": "...", "url": "..."}}` — these are the ONLY reliable URLs.
+         `grounded_segments` is a list of `{{"text": "...", "source_ids": [...]}}` mapping each grounded sentence to indices in `sources`.
+         Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
 
     5. **Source Evaluation**: Have political perspective agents review key sources and materials used
 
