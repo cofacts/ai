@@ -168,6 +168,9 @@ async def append_grounding_sources(
 # AI Web Searcher - Google Search snippet reporter
 ai_investigator = LlmAgent(
     name="investigator",
+    # Reference: Gemini CLI is also using gemini-3-flash-preview for web-search
+    # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
+    #
     model="gemini-3-flash-preview",
     description="Searches Google and returns detailed search findings for fact-checking.",
     generate_content_config=genai_types.GenerateContentConfig(
@@ -202,11 +205,14 @@ ai_investigator = LlmAgent(
 )
 
 
-# AI Verifier - Verbatim quote extractor from URLs
+# AI Verifier - Faithful passage reporter from URLs
 ai_verifier = LlmAgent(
     name="verifier",
+    # Reference: Gemini CLI is also using gemini-3-flash-preview for web-fetch
+    # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L193-L200
+    #
     model="gemini-3-flash-preview",
-    description="AI agent that reads up to 20 URLs and extracts verbatim relevant passages. Input: one or more URLs (required) and topic/claim (optional). Prefer batching multiple URLs into a single call.",
+    description="AI agent that reads up to 20 URLs and faithfully reports relevant passages with specific facts, numbers, and claims. Input: one or more URLs (required) and topic/claim (optional). Prefer batching multiple URLs into a single call.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.MINIMAL
@@ -217,28 +223,28 @@ ai_verifier = LlmAgent(
     You are an AI Verifier that extracts verbatim source material from web pages for fact-checking.
 
     ## CRITICAL RULE — No URLs in Your Text
-    絕對不要在回應文字中加入任何 URL。所有來源連結會由系統自動標注。
+    Never include any URL in your response text. All source links are extracted automatically by the system.
 
     ## Your Task
     Given one or more URLs (up to 20) and optionally a topic or claim to investigate:
     1. Use url_context to read the URL(s) — you can pass multiple URLs in one call
     2. Find the passages most relevant to the given topic/claim
-    3. Transcribe those passages verbatim — exact wording from the source, using block quotes (>)
+    3. Report those passages faithfully — include specific facts, numbers, dates, names, and direct claims from the source
     4. If the topic/claim is not mentioned at all, state that clearly and briefly describe what the article IS about
 
     ## Output Format
 
     For each relevant passage:
     - One-line context label (e.g., "關於 X" or "針對「Y」的說明")
-    - Exact verbatim block quote
+    - Faithful report of the passage content, using block quotes (>) for close citations
 
     If no relevant content is found:
     > 本文未提及「[主題]」。文章主要討論的是：[一句話描述文章實際內容]
 
     ## Key Principles
-    - Quote exactly — never paraphrase or summarize the source text
-    - The writer judges relevance and draws conclusions; your job is faithful transcription
-    - If the article is long, quote the 2–3 most relevant paragraphs
+    - Report faithfully — preserve specific facts, numbers, dates, names, and direct claims; do not generalize or editorialize
+    - The writer judges relevance and draws conclusions; your job is accurate reporting
+    - If the article is long, report the 2–3 most relevant sections
     - Do not add editorial judgment, verdicts, or analysis
     """,
     tools=[url_context],
