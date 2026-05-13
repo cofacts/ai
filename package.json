@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "concurrently \"pnpm run dev:ui\" \"pnpm run dev:agent\" --names ui,agent --prefix-colors blue,green --kill-others",
     "dev:ui": "vite dev --port 3000",
-    "dev:agent": "uv run --project adk adk web --port 8000 adk",
+    "dev:agent": "uv run --project adk adk web --port 8000 --reload_agents adk",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
