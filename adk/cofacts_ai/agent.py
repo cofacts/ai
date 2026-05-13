@@ -118,11 +118,7 @@ async def append_grounding_sources(
         else:
             sources.append(None)
 
-    # Save sources to temp state so writer's after_tool_callback can inject them
-    # into the structured tool response. Keyed by parent's function_call_id so
-    # parallel investigator/verifier calls don't overwrite each other.
-    call_id = callback_context.state.get("temp:_injected_call_id", "unknown")
-    callback_context.state[f"temp:{call_id}"] = [
+    sources_list = [
         {"title": src["title"], "url": src["resolved_url"]}
         for src in sources if src
     ]
@@ -144,10 +140,8 @@ async def append_grounding_sources(
         combined,
     )
 
-    # ── E: Append Grounded Segments + Sources sections ───────────────────────
+    # ── E: Append Grounded Segments section ──────────────────────────────────
     source_lines = []
-
-    # Section 1: passage → source mapping from grounding_supports
     supports = metadata.grounding_supports or []
     if supports:
         source_lines.append("\n\n## Grounded Segments")
@@ -163,14 +157,6 @@ async def append_grounding_sources(
             indices = support.grounding_chunk_indices or []
             nums = ", ".join(str(i + 1) for i in sorted(indices))
             source_lines.append(f"> {text}\n> -- [{nums}]")
-
-    # Section 2: numbered source list
-    source_lines.append("\n\n## Sources")
-    for i, src in enumerate(sources, 1):
-        if src:
-            source_lines.append(f"[{i}] **{src['title']}**")
-            source_lines.append(src["resolved_url"])
-            source_lines.append("")
     combined += "\n".join(source_lines)
 
     # ── F: Save Search Widget as artifact (Google policy compliance) ─────────
@@ -188,12 +174,13 @@ async def append_grounding_sources(
             ),
         )
 
-    # ── Write back: all text into first part, clear text in others ────────────
+    # ── Write back as JSON so writer's after_tool_callback gets structured output
+    serialized = json.dumps({"report": combined, "sources": sources_list}, ensure_ascii=False)
     first_text_idx = next(
         (i for i, p in enumerate(llm_response.content.parts) if p.text is not None),
         0,
     )
-    llm_response.content.parts[first_text_idx].text = combined
+    llm_response.content.parts[first_text_idx].text = serialized
     for i, part in enumerate(llm_response.content.parts):
         if i != first_text_idx and part.text is not None:
             part.text = ""
@@ -485,33 +472,22 @@ ai_proofreader_minor_parties = LlmAgent(
 )
 
 
-async def before_tool(
-    tool: BaseTool, args: dict, tool_context: CallbackContext
-) -> Optional[dict]:
-    """Injects writer's function_call_id into state so append_grounding_sources
-    can key its temp state slot correctly (parallel-call safe)."""
-    if tool.name in ("investigator", "verifier"):
-        # temp: prefix ensures this key is cleared at turn end
-        tool_context.state["temp:_injected_call_id"] = tool_context.function_call_id
-    return None
-
-
 async def after_tool(
     tool: BaseTool,
     args: dict,
     tool_context: CallbackContext,
     tool_response: Any,
 ) -> Optional[Any]:
-    """Wraps investigator/verifier plain-text response in a structured dict that
-    includes the grounding sources saved by append_grounding_sources."""
+    """Deserializes the JSON response from investigator/verifier into a dict so
+    the writer LLM receives a structured {report, sources} object."""
     if tool.name not in ("investigator", "verifier"):
         return None
-    call_id = tool_context.function_call_id
-    sources = tool_context.state.pop(f"temp:{call_id}", [])
-    if not sources:
+    if not isinstance(tool_response, str):
         return None
-    report = tool_response if isinstance(tool_response, str) else str(tool_response)
-    return {"report": report, "sources": sources}
+    try:
+        return json.loads(tool_response)
+    except json.JSONDecodeError:
+        return None
 
 
 # Main AI Writer - Orchestrator agent
@@ -534,7 +510,6 @@ ai_writer = LlmAgent(
             include_thoughts=True, thinking_level=genai_types.ThinkingLevel.HIGH
         )
     ),
-    before_tool_callback=before_tool,
     after_tool_callback=after_tool,
     after_agent_callback=update_last_event_time,
     instruction=f"""
