@@ -8,6 +8,7 @@ This module implements a hierarchical agent system with:
 - AI Proof-readers: Role-play different political perspectives to test reply effectiveness
 """
 
+import asyncio
 import json
 import re
 import time
@@ -92,19 +93,19 @@ async def append_grounding_sources(
     if not llm_response.content or not llm_response.content.parts:
         return None
 
-    # ── A: Resolve grounding chunks to real URLs (1:1 with chunks) ───────────
-    sources_list = []
-    for chunk in chunks:
-        if chunk.web and chunk.web.uri:
-            resolved = await resolve_vertex_redirect(chunk.web.uri)
-            sources_list.append(
-                {
-                    "title": chunk.web.title or "Unknown Source",
-                    "url": resolved,
-                }
-            )
-        else:
-            sources_list.append({"title": "Unknown Source", "url": None})
+    # ── A: Resolve grounding chunks to real URLs in parallel (1:1 with chunks) ─
+
+    async def _resolve(chunk) -> Optional[str]:
+        return await resolve_vertex_redirect(chunk.web.uri) if chunk.web and chunk.web.uri else None
+
+    resolved_urls = await asyncio.gather(*[_resolve(c) for c in chunks])
+    sources_list = [
+        {
+            "title": (chunk.web and chunk.web.title) or "Unknown Source",
+            "url": resolved,
+        }
+        for chunk, resolved in zip(chunks, resolved_urls)
+    ]
 
     # ── B: Build content from all text parts ─────────────────────────────────
     content = "".join(p.text or "" for p in llm_response.content.parts)
@@ -123,7 +124,7 @@ async def append_grounding_sources(
         content,
     )
 
-    # ── E: Build grounding_supports preserving Gemini segment positions ──────
+    # ── D: Build grounding_supports preserving Gemini segment positions ──────
     grounding_supports = []
     seen_texts: set[str] = set()
     for support in metadata.grounding_supports or []:
@@ -472,7 +473,7 @@ async def after_tool(
     tool_response: Any,
 ) -> Optional[Any]:
     """Deserializes the JSON response from investigator/verifier into a dict so
-    the writer LLM receives a structured {report, sources} object."""
+    the writer LLM receives a structured {content, sources, grounding_supports} object."""
     if tool.name not in ("investigator", "verifier"):
         return None
     if not isinstance(tool_response, str):
