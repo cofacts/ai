@@ -283,12 +283,12 @@ ai_verifier = LlmAgent(
 
     For each claim, use the article's full title (as it appears on the page) to identify the source:
 
-    **Claim: 「衛福部宣布自 2026 年起全面禁止含防腐劑的進口食品」**
-    ✓ 支持來源：《衛福部食品安全公告》— >「本部公告自民國115年1月1日起，禁止輸入含苯甲酸之加工食品」
-    ✗ 《聯合新聞網：食安新制上路》— 文章提及新制，但範圍僅限特定類別，非「全面禁止」
+    **Claim: 「鯊魚每年攻擊人類超過 1000 次」**
+    ✓ 支持來源：《International Shark Attack File 年度報告》— >「2023 年全球共記錄 69 件無端鯊魚攻擊事件」
+    ✗ 《海洋生物百科》— 文章介紹鯊魚習性，未提及攻擊統計數字
 
-    **Claim: 「研究指出每天喝咖啡超過3杯會增加心臟病風險」**
-    ✗ 所有來源均未提及此數據；相關研究結論相反，指適量咖啡對心血管無害
+    **Claim: 「人類平均每晚只需要 4 小時睡眠就足夠」**
+    ✗ 所有來源均未支持此說法；來源一致指出成人建議睡眠時間為 7–9 小時
 
     ## Key Principles
     - Identify each source by its article title, not by domain name — the same domain may have multiple articles
