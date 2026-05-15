@@ -10,7 +10,6 @@ This module implements a hierarchical agent system with:
 
 import asyncio
 import json
-import re
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -77,7 +76,6 @@ async def append_grounding_sources(
     After-model callback for ai_investigator.
 
     Transforms the raw LLM response into structured JSON {content, sources, grounding_supports}:
-    - Strips hallucinated (non-grounding) URLs that the LLM invented from training data
     - Resolves grounding chunk redirect URLs in parallel; builds sources[] (1:1 with chunks)
     - Preserves Gemini's grounding_supports segment positions for frontend visualization
     - If grounding metadata is missing (intermittent), injects a retry instruction for the writer
@@ -115,21 +113,7 @@ async def append_grounding_sources(
     # ── B: Build content from all text parts ─────────────────────────────────
     content = "".join(p.text or "" for p in llm_response.content.parts)
 
-    # ── C: Strip hallucinated (non-grounding) URLs ────────────────────────────
-    # Markdown links with non-grounding URLs: keep the label text, drop the URL.
-    content = re.sub(
-        r"\[([^\]]+)\]\(https?://(?!vertexaisearch\.cloud\.google\.com)[^\)]+\)",
-        r"\1",
-        content,
-    )
-    # Bare non-grounding URLs: remove entirely.
-    content = re.sub(
-        r"https?://(?!vertexaisearch\.cloud\.google\.com)\S+",
-        "",
-        content,
-    )
-
-    # ── D: Build grounding_supports preserving Gemini segment positions ──────
+    # ── C: Build grounding_supports preserving Gemini segment positions ──────
     grounding_supports = []
     seen_texts: set[str] = set()
     for support in metadata.grounding_supports or []:
