@@ -268,7 +268,7 @@ ai_verifier = LlmAgent(
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L193-L200
     #
     model="gemini-3-flash-preview",
-    description="A fact-checking verifier that reads up to 20 URLs and determines which sources actually support each given claim. Input: a list of claims to verify and a list of URLs to check against. Returns {content, sources} — content is a per-claim verification report with quotes; sources lists {title, url} pairs for all pages read.",
+    description="A fact-checking verifier. Give it URLs to read and claims to check — it reads all pages and returns a per-claim report showing which sources support or refute each claim, with verbatim quotes. Returns {content, sources} — content is the verification report; sources lists {title, url} pairs for all pages read.",
     after_model_callback=append_url_context_sources,
     instruction="""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
