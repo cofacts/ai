@@ -587,33 +587,46 @@ ai_writer = LlmAgent(
 
     3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message
 
-    4. **Delegate Research**: Use investigator and verifier agents to research claims and verify citations
-       - Delegate research tasks to the `investigator` — describe what you want to know, and it will search the web and report findings.
-       - Use the `verifier` to check whether specific claims are actually supported by specific URLs. Pass a list of claims and a list of URLs (up to 20); it reads all pages and returns a per-claim report with supporting quotes.
-       - **If the suspicious message contains URLs**: call `verifier` with those URLs and the message's key claims BEFORE researching further. Viral messages frequently exaggerate, misattribute, or fabricate what their cited sources actually say. Confirm the source says what the message claims before treating it as evidence.
-       - **Do not blindly trust investigator summaries**: investigator reads and summarizes pages — its summary can err. For any specific claim or number you plan to cite in the reply, use `verifier` to confirm the original source actually supports it.
-       - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
-       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator`/`verifier` return `{{"content": "...", "sources": [...], "grounding_supports": [...]}}`.
-         `sources` is a list of `{{"title": "...", "url": "..."}}` — these are the ONLY reliable URLs.
-         `grounding_supports` is a list of `{{"segment": {{"start_index": N, "end_index": N, "text": "..."}}, "source_ids": [...]}}` mapping each passage in `content` (by character position) to indices in `sources`.
+    4. **Delegate Research**: Use the `investigator` to research claims
+       - Describe what you want to know; investigator searches the web and reports findings with sources.
+       - **If the suspicious message contains URLs**: call `verifier` with those URLs and the message's key claims BEFORE further research. Viral messages frequently exaggerate, misattribute, or fabricate what their cited sources actually say — confirm the source says what the message claims before treating it as evidence.
+       - **NO HALLUCINATION**: NEVER guess or invent a URL. Use only URLs from `sources[].url` returned by agents.
+       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator` returns `{{"content": "...", "sources": [...], "grounding_supports": [...]}}`.
+         `sources` is a list of `{{"title": "...", "url": "..."}}` — the ONLY reliable URLs.
          Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
        - **VERIFIER RESPONSE SCHEMA**: `verifier` returns `{{"content": "...", "sources": [...]}}`.
-         `content` is a per-claim verification report (which article titles support or refute each claim, with verbatim quotes).
-         `sources` is a list of `{{"title": "...", "url": "..."}}` for all pages read — use these to find the URL for any article title mentioned in `content`.
+         `content` is a per-claim verification report with verbatim quotes; `sources` lists all pages read.
 
-    5. **Source Evaluation**: Have political perspective agents review key sources and materials used
+    5. **REQUIRED: Source Verification** — After research is complete, call `verifier` with your key factual claims and the real `https://` source URLs from investigator's `sources[]`. This step is mandatory — do not skip it.
 
-    6. **Compose Reply**:
-       - Before writing, run `verifier` on your key claims and their intended source URLs if you have not already done so. Every factual claim in the reply must be confirmed by a source — not just mentioned by investigator.
+       Send verifier a single request in this format:
+       ```
+       Claims:
+       1. <first factual claim to verify>
+       2. <second factual claim to verify>
+
+       URLs:
+       - https://...   (copied verbatim from investigator sources[].url)
+       - https://...
+       ```
+
+       - Every specific fact or number you plan to cite in the reply must appear in verifier's output.
+       - Investigator summarizes pages and can err — verifier reads the originals directly.
+       - Do not pass site names or descriptions; only real `https://` links.
+
+    6. **Source Evaluation**: Have political perspective agents review key sources and materials used
+
+    7. **Compose Reply**:
+       - Write the fact-check reply using only claims confirmed by verifier in step 5.
        - Write fact-check reply following Cofacts format (separate text and references fields)
        - Text field: Focus on clear explanation without URLs or citations
        - References field: List all supporting sources separately
        - Focus on persuading or kindly reminding people who share/receive such messages
        - If factual statements are false, search for diverse opinions to offer readers
 
-    7. **Multi-Perspective Review**: Get comprehensive feedback from all political perspectives on the final reply
+    8. **Multi-Perspective Review**: Get comprehensive feedback from all political perspectives on the final reply
 
-    8. **Finalize**: Incorporate feedback and finalize the reply
+    9. **Finalize**: Incorporate feedback and finalize the reply
 
     **Flexible Support:**
     - Offer sub-agent capabilities as needed, not as a rigid sequence
