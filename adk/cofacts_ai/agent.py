@@ -170,8 +170,8 @@ async def append_url_context_sources(
 
     Captures clean URL-title pairs from url_context grounding_chunks and wraps
     the response as {content, sources} JSON. Intentionally omits grounding_supports
-    (too scattered for url_context). Unlike investigator, url_context already returns
-    real URLs so resolve_vertex_redirect is a no-op here but kept for safety.
+    (too scattered for url_context). url_context returns real URLs directly —
+    no redirect resolution or hallucination stripping needed.
     """
     if not llm_response.grounding_metadata:
         return None
@@ -180,34 +180,15 @@ async def append_url_context_sources(
     if not chunks or not llm_response.content or not llm_response.content.parts:
         return None
 
-    async def _resolve(chunk) -> Optional[str]:
-        return (
-            await resolve_vertex_redirect(chunk.web.uri)
-            if chunk.web and chunk.web.uri
-            else None
-        )
-
-    resolved_urls = await asyncio.gather(*[_resolve(c) for c in chunks])
     sources_list = [
         {
             "title": (chunk.web and chunk.web.title) or "Unknown Source",
-            "url": resolved,
+            "url": chunk.web.uri if chunk.web else None,
         }
-        for chunk, resolved in zip(chunks, resolved_urls)
+        for chunk in chunks
     ]
 
     content = "".join(p.text or "" for p in llm_response.content.parts)
-    # Strip any bare non-grounding URLs the LLM may have hallucinated.
-    content = re.sub(
-        r"\[([^\]]+)\]\(https?://(?!vertexaisearch\.cloud\.google\.com)[^\)]+\)",
-        r"\1",
-        content,
-    )
-    content = re.sub(
-        r"https?://(?!vertexaisearch\.cloud\.google\.com)\S+",
-        "",
-        content,
-    )
 
     serialized = json.dumps(
         {"content": content, "sources": sources_list},
