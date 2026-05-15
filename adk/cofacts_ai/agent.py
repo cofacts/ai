@@ -229,40 +229,41 @@ ai_verifier = LlmAgent(
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L193-L200
     #
     model="gemini-3-flash-preview",
-    description="AI agent that reads up to 20 URLs and faithfully reports relevant passages with specific facts, numbers, and claims. Input: one or more URLs (required) and topic/claim (optional). Prefer batching multiple URLs into a single call.",
+    description="A fact-checking verifier that reads up to 20 URLs and determines which sources actually support each given claim. Input: a list of claims to verify and a list of URLs to check against. Returns a per-claim verification report with supporting quotes.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.MEDIUM
         )
     ),
-    after_model_callback=[append_grounding_sources, save_search_widget],
     instruction="""
-    You are an AI Verifier that extracts verbatim source material from web pages for fact-checking.
-
-    ## CRITICAL RULE — No URLs in Your Text
-    Never include any URL in your response text. All source links are extracted automatically by the system.
+    You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
+    read all the URLs and determine which sources actually support each claim.
 
     ## Your Task
-    Given one or more URLs (up to 20) and optionally a topic or claim to investigate:
-    1. Use url_context to read the URL(s) — you can pass multiple URLs in one call
-    2. Find the passages most relevant to the given topic/claim
-    3. Report those passages faithfully — include specific facts, numbers, dates, names, and direct claims from the source
-    4. If the topic/claim is not mentioned at all, state that clearly and briefly describe what the article IS about
+    1. Use url_context to read all provided URLs in one call (up to 20)
+    2. For each claim, assess whether each URL's content directly supports it
+    3. Write a verification report
 
     ## Output Format
 
-    For each relevant passage:
-    - One-line context label (e.g., "關於 X" or "針對「Y」的說明")
-    - Faithful report of the passage content, using block quotes (>) for close citations
+    For each claim:
+    - State the claim clearly
+    - List which sources support it (by title/domain), quoting the relevant passage
+    - If no source supports the claim, say so explicitly
 
-    If no relevant content is found:
-    > 本文未提及「[主題]」。文章主要討論的是：[一句話描述文章實際內容]
+    Example:
+    **Claim: 「龍葵鹼致死劑量約為 3–6 mg/kg」**
+    ✓ 支持來源：vghtpe.gov.tw — >「龍葵鹼對人體的急性致死劑量估計約為 3 至 6 mg/kg」
+    ✓ 支持來源：commonhealth.com.tw — >「每公斤體重攝入 3mg 以上即有生命危險」
+    ✗ heho.com.tw — 文章未提及致死劑量
+
+    **Claim: 「台灣目前只有 2 間實驗室能檢測龍葵鹼」**
+    ✗ 所有來源均未提及此數據
 
     ## Key Principles
-    - Report faithfully — preserve specific facts, numbers, dates, names, and direct claims; do not generalize or editorialize
-    - The writer judges relevance and draws conclusions; your job is accurate reporting
-    - If the article is long, report the 2–3 most relevant sections
-    - Do not add editorial judgment, verdicts, or analysis
+    - A source supports a claim only if its content contains direct, specific evidence — not merely related topic
+    - Quote the supporting passage verbatim
+    - Do not add analysis or verdicts beyond what the sources say
     """,
     tools=[url_context],
 )
@@ -472,9 +473,9 @@ async def after_tool(
     tool_context: CallbackContext,
     tool_response: Any,
 ) -> Optional[Any]:
-    """Deserializes the JSON response from investigator/verifier into a dict so
+    """Deserializes the JSON response from investigator into a dict so
     the writer LLM receives a structured {content, sources, grounding_supports} object."""
-    if tool.name not in ("investigator", "verifier"):
+    if tool.name != "investigator":
         return None
     if not isinstance(tool_response, str):
         return None
@@ -557,7 +558,7 @@ ai_writer = LlmAgent(
 
     4. **Delegate Research**: Use investigator and verifier agents to research claims and verify citations
        - Delegate research tasks to the `investigator` — describe what you want to know, and it will search the web and report findings.
-       - Use the `verifier` to confirm factual claims by reading content from provided URLs. If `investigator` results contain URLs worth deeper analysis, pass them to `verifier` for verbatim extraction — you can batch up to 20 URLs in a single `verifier` call.
+       - Use the `verifier` to check whether specific claims are actually supported by specific URLs. Pass a list of claims and a list of URLs (up to 20); it reads all pages and returns a per-claim report with supporting quotes. Good uses: (1) verify claims in a suspicious message against links it cites, (2) verify investigator findings against investigator sources, (3) verify every claim in your draft fact-check reply has a corresponding source.
        - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
        - **INVESTIGATOR RESPONSE SCHEMA**: `investigator`/`verifier` return `{{"content": "...", "sources": [...], "grounding_supports": [...]}}`.
          `sources` is a list of `{{"title": "...", "url": "..."}}` — these are the ONLY reliable URLs.
