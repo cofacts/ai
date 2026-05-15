@@ -8,27 +8,29 @@ This module implements a hierarchical agent system with:
 - AI Proof-readers: Role-play different political perspectives to test reply effectiveness
 """
 
-from typing import Dict, Optional
-import re
+import asyncio
 import json
 import time
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from google.adk.apps import App
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
+from google.adk.apps import App
 from google.adk.models.llm_response import LlmResponse
-from google.adk.tools import url_context, google_search
+from google.adk.tools import google_search, url_context
 from google.adk.tools.agent_tool import AgentTool
-from datetime import datetime
+from google.adk.tools.base_tool import BaseTool
+from google.genai import types as genai_types
 
+from .instrumentation import LangfuseTracingPlugin, setup_instrumentation
 from .tools import (
-    search_cofacts_database,
     get_single_cofacts_article,
+    resolve_vertex_redirect,
+    search_cofacts_database,
     submit_cofacts_reply,
-    resolve_vertex_redirect
 )
-from .instrumentation import setup_instrumentation, LangfuseTracingPlugin
 
 load_dotenv()
 
@@ -39,7 +41,7 @@ setup_instrumentation()
 # for sorting and unread-dot logic. We cannot rely on ADK's built-in lastUpdateTime
 # because any session state PATCH (including the client writing lastOpenedAt)
 # bumps it, which would cause sidebar reordering on every session open.
-SESSION_LAST_EVENT_TIME_KEY = 'lastEventTime'
+SESSION_LAST_EVENT_TIME_KEY = "lastEventTime"
 
 
 async def update_last_event_time(callback_context: CallbackContext) -> None:
@@ -47,162 +49,251 @@ async def update_last_event_time(callback_context: CallbackContext) -> None:
     callback_context.state[SESSION_LAST_EVENT_TIME_KEY] = time.time()
 
 
-async def append_grounding_sources(
-    callback_context: CallbackContext,
-    llm_response: LlmResponse
-) -> Optional[LlmResponse]:
-    """
-    After-model callback to append grounding sources to the response.
-    Extracts sources from grounding metadata, resolves redirect URLs,
-    and appends them as a markdown list.
-    """
-    metadata = llm_response.grounding_metadata
-    chunks = metadata.grounding_chunks
-    if not chunks:
-        return None
+_RECITATION_RETRY_TEXT = (
+    "[SYSTEM] The previous search was blocked by a copyright filter (RECITATION). "
+    "Please retry immediately using different or more specific search terms to find the same information."
+)
 
-    output_parts = ["\n\n## Sources Found\n"]
-    seen_urls = set()
-    url_map = {}  # original -> resolved
-
-    # 1. Collect and resolve all unique URLs from grounding chunks
-    for chunk in chunks:
-        if chunk.web and chunk.web.uri and chunk.web.uri not in seen_urls:
-            uri = chunk.web.uri
-            seen_urls.add(uri)
-            resolved_url = await resolve_vertex_redirect(uri)
-            url_map[uri] = resolved_url
-
-            title = chunk.web.title or "Unknown Source"
-            display_uri = f"[{resolved_url}]({uri})" if resolved_url != uri else uri
-
-            output_parts.append(f"**Source {len(seen_urls)}**: {title}")
-            output_parts.append(f"- **URL**: {display_uri}")
-            output_parts.append("") # Extra newline
-
-    # 2. Perform "markdown work" in response text (formerly resolve_investigator_urls)
-    # Replace occurrences of grounding redirect URLs in the main text
-    if llm_response.content and llm_response.content.parts:
-        for part in llm_response.content.parts:
-            if not part.text:
-                continue
-            for original_url, resolved_url in url_map.items():
-                if resolved_url != original_url:
-                    # If the URL is already inside a markdown link [label](original),
-                    # replace the entire markdown link with our resolved one.
-                    markdown_pattern = re.compile(r'\[[^\]]*\]\(' + re.escape(original_url) + r'\)')
-                    if markdown_pattern.search(part.text):
-                        part.text = markdown_pattern.sub(f"[{resolved_url}]({original_url})", part.text)
-                    else:
-                        # Otherwise just replace the raw URL
-                        part.text = part.text.replace(original_url, f"[{resolved_url}]({original_url})")
-
-    # 3. Append Search Widget if present (Policy requirement)
-    if metadata.search_entry_point and metadata.search_entry_point.rendered_content:
-        output_parts.append("\n\n## Search Widget (Policy Requirement)\n")
-        output_parts.append(metadata.search_entry_point.rendered_content)
-
-    if len(output_parts) > 1:
-        # Append to the first part of the content
-        if llm_response.content and llm_response.content.parts:
-            # Ensure the first part is text
-            if not llm_response.content.parts[0].text:
-                llm_response.content.parts[0].text = ""
-
-            llm_response.content.parts[0].text += "\n".join(output_parts)
-            return llm_response
-
-    return llm_response
-
-
-# AI Investigator - Deep research specialist
-ai_investigator = LlmAgent(
-    name="investigator",
-    model="gemini-3-flash-preview",
-    description="AI agent specialized in web research using Google Search for fact-checking.",
-    after_model_callback=append_grounding_sources,
-    instruction="""
-    You are an AI Investigator specialized in web research for fact-checking. Your role is to conduct thorough web research and provide properly structured source citations.
-
-    ## Core Responsibilities:
-
-    1. **Web Search**: Use Google Search to find authoritative sources and primary information
-    2. **Source Discovery**: Identify credible news sources, official statements, and expert opinions
-    3. **Evidence Collection**: Gather diverse perspectives and supporting evidence from the web
-
-    ## Research Strategy:
-
-    When investigating claims:
-    - Search for official sources (government, institutions, organizations)
-    - Look for recent news coverage from multiple outlets
-    - Find expert opinions and analysis
-    - Search for original documents or statements when possible
-    - Cross-verify information across multiple credible sources
-
-    ## Output Requirements:
-
-    1. **Comprehensive Report**: Synthesize information from all search results into a coherent answer.
-    2. **Search Queries**: List the search queries used.
-
-    Focus on providing comprehensive, well-sourced research content.
-    """,
-    tools=[google_search]
+_GROUNDING_RETRY_TEXT = (
+    "[SYSTEM] Google Search returned no grounding metadata this time — "
+    "source URLs cannot be verified. This is intermittent. "
+    "Please call this tool again immediately."
 )
 
 
-# AI Verifier - URL content vs claim verification specialist
+def _set_text_content(llm_response: LlmResponse, text: str) -> LlmResponse:
+    llm_response.content = genai_types.Content(
+        role="model",
+        parts=[genai_types.Part(text=text)],
+    )
+    return llm_response
+
+
+async def append_grounding_sources(
+    callback_context: CallbackContext, llm_response: LlmResponse
+) -> Optional[LlmResponse]:
+    """
+    After-model callback for ai_investigator.
+
+    Transforms the raw LLM response into structured JSON {content, sources, grounding_supports}:
+    - Resolves grounding chunk redirect URLs in parallel; builds sources[] (1:1 with chunks)
+    - Preserves Gemini's grounding_supports segment positions for frontend visualization
+    - If grounding metadata is missing (intermittent), injects a retry instruction for the writer
+    - If response was blocked by copyright filter (RECITATION), injects a retry with different terms
+    """
+    if llm_response.error_code == "RECITATION":
+        return _set_text_content(llm_response, _RECITATION_RETRY_TEXT)
+    if not llm_response.grounding_metadata:
+        return _set_text_content(llm_response, _GROUNDING_RETRY_TEXT)
+    metadata = llm_response.grounding_metadata
+    chunks = metadata.grounding_chunks
+    if not chunks:
+        return _set_text_content(llm_response, _GROUNDING_RETRY_TEXT)
+    if not llm_response.content or not llm_response.content.parts:
+        return None
+
+    # ── A: Resolve grounding chunks to real URLs in parallel (1:1 with chunks) ─
+
+    async def _resolve(chunk) -> Optional[str]:
+        return (
+            await resolve_vertex_redirect(chunk.web.uri)
+            if chunk.web and chunk.web.uri
+            else None
+        )
+
+    resolved_urls = await asyncio.gather(*[_resolve(c) for c in chunks])
+    sources_list = [
+        {
+            "title": (chunk.web and chunk.web.title) or "Unknown Source",
+            "url": resolved,
+        }
+        for chunk, resolved in zip(chunks, resolved_urls)
+    ]
+
+    # ── B: Build content from all text parts ─────────────────────────────────
+    content = "".join(p.text or "" for p in llm_response.content.parts)
+
+    # ── C: Build grounding_supports preserving Gemini segment positions ──────
+    grounding_supports = []
+    seen_texts: set[str] = set()
+    for support in metadata.grounding_supports or []:
+        seg = support.segment
+        if not seg or not seg.text:
+            continue
+        if seg.text in seen_texts:
+            continue
+        seen_texts.add(seg.text)
+        src_ids = sorted(set(support.grounding_chunk_indices or []))
+        grounding_supports.append(
+            {
+                "segment": {
+                    "start_index": seg.start_index,
+                    "end_index": seg.end_index,
+                    "text": seg.text,
+                },
+                "source_ids": src_ids,
+            }
+        )
+
+    # ── Write back as JSON so writer's after_tool_callback gets structured output
+    serialized = json.dumps(
+        {
+            "content": content,
+            "sources": sources_list,
+            "grounding_supports": grounding_supports,
+        },
+        ensure_ascii=False,
+    )
+    return _set_text_content(llm_response, serialized)
+
+
+async def append_url_context_sources(
+    callback_context: CallbackContext, llm_response: LlmResponse
+) -> Optional[LlmResponse]:
+    """
+    After-model callback for ai_verifier.
+
+    Captures clean URL-title pairs from url_context grounding_chunks and wraps
+    the response as {content, sources} JSON. Intentionally omits grounding_supports
+    (too scattered for url_context). url_context returns real URLs directly —
+    no redirect resolution or hallucination stripping needed.
+    """
+    if not llm_response.grounding_metadata:
+        return None
+    metadata = llm_response.grounding_metadata
+    chunks = metadata.grounding_chunks
+    if not chunks or not llm_response.content or not llm_response.content.parts:
+        return None
+
+    sources_list = [
+        {
+            "title": (chunk.web and chunk.web.title) or "Unknown Source",
+            "url": chunk.web.uri if chunk.web else None,
+        }
+        for chunk in chunks
+    ]
+
+    content = "".join(p.text or "" for p in llm_response.content.parts)
+
+    serialized = json.dumps(
+        {"content": content, "sources": sources_list},
+        ensure_ascii=False,
+    )
+    return _set_text_content(llm_response, serialized)
+
+
+async def save_search_widget(
+    callback_context: CallbackContext, llm_response: LlmResponse
+) -> Optional[LlmResponse]:
+    """Save Google Search Widget HTML as an ADK artifact (Google policy compliance)."""
+    metadata = llm_response.grounding_metadata
+    if not metadata:
+        return None
+    if not (
+        metadata.search_entry_point and metadata.search_entry_point.rendered_content
+    ):
+        return None
+    filename = f"search-widget-{int(time.time() * 1000)}.html"
+    await callback_context.save_artifact(
+        filename=filename,
+        artifact=genai_types.Part(
+            inline_data=genai_types.Blob(
+                mime_type="text/html",
+                data=metadata.search_entry_point.rendered_content.encode("utf-8"),
+            )
+        ),
+    )
+    return None
+
+
+# AI Web Searcher - Google Search snippet reporter
+ai_investigator = LlmAgent(
+    name="investigator",
+    # Reference: Gemini CLI is also using gemini-3-flash-preview for web-search
+    # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
+    #
+    model="gemini-3-flash-preview",
+    description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources, grounding_supports} — sources lists reliable {title, url} pairs; grounding_supports maps content passages to source indices.",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.MEDIUM
+        )
+    ),
+    after_model_callback=[append_grounding_sources, save_search_widget],
+    instruction="""
+    You are an AI Investigator for fact-checking. Search the web and faithfully report
+    what search results say — do not draw conclusions or form opinions.
+
+    ## CRITICAL RULE — No URLs in Your Text
+    Never include any URL, hyperlink, or web address in your response text.
+    All source links are extracted automatically from search results by the system.
+    Putting URLs in your text would show unverified links to fact-checkers — a serious quality issue.
+
+    ## Your Task
+
+    1. Search Google for information relevant to the claim or question
+    2. For each relevant result, report the page title and its content in detail:
+       include specific facts, numbers, dates, names, and direct claims from the source.
+       The writer needs concrete information — not high-level summaries.
+    3. Skip results that are not directly relevant
+
+    ## Key Principles
+    - Report faithfully; do not analyze, synthesize, or editorialize
+    - The writer draws conclusions — your job is to relay what sources say
+    - If sources disagree, report both sides; let the writer reconcile
+    """,
+    tools=[google_search],
+)
+
+
+# AI Verifier - Faithful passage reporter from URLs
 ai_verifier = LlmAgent(
     name="verifier",
-    model="gemini-2.5-pro",
-    description="AI agent that reads URL content and verifies claims. Input: URL (required) and Claim (optional).",
+    # Reference: Gemini CLI is also using gemini-3-flash-preview for web-fetch
+    # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L193-L200
+    #
+    model="gemini-3-flash-preview",
+    description="A fact-checking verifier. Give it URLs to read and claims to check — it reads all pages and returns a per-claim report showing which sources support or refute each claim, with verbatim quotes. Returns {content, sources} — content is the verification report; sources lists {title, url} pairs for all pages read.",
+    after_model_callback=append_url_context_sources,
     instruction="""
-    You are an AI Verifier with a very specific and crucial task: verify whether the content of given URLs actually supports the claims being made.
+    You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
+    read all the URLs and determine which sources actually support each claim.
 
-    ## Core Mission:
-    1. **Verify Claims**: Determine if there is a genuine connection between claims and their cited URLs
-    2. **Fact Checking**: Check statements against provided sources
+    ## Your Task
+    1. Use url_context to read all provided URLs in one call (up to 20)
+    2. For each claim, assess whether each URL's content directly supports it
+    3. Write a verification report
 
-    ## Common Problems You Help Solve:
-    1. **False Citation**: Message contains multiple claims + a URL, but the URL content doesn't mention those claims at all
-    2. **Misrepresented Sources**: Research reports claim "Source X says Y" but when you check Source X, it never says Y
-    3. **Weak Support**: URL content is vaguely related but doesn't actually support the specific claim being made
+    ## Output Format
 
-    ## Your Process:
-    1. **Navigate to URL**: Use url_context tool to get the actual content
-    2. **Extract Claims**: Identify the specific claims to verify (if provided) OR simply summarize the content (if just asked to read)
-    3. **Content Analysis**: Carefully read through the URL content
-    4. **Match Verification**: Check if the content actually mentions or supports the claim
-    5. **Report Findings**: State the final URL, content summary, and verification result
+    For each claim, use the article's full title (as it appears on the page) to identify the source:
 
+    **Claim: "Sharks attack humans more than 1,000 times per year"**
+    ✓ Supported: 《International Shark Attack File Annual Report》— >"In 2023, a total of 69 unprovoked shark attacks were recorded worldwide."
+    ✗ 《Ocean Life Encyclopedia》— Article covers shark behavior but contains no attack statistics.
 
-    ## Output Format:
-    For each URL processed, you MUST provide:
-    - **URL**: [The URL being verified]
-    - **CLAIM**: [The specific statement being verified, or "N/A" if just resolving URL]
-    - **URL CONTENT**: [Brief summary of what the URL actually says]
-    - **VERIFICATION RESULT**:
-      * ✅ SUPPORTED: URL clearly supports this claim (include specific quote)
-      * ❌ NOT SUPPORTED: URL doesn't mention or contradicts this claim
-      * ⚠️ PARTIALLY SUPPORTED: URL mentions related info but doesn't fully support the claim
-      * 🔍 UNCLEAR: URL content is ambiguous or insufficient to verify
+    **Claim: "Humans only need 4 hours of sleep per night"**
+    ✗ None of the sources support this claim.
 
-    ## Key Principles:
-    - Be extremely literal and precise
-    - Don't make logical leaps or inferences beyond what's explicitly stated
-    - If a URL doesn't directly mention a claim, say so clearly
-    - Quote exact text from sources when possible
-    - Focus on factual verification, not editorial judgment
-
-    This verification is critical for combating misinformation that relies on fake or misleading citations.
+    ## Key Principles
+    - Identify each source by its article title, not by domain name — the same domain may have multiple articles
+    - A source supports a claim only if its content contains direct, specific evidence — not merely related topic
+    - Quote the supporting passage verbatim
+    - Do not add analysis or verdicts beyond what the sources say
     """,
-    tools=[url_context]
+    tools=[url_context],
 )
 
 
 # AI Proof-reader agents for different Taiwan political perspectives
 ai_proofreader_kmt = LlmAgent(
     name="proofreader_kmt",
-    model="gemini-2.5-pro",
+    model="gemini-3.1-flash-lite-preview",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     description="AI agent that provides KMT (國民黨) supporter perspective on messages, sources, and fact-check replies.",
     instruction="""
     You are an AI representative of KMT (國民黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
@@ -241,12 +332,17 @@ ai_proofreader_kmt = LlmAgent(
 
     Provide respectful, measured analysis that helps ensure fact-checking is credible across political divides.
     """,
-    tools=[]
+    tools=[],
 )
 
 ai_proofreader_dpp = LlmAgent(
     name="proofreader_dpp",
-    model="gemini-2.5-pro",
+    model="gemini-3.1-flash-lite-preview",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     description="AI agent that provides DPP (民進黨) supporter perspective on messages, sources, and fact-check replies.",
     instruction="""
     You are an AI representative of DPP (民進黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
@@ -285,12 +381,17 @@ ai_proofreader_dpp = LlmAgent(
 
     Provide engaged, democratic analysis that helps ensure fact-checking resonates with progressive audiences.
     """,
-    tools=[]
+    tools=[],
 )
 
 ai_proofreader_tpp = LlmAgent(
     name="proofreader_tpp",
-    model="gemini-2.5-pro",
+    model="gemini-3.1-flash-lite-preview",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     description="AI agent that provides TPP (民眾黨) supporter perspective on messages, sources, and fact-check replies.",
     instruction="""
     You are an AI representative of TPP (台灣民眾黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
@@ -329,12 +430,17 @@ ai_proofreader_tpp = LlmAgent(
 
     Provide rational, balanced analysis that helps ensure fact-checking appeals to moderate voters seeking practical solutions.
     """,
-    tools=[]
+    tools=[],
 )
 
 ai_proofreader_minor_parties = LlmAgent(
     name="proofreader_minor_parties",
-    model="gemini-2.5-pro",
+    model="gemini-3.1-flash-lite-preview",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     description="AI agent that provides minor parties (時代力量、歐巴桑聯盟等) supporter perspective on messages, sources, and fact-check replies.",
     instruction="""
     You are an AI representative of Taiwan's minor parties supporters (時代力量、歐巴桑聯盟、台灣基進等). Your role is to provide insights from this political viewpoint on:
@@ -373,8 +479,26 @@ ai_proofreader_minor_parties = LlmAgent(
 
     Provide engaged, civic-minded analysis that helps ensure fact-checking includes diverse voices and perspectives.
     """,
-    tools=[]
+    tools=[],
 )
+
+
+async def after_tool(
+    tool: BaseTool,
+    args: dict,
+    tool_context: CallbackContext,
+    tool_response: Any,
+) -> Optional[Any]:
+    """Deserializes the JSON response from investigator/verifier into a dict so
+    the writer LLM receives structured output."""
+    if tool.name not in ("investigator", "verifier"):
+        return None
+    if not isinstance(tool_response, str):
+        return None
+    try:
+        return json.loads(tool_response)
+    except json.JSONDecodeError:
+        return None
 
 
 # Main AI Writer - Orchestrator agent
@@ -390,8 +514,14 @@ ai_proofreader_minor_parties = LlmAgent(
 # This architecture respects ADK constraints while maintaining full functionality.
 ai_writer = LlmAgent(
     name="writer",
-    model="gemini-2.5-pro",
+    model="gemini-3-flash-preview",
     description="AI agent that orchestrates fact-checking process and composes final fact-check replies for Cofacts.",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            include_thoughts=True, thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
+    after_tool_callback=after_tool,
     after_agent_callback=update_last_event_time,
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
@@ -442,23 +572,46 @@ ai_writer = LlmAgent(
 
     3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message
 
-    4. **Delegate Research**: Use investigator and verifier agents to research claims and verify citations
-       - Delegate deep research and web gathering to the `investigator`.
-       - Use the `verifier` to confirm factual claims by reading content from provided URLs.
-       - **NO HALLUCINATION**: NEVER guess or invent a "human-readable" URL. Use the URLs provided by your research agents.
+    4. **Delegate Research**: Use the `investigator` to research claims
+       - Describe what you want to know; investigator searches the web and reports findings with sources.
+       - **If the suspicious message contains URLs**: call `verifier` with those URLs and the message's key claims BEFORE further research. Viral messages frequently exaggerate, misattribute, or fabricate what their cited sources actually say — confirm the source says what the message claims before treating it as evidence.
+       - **NO HALLUCINATION**: NEVER guess or invent a URL. Use only URLs from `sources[].url` returned by agents.
+       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator` returns `{{"content": "...", "sources": [...], "grounding_supports": [...]}}`.
+         `sources` is a list of `{{"title": "...", "url": "..."}}` — the ONLY reliable URLs.
+         Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
+       - **VERIFIER RESPONSE SCHEMA**: `verifier` returns `{{"content": "...", "sources": [...]}}`.
+         `content` is a per-claim verification report with verbatim quotes; `sources` lists all pages read.
 
-    5. **Source Evaluation**: Have political perspective agents review key sources and materials used
+    5. **REQUIRED: Source Verification** — After research is complete, call `verifier` with your key factual claims and the real `https://` source URLs from investigator's `sources[]`. This step is mandatory — do not skip it.
 
-    6. **Compose Reply**:
+       Send verifier a single request in this format:
+       ```
+       Claims:
+       1. <first factual claim to verify>
+       2. <second factual claim to verify>
+
+       URLs:
+       - https://...   (copied verbatim from investigator sources[].url)
+       - https://...
+       ```
+
+       - Every specific fact or number you plan to cite in the reply must appear in verifier's output.
+       - Investigator summarizes pages and can err — verifier reads the originals directly.
+       - Do not pass site names or descriptions; only real `https://` links.
+
+    6. **Source Evaluation**: Have political perspective agents review key sources and materials used
+
+    7. **Compose Reply**:
+       - Write the fact-check reply using only claims confirmed by verifier in step 5.
        - Write fact-check reply following Cofacts format (separate text and references fields)
        - Text field: Focus on clear explanation without URLs or citations
        - References field: List all supporting sources separately
        - Focus on persuading or kindly reminding people who share/receive such messages
        - If factual statements are false, search for diverse opinions to offer readers
 
-    7. **Multi-Perspective Review**: Get comprehensive feedback from all political perspectives on the final reply
+    8. **Multi-Perspective Review**: Get comprehensive feedback from all political perspectives on the final reply
 
-    8. **Finalize**: Incorporate feedback and finalize the reply
+    9. **Finalize**: Incorporate feedback and finalize the reply
 
     **Flexible Support:**
     - Offer sub-agent capabilities as needed, not as a rigid sequence
@@ -555,7 +708,7 @@ ai_writer = LlmAgent(
         AgentTool(agent=ai_proofreader_kmt),
         AgentTool(agent=ai_proofreader_dpp),
         AgentTool(agent=ai_proofreader_tpp),
-        AgentTool(agent=ai_proofreader_minor_parties)
+        AgentTool(agent=ai_proofreader_minor_parties),
     ],
 )
 

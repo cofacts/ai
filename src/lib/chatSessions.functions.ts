@@ -137,6 +137,41 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
     return data
   })
 
+export const listSessionArtifacts = createServerFn({ method: 'GET' })
+  .inputValidator((sessionId: string) => sessionId)
+  .handler(async ({ data: sessionId }) => {
+    const { data, error } = await adkClient.GET(
+      '/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts',
+      {
+        params: {
+          path: { app_name: ADK_APP_NAME, user_id: ADK_USER_ID, session_id: sessionId },
+        },
+      },
+    )
+    if (error) handleAdkError(error)
+    return data ?? []
+  })
+
+export const getSessionArtifact = createServerFn({ method: 'GET' })
+  .inputValidator((input: { sessionId: string; artifactName: string }) => input)
+  .handler(async ({ data: { sessionId, artifactName } }) => {
+    const { data, error } = await adkClient.GET(
+      '/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{artifact_name}',
+      {
+        params: {
+          path: {
+            app_name: ADK_APP_NAME,
+            user_id: ADK_USER_ID,
+            session_id: sessionId,
+            artifact_name: artifactName,
+          },
+        },
+      },
+    )
+    if (error) handleAdkError(error)
+    return data
+  })
+
 export const markSessionOpened = createServerFn({ method: 'POST' })
   .inputValidator((sessionId: string) => sessionId)
   .handler(async ({ data: sessionId }) => {

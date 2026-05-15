@@ -154,28 +154,16 @@ async def _execute_cofacts_graphql(
             if "errors" in result:
                 return {
                     "error": f"GraphQL errors: {result['errors']}",
-                    "graphql_request": {
-                        "query": query,
-                        "variables": variables
-                    }
                 }
 
             return {
                 "success": True,
                 "data": result["data"],
-                "graphql_request": {
-                    "query": query,
-                    "variables": variables
-                }
             }
 
     except Exception as e:
         return {
             "error": f"Failed to execute {operation_name}: {str(e)}",
-            "graphql_request": {
-                "query": query,
-                "variables": variables
-            }
         }
 
 
@@ -305,17 +293,12 @@ async def search_cofacts_database(
 
         # Extract ListArticles data from the successful response
         return {
-            "graphql_request": result["graphql_request"],
             "data": result["data"]["ListArticles"]
         }
 
     except Exception as e:
         return {
             "error": f"Failed to search Cofacts database: {str(e)}",
-            "graphql_request": {
-                "query": graphql_query if 'graphql_query' in locals() else None,
-                "variables": variables if 'variables' in locals() else None
-            }
         }
 
 
@@ -363,13 +346,11 @@ async def get_single_cofacts_article(
             return {
                 "error": f"Article not found",
                 "article_id": article_id,
-                "graphql_request": result["graphql_request"]
             }
 
         return {
             "article_id": article_id,
             "article": article,
-            "graphql_request": result["graphql_request"]
         }
 
     except Exception as e:
