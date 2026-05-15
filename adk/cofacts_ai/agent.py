@@ -283,12 +283,12 @@ ai_verifier = LlmAgent(
 
     For each claim, use the article's full title (as it appears on the page) to identify the source:
 
-    **Claim: 「鯊魚每年攻擊人類超過 1000 次」**
-    ✓ 支持來源：《International Shark Attack File 年度報告》— >「2023 年全球共記錄 69 件無端鯊魚攻擊事件」
-    ✗ 《海洋生物百科》— 文章介紹鯊魚習性，未提及攻擊統計數字
+    **Claim: "Sharks attack humans more than 1,000 times per year"**
+    ✓ Supported: 《International Shark Attack File Annual Report》— >"In 2023, a total of 69 unprovoked shark attacks were recorded worldwide."
+    ✗ 《Ocean Life Encyclopedia》— Article covers shark behavior but contains no attack statistics.
 
-    **Claim: 「人類平均每晚只需要 4 小時睡眠就足夠」**
-    ✗ 所有來源均未支持此說法；來源一致指出成人建議睡眠時間為 7–9 小時
+    **Claim: "Humans only need 4 hours of sleep per night"**
+    ✗ None of the sources support this claim; all sources state the recommended sleep duration for adults is 7–9 hours.
 
     ## Key Principles
     - Identify each source by its article title, not by domain name — the same domain may have multiple articles
