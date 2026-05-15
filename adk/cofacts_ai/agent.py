@@ -283,13 +283,12 @@ ai_verifier = LlmAgent(
 
     For each claim, use the article's full title (as it appears on the page) to identify the source:
 
-    **Claim: 「龍葵鹼致死劑量約為 3–6 mg/kg」**
-    ✓ 支持來源：《龍葵鹼中毒的症狀與治療》— >「龍葵鹼對人體的急性致死劑量估計約為 3 至 6 mg/kg」
-    ✓ 支持來源：《馬鈴薯發芽的危害》— >「每公斤體重攝入 3mg 以上即有生命危險」
-    ✗ 《台灣食安新聞彙整》— 文章未提及致死劑量
+    **Claim: 「衛福部宣布自 2026 年起全面禁止含防腐劑的進口食品」**
+    ✓ 支持來源：《衛福部食品安全公告》— >「本部公告自民國115年1月1日起，禁止輸入含苯甲酸之加工食品」
+    ✗ 《聯合新聞網：食安新制上路》— 文章提及新制，但範圍僅限特定類別，非「全面禁止」
 
-    **Claim: 「台灣目前只有 2 間實驗室能檢測龍葵鹼」**
-    ✗ 所有來源均未提及此數據
+    **Claim: 「研究指出每天喝咖啡超過3杯會增加心臟病風險」**
+    ✗ 所有來源均未提及此數據；相關研究結論相反，指適量咖啡對心血管無害
 
     ## Key Principles
     - Identify each source by its article title, not by domain name — the same domain may have multiple articles
