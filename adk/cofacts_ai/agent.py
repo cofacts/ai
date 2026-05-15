@@ -74,11 +74,12 @@ async def append_grounding_sources(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
     """
-    After-model callback for ai_investigator and ai_verifier.
+    After-model callback for ai_investigator.
 
-    Transforms the raw LLM response into a grounded research report:
+    Transforms the raw LLM response into structured JSON {content, sources, grounding_supports}:
     - Strips hallucinated (non-grounding) URLs that the LLM invented from training data
-    - Appends a numbered ## 查核來源 list resolved from grounding_chunks
+    - Resolves grounding chunk redirect URLs in parallel; builds sources[] (1:1 with chunks)
+    - Preserves Gemini's grounding_supports segment positions for frontend visualization
     - If grounding metadata is missing (intermittent), injects a retry instruction for the writer
     - If response was blocked by copyright filter (RECITATION), injects a retry with different terms
     """
