@@ -65,7 +65,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
       await queryClient.invalidateQueries({ queryKey: ['sessions'] })
     } catch (err) {
       if (isAuthExpiredError(err)) {
-        handleAuthExpired(queryClient)
+        handleAuthExpired()
       } else {
         console.error('Failed to update session title:', err)
       }

@@ -1,12 +1,7 @@
-// Centralized 'session expired' handler. When the client detects an expired
-// or missing session cookie, we must (a) drop user-scoped caches so stale
-// data from the previous session isn't shown, (b) reset useAuth().user to
-// null so the layout switches to the logged-out landing, and (c) prompt the
-// user to re-authenticate. We use a custom DOM event to keep this module
-// React-free; AuthProvider listens for it and opens LoginModal.
-
-import type { QueryClient } from '@tanstack/react-query'
-import { clearUserScopedCache } from './auth'
+// Auth-expired signal. Callers dispatch AUTH_EXPIRED_EVENT (or throw an
+// Error with AUTH_EXPIRED_MESSAGE that the router-level error handler
+// dispatches for them); AuthProvider listens, clears user-scoped caches,
+// and opens LoginModal.
 
 export const AUTH_EXPIRED_EVENT = 'cofacts:auth-expired'
 
@@ -20,8 +15,7 @@ export function isAuthExpiredError(err: unknown): boolean {
   return err instanceof Error && err.message === AUTH_EXPIRED_MESSAGE
 }
 
-export function handleAuthExpired(queryClient: QueryClient): void {
-  clearUserScopedCache(queryClient)
+export function handleAuthExpired(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
   }

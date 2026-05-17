@@ -28,7 +28,7 @@ function SessionPage() {
         queryClient.invalidateQueries({ queryKey: ['sessions'] })
       })
       .catch((err) => {
-        if (isAuthExpiredError(err)) handleAuthExpired(queryClient)
+        if (isAuthExpiredError(err)) handleAuthExpired()
       })
   }, [sessionId, queryClient, isStreaming])
 

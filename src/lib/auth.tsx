@@ -70,16 +70,17 @@ export function AuthProvider({
     staleTime: Infinity,
   })
 
-  // Open LoginModal whenever any client-side call detects 401. The redirect
-  // target is the current pathname so the user lands back where they were
-  // after re-authenticating.
+  // Owns the AUTH_EXPIRED_EVENT reaction: clear user-scoped caches and
+  // open LoginModal anchored to the current pathname so re-auth lands the
+  // user back where they were.
   useEffect(() => {
     const onAuthExpired = () => {
+      clearUserScopedCache(queryClient)
       setPendingRedirect(router.state.location.pathname)
     }
     window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
-  }, [router])
+  }, [router, queryClient])
 
   const login = useCallback((redirectTo?: string) => {
     setPendingRedirect(redirectTo ?? '')

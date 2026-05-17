@@ -74,7 +74,7 @@ export async function startChatStream({
 
     if (!response.ok) {
       if (response.status === 401) {
-        handleAuthExpired(queryClient)
+        handleAuthExpired()
       }
       throw new Error(`ADK request failed: HTTP ${response.status}`)
     }

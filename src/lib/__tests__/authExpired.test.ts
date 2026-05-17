@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { QueryClient } from '@tanstack/react-query'
+import { describe, expect, test, vi } from 'vitest'
 import {
   AUTH_EXPIRED_EVENT,
   AUTH_EXPIRED_MESSAGE,
@@ -24,26 +23,12 @@ describe('isAuthExpiredError', () => {
 })
 
 describe('handleAuthExpired', () => {
-  let queryClient: QueryClient
-
-  beforeEach(() => {
-    queryClient = new QueryClient()
-    queryClient.setQueryData(['me'], { id: 'u1', name: 'x' })
-    queryClient.setQueryData(['sessions'], [{ id: 's1' }])
-  })
-
-  afterEach(() => {
-    queryClient.clear()
-  })
-
-  test('clears user-scoped cache and dispatches event', () => {
+  test('dispatches AUTH_EXPIRED_EVENT on window', () => {
     const handler = vi.fn()
     window.addEventListener(AUTH_EXPIRED_EVENT, handler)
 
-    handleAuthExpired(queryClient)
+    handleAuthExpired()
 
-    expect(queryClient.getQueryData(['me'])).toBeNull()
-    expect(queryClient.getQueryData(['sessions'])).toBeUndefined()
     expect(handler).toHaveBeenCalledTimes(1)
 
     window.removeEventListener(AUTH_EXPIRED_EVENT, handler)
