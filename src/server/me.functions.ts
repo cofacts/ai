@@ -1,10 +1,13 @@
 // TanStack Start server function exposing the current logged-in user to the
 // client. Reads the HttpOnly cofacts_session cookie via h3's getCookie and
-// dispatches the GetUser GraphQL query through cofactsExec. If GetUser fails
-// (upstream down, transient error) but a valid session cookie exists, falls
-// back to a minimal user derived from the JWT sub claim so the app keeps
-// showing the authenticated shell; the full profile will load on next SSR.
-// Returns null only when there is definitely no valid session at all.
+// dispatches the GetUser GraphQL query through cofactsExec.
+//
+// When GetUser throws but the session cookie is a valid JWT, returns a
+// minimal user populated from the JWT sub so AuthProvider's `['me']` query
+// (initialData + staleTime: Infinity) stays truthy and _app.tsx's `!user`
+// gate keeps rendering the authenticated shell. name/avatar remain null
+// until cache invalidation or a subsequent successful fetch. Returns null
+// only when no valid session cookie exists.
 
 import { createServerFn } from '@tanstack/react-start'
 import { getCookie } from '@tanstack/react-start/server'
