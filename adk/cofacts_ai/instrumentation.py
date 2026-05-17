@@ -10,7 +10,6 @@ from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace as otel_trace
 from opentelemetry.sdk.trace import SpanProcessor
 from opentelemetry.sdk.trace import TracerProvider as SDKTracerProvider
-from opentelemetry.trace import get_current_span
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +41,13 @@ class RootSessionSpanProcessor(SpanProcessor):
             return
         trace_id = span_ctx.trace_id
 
-        parent_span_ctx = get_current_span(parent_context).get_span_context()
-        if not parent_span_ctx.is_valid:
-            # Root or context-detached sub-agent span: register the first one seen.
-            # setdefault is atomic under the GIL and returns the winning value.
+        # span.parent is the authoritative OTel parent SpanContext (set during
+        # span creation). parent_context is the ambient context at call time and
+        # may not reflect the actual parent when openinference detaches context.
+        is_root = span.parent is None or not span.parent.is_valid
+        if is_root:
+            # Root or context-detached span: register the first session seen per
+            # trace. setdefault is atomic under the GIL.
             root = self._root_sessions.setdefault(trace_id, session_id)
             if root != session_id:
                 span.set_attribute(_SESSION_ID_ATTR, root)
@@ -105,4 +107,6 @@ class LangfuseTracingPlugin(BasePlugin):
             # future events in this invocation before they are saved to the DB.
             if invocation_context.run_config.custom_metadata is None:
                 invocation_context.run_config.custom_metadata = {}
-            invocation_context.run_config.custom_metadata[_LANGFUSE_TRACE_ID_KEY] = trace_id
+            invocation_context.run_config.custom_metadata[_LANGFUSE_TRACE_ID_KEY] = (
+                trace_id
+            )
