@@ -49,9 +49,6 @@ class RootSessionSpanProcessor(SpanProcessor):
         if isinstance(session, str):
             span.set_attribute(_LANGFUSE_SESSION_ID_ATTR, session)
 
-    def on_end(self, span):
-        pass
-
 
 def setup_instrumentation():
     """
