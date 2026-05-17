@@ -93,15 +93,6 @@ export interface SubmitFeedbackInput {
   comment?: string
 }
 
-function isSubmitFeedbackInput(raw: unknown): raw is SubmitFeedbackInput {
-  if (!raw || typeof raw !== 'object') return false
-  const obj = raw as Record<string, unknown>
-  if (typeof obj.traceId !== 'string' || obj.traceId.length === 0) return false
-  if (obj.value !== 1 && obj.value !== -1 && obj.value !== 0) return false
-  if (obj.comment !== undefined && typeof obj.comment !== 'string') return false
-  return true
-}
-
 export async function postFeedbackForTrace(
   input: SubmitFeedbackInput,
 ): Promise<void> {
@@ -138,12 +129,7 @@ export async function postFeedbackForTrace(
 }
 
 export const submitFeedbackForTrace = createServerFn({ method: 'POST' })
-  .inputValidator((raw: unknown): SubmitFeedbackInput => {
-    if (!isSubmitFeedbackInput(raw)) {
-      throw new Error('Invalid feedback submission payload')
-    }
-    return raw
-  })
+  .inputValidator((raw: SubmitFeedbackInput) => raw)
   .handler(async ({ data }): Promise<{ ok: true }> => {
     // Re-resolve identity per submission so an expired cookie/JWT triggers
     // a 401 here instead of silently posting under a stale user id.
