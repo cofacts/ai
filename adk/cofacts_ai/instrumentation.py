@@ -30,6 +30,7 @@ class RootSessionSpanProcessor(SpanProcessor):
 
     def __init__(self):
         self._root_sessions: dict[int, str] = {}
+        self._root_spans: dict[int, int] = {}  # trace_id -> span_id that registered the session
 
     def on_start(self, span, parent_context=None):
         session_id = (span.attributes or {}).get(_SESSION_ID_ATTR)
@@ -49,7 +50,11 @@ class RootSessionSpanProcessor(SpanProcessor):
             # Root or context-detached span: register the first session seen per
             # trace. setdefault is atomic under the GIL.
             root = self._root_sessions.setdefault(trace_id, session_id)
-            if root != session_id:
+            if root == session_id:
+                # We just registered this trace — record this span as the
+                # canonical root so on_end knows when it's safe to clean up.
+                self._root_spans[trace_id] = span_ctx.span_id
+            else:
                 span.set_attribute(_SESSION_ID_ATTR, root)
             return
 
@@ -58,8 +63,15 @@ class RootSessionSpanProcessor(SpanProcessor):
             span.set_attribute(_SESSION_ID_ATTR, root)
 
     def on_end(self, span):
-        if span.parent is None and span.context is not None:
-            self._root_sessions.pop(span.context.trace_id, None)
+        if span.context is None:
+            return
+        trace_id = span.context.trace_id
+        # Only clean up when the specific span that registered the root session ends.
+        # Sub-agent invocation spans are also context-detached (span.parent is None)
+        # but must not trigger cleanup before their child agent_run spans are processed.
+        if self._root_spans.get(trace_id) == span.context.span_id:
+            self._root_sessions.pop(trace_id, None)
+            self._root_spans.pop(trace_id, None)
 
 
 def setup_instrumentation():
