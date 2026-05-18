@@ -85,18 +85,6 @@ export type FunctionResponseOutput =
     }[keyof AllTools]
   | components['schemas']['FunctionResponse-Output']
 
-// ── FocusedTool ───────────────────────────────────────────────────
-// Pairs name + args + response under one discriminant so switch(tool.name)
-// narrows all three simultaneously. No catch-all: discriminated union only.
-
-export type FocusedTool = {
-  [K in keyof AllTools]: {
-    name: K
-    args: AllTools[K]['args']
-    response: AllTools[K]['resp'] | null
-  }
-}[keyof AllTools]
-
 export interface SourceItem {
   url: string
   title: string

@@ -3,6 +3,7 @@ import type {
   AdkEvent,
   AdkSession,
   ChatMessage,
+  FunctionResponseOutput,
   SourceItem,
 } from './adk'
 
@@ -11,6 +12,7 @@ export interface ChatSessionState {
   isStreaming: boolean
   error: string | null
   sources: Array<SourceItem>
+  toolResponses: Record<string, FunctionResponseOutput>
 }
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
@@ -18,6 +20,7 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   isStreaming: false,
   error: null,
   sources: [],
+  toolResponses: {},
 }
 
 // Global registry of abort controllers per session to prevent duplicate streams
@@ -209,17 +212,27 @@ export function applyEventToState(
 
   // console.info('applyEventToState', event);
 
-  // Skip function responses
-  const eventParts = event.content.parts.filter(p => !p.functionResponse);
+  // Collect functionResponses into the map keyed by id (or name as fallback)
+  const toolResponses = { ...prev.toolResponses }
+  for (const part of event.content.parts) {
+    if (part.functionResponse) {
+      const key = part.functionResponse.id ?? part.functionResponse.name
+      if (key) toolResponses[key] = part.functionResponse as FunctionResponseOutput
+    }
+  }
+
+  // Exclude function response parts from chat messages
+  const eventParts = event.content.parts.filter(p => !p.functionResponse)
 
   if (event.content.role === 'user') {
-    // Don't insert user message if it's just a function response.
-    // We may store the map of function response as a separate map when we need tool response in UI.
-    if (eventParts.length === 0) return prev;
+    // Don't insert user message if it's just function responses
+    if (eventParts.length === 0) return { ...prev, toolResponses }
 
     // event is user message, just append message
     return {
-      ...prev, messages: [
+      ...prev,
+      toolResponses,
+      messages: [
         ...prev.messages,
         {
           id: genId(),
@@ -228,7 +241,7 @@ export function applyEventToState(
           parts: [...eventParts],
           timestamp: new Date(),
         },
-      ]
+      ],
     }
   }
 
@@ -333,7 +346,7 @@ export function applyEventToState(
     }
   }
 
-  return { ...prev, messages, sources }
+  return { ...prev, messages, sources, toolResponses }
 }
 
 /**

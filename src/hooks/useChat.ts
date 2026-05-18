@@ -80,6 +80,7 @@ export function useChat({ sessionId }: UseChatOptions) {
     isStreaming: data.isStreaming,
     error,
     sources: data.sources,
+    toolResponses: data.toolResponses,
     sendMessage,
     resumeRun,
     stopGeneration,

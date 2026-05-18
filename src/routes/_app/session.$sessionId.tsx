@@ -3,9 +3,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
 import { RightDrawer } from '@/components/RightDrawer'
+import type { FocusedTool } from '@/components/RightDrawer'
 import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
-import type { FocusedTool } from '@/lib/adk'
+import type { FunctionCall } from '@/lib/adk'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
@@ -14,36 +15,39 @@ export const Route = createFileRoute('/_app/session/$sessionId')({
 function SessionPage() {
   const { sessionId } = useParams({ from: '/_app/session/$sessionId' })
   const queryClient = useQueryClient()
-  const { messages, isStreaming, error, sendMessage, stopGeneration } = useChat(
+  const { messages, isStreaming, error, sendMessage, stopGeneration, toolResponses } = useChat(
     { sessionId },
   )
 
-  const [focused, setFocused] = useState<(FocusedTool & { id: string }) | null>(null)
+  // Store the immutable call object; response is looked up from toolResponses at render time
+  const [focusedCall, setFocusedCall] = useState<(FunctionCall & { id: string }) | null>(null)
 
   const handleToolBadgeClick = useCallback(
     (id: string) => {
-      if (focused?.id === id) {
-        setFocused(null)
+      if (focusedCall?.id === id) {
+        setFocusedCall(null)
         return
       }
-      let foundCall: { name?: string | null; args?: unknown } | null = null
-      let foundResponse: { response?: unknown } | null = null
       for (const msg of messages) {
         for (const part of msg.parts ?? []) {
-          if (part.functionCall?.id === id) foundCall = part.functionCall
-          if (part.functionResponse?.id === id) foundResponse = part.functionResponse
+          if (part.functionCall?.id === id) {
+            setFocusedCall(part.functionCall as FunctionCall & { id: string })
+            return
+          }
         }
       }
-      if (!foundCall) return
-      setFocused({
-        id,
-        name: foundCall.name ?? '',
-        args: (foundCall.args ?? {}) as FocusedTool['args'],
-        response: (foundResponse?.response ?? null) as FocusedTool['response'],
-      } as FocusedTool & { id: string })
     },
-    [focused, messages],
+    [focusedCall, messages],
   )
+
+  const focused: (FocusedTool & { id: string }) | null = focusedCall
+    ? ({
+        id: focusedCall.id,
+        name: focusedCall.name ?? '',
+        args: (focusedCall.args ?? {}) as FocusedTool['args'],
+        response: (toolResponses[focusedCall.id]?.response ?? null) as FocusedTool['response'],
+      } as FocusedTool & { id: string })
+    : null
 
   useEffect(() => {
     if (isStreaming) {
@@ -83,7 +87,7 @@ function SessionPage() {
       </div>
       <RightDrawer
         isOpen={!!focused}
-        onClose={() => setFocused(null)}
+        onClose={() => setFocusedCall(null)}
         tool={focused}
       />
     </div>

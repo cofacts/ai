@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { AllTools, FocusedTool } from '@/lib/adk'
+import type { AllTools } from '@/lib/adk'
+
+export type FocusedTool = {
+  [K in keyof AllTools]: {
+    name: K
+    args: AllTools[K]['args']
+    response: AllTools[K]['resp'] | null
+  }
+}[keyof AllTools]
 
 interface RightDrawerProps {
   isOpen: boolean
