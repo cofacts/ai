@@ -14,7 +14,7 @@ export function RightDrawer({ isOpen, onClose, tool }: RightDrawerProps) {
     <>
       {/* Desktop drawer */}
       {isOpen && (
-        <aside className="hidden md:flex w-[420px] bg-white border-l border-border-subtle flex-col shrink-0 shadow-lg z-10">
+        <aside className="hidden md:flex flex-1 bg-white border-l border-border-subtle flex-col shadow-lg z-10">
           <DrawerHeader tool={tool} onClose={onClose} />
           <DrawerContent tool={tool} />
         </aside>
