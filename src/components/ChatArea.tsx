@@ -11,6 +11,8 @@ interface ChatAreaProps {
   onSendMessage: (text: string) => void
   onStop?: () => void
   sessionId?: string
+  focusedToolCallId?: string | null
+  onToolBadgeClick?: (id: string) => void
 }
 
 export function ChatArea({
@@ -19,6 +21,8 @@ export function ChatArea({
   onSendMessage,
   onStop,
   sessionId,
+  focusedToolCallId,
+  onToolBadgeClick,
 }: ChatAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -48,6 +52,8 @@ export function ChatArea({
                 <AgentMessage
                   message={msg}
                   showAvatar={msg.author !== prevMsg?.author}
+                  focusedToolCallId={focusedToolCallId}
+                  onToolBadgeClick={onToolBadgeClick}
                 />
               )}
               {

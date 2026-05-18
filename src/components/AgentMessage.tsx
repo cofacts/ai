@@ -1,13 +1,21 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatMessage } from '@/lib/adk'
+import { cn } from '@/lib/utils'
 
 interface AgentMessageProps {
   message: ChatMessage
   showAvatar?: boolean
+  focusedToolCallId?: string | null
+  onToolBadgeClick?: (id: string) => void
 }
 
-export function AgentMessage({ message, showAvatar = true }: AgentMessageProps) {
+export function AgentMessage({
+  message,
+  showAvatar = true,
+  focusedToolCallId,
+  onToolBadgeClick,
+}: AgentMessageProps) {
   return (
     <div className="flex flex-col items-start w-full">
       {/* Agent header */}
@@ -42,25 +50,34 @@ export function AgentMessage({ message, showAvatar = true }: AgentMessageProps) 
           }
 
           if (part.functionCall) {
-            const tool = part.functionCall
+            const { id, name } = part.functionCall
+            const isFocused = !!id && id === focusedToolCallId
             return (
               <div key={i} className="flex items-center gap-2 pl-1">
                 <span className="material-symbols-outlined text-gray-300 text-xs">
                   subdirectory_arrow_right
                 </span>
-                <div className="tool-badge">
+                <button
+                  className={cn(
+                    'tool-badge transition-all',
+                    isFocused
+                      ? 'bg-primary/10 ring-1 ring-primary/40'
+                      : 'hover:bg-gray-200',
+                  )}
+                  onClick={() => onToolBadgeClick?.(id ?? '')}
+                >
                   <span className="material-symbols-outlined text-[14px] text-gray-500">
-                    {tool.name?.toLowerCase()?.includes('search')
+                    {name?.toLowerCase()?.includes('search')
                       ? 'search'
-                      : tool.name?.toLowerCase()?.includes('verify') ||
-                        tool.name?.toLowerCase()?.includes('check')
+                      : name?.toLowerCase()?.includes('verify') ||
+                          name?.toLowerCase()?.includes('check')
                         ? 'shield'
-                        : tool.name?.toLowerCase()?.includes('cofacts')
+                        : name?.toLowerCase()?.includes('cofacts')
                           ? 'fact_check'
                           : 'build'}
                   </span>
-                  <span>{tool.name}</span>
-                </div>
+                  <span>{name}</span>
+                </button>
               </div>
             )
           }

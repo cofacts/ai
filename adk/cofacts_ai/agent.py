@@ -26,6 +26,7 @@ from google.genai import types as genai_types
 
 from .instrumentation import LangfuseTracingPlugin, setup_instrumentation
 from .tools import (
+    draft_factcheck_response,
     get_single_cofacts_article,
     resolve_vertex_redirect,
     search_cofacts_database,
@@ -602,12 +603,9 @@ ai_writer = LlmAgent(
     6. **Source Evaluation**: Have political perspective agents review key sources and materials used
 
     7. **Compose Reply**:
-       - Write the fact-check reply using only claims confirmed by verifier in step 5.
-       - Write fact-check reply following Cofacts format (separate text and references fields)
-       - Text field: Focus on clear explanation without URLs or citations
-       - References field: List all supporting sources separately
-       - Focus on persuading or kindly reminding people who share/receive such messages
-       - If factual statements are false, search for diverse opinions to offer readers
+       - Call `draft_factcheck_response` with the reply draft. See the tool's argument descriptions for all format requirements.
+       - Use only claims confirmed by verifier in step 5.
+       - Focus on persuading or kindly reminding people who share/receive such messages.
 
     8. **Multi-Perspective Review**: Get comprehensive feedback from all political perspectives on the final reply
 
@@ -622,46 +620,7 @@ ai_writer = LlmAgent(
 
     ## Cofacts Reply Format:
 
-    **Note**: Cofacts uses separate fields for content and sources, and does not support Markdown formatting.
-
-    Based on your analysis, classify the message as one of:
-    - **Contains true information** (含有正確訊息)
-    - **Contains misinformation** (含有錯誤訊息)
-    - **Contains personal perspective** (含有個人意見)
-
-    ### Format Structure:
-
-    **For "Contains true information" or "Contains misinformation":**
-
-    **Text Field (內文) - PLAIN TEXT ONLY:**
-    - Start with a brief opening paragraph that identifies which specific parts of the message are correct/incorrect/opinion-based
-    - Follow with detailed explanations in separate paragraphs
-    - Write a clear, self-contained explanation in plain text
-    - Use neutral, educational tone
-    - Use emojis at the start of paragraphs for better readability
-    - Do NOT use Markdown formatting
-    - Do NOT include URLs, links, or reference citations in this text
-
-    **References Field (出處):**
-    - **NO HALLUCINATION**: Only use URLs that have been explicitly provided by search results or verification.
-    - NEVER guess or invent a URL destination.
-    - List each source URL on a separate line
-    - Add a brief 1-line summary after each URL explaining its relevance
-
-    **For "Contains personal perspective":**
-
-    **Text Field (內文) - PLAIN TEXT ONLY:**
-    - Start with a brief opening paragraph that identifies which specific parts contain personal opinions vs. factual claims
-    - Follow with detailed explanations in separate paragraphs
-    - Remind readers that opinions are not factual statements
-    - Provide context about why this matters for public discourse
-    - Use emojis for paragraph separation
-    - Do NOT use Markdown formatting
-    - Do NOT include URLs or citations in this text
-
-    **Opinion Sources Field (意見出處):**
-    - URLs with 1-line summaries showing diverse perspectives
-    - Include sources representing different viewpoints when available
+    Use `draft_factcheck_response` to submit the reply. All format rules are in that tool's argument descriptions.
 
     ## How to Use Political Perspective Agents:
 
@@ -702,6 +661,7 @@ ai_writer = LlmAgent(
     tools=[
         search_cofacts_database,
         get_single_cofacts_article,
+        draft_factcheck_response,
         # submit_cofacts_reply
         AgentTool(agent=ai_investigator),
         AgentTool(agent=ai_verifier),

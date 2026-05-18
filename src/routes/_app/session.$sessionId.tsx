@@ -1,9 +1,11 @@
 import { createFileRoute, useParams } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
+import { RightDrawer } from '@/components/RightDrawer'
 import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
+import type { FocusedTool } from '@/lib/adk'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
@@ -14,6 +16,33 @@ function SessionPage() {
   const queryClient = useQueryClient()
   const { messages, isStreaming, error, sendMessage, stopGeneration } = useChat(
     { sessionId },
+  )
+
+  const [focused, setFocused] = useState<(FocusedTool & { id: string }) | null>(null)
+
+  const handleToolBadgeClick = useCallback(
+    (id: string) => {
+      if (focused?.id === id) {
+        setFocused(null)
+        return
+      }
+      let foundCall: { name?: string | null; args?: unknown } | null = null
+      let foundResponse: { response?: unknown } | null = null
+      for (const msg of messages) {
+        for (const part of msg.parts ?? []) {
+          if (part.functionCall?.id === id) foundCall = part.functionCall
+          if (part.functionResponse?.id === id) foundResponse = part.functionResponse
+        }
+      }
+      if (!foundCall) return
+      setFocused({
+        id,
+        name: foundCall.name ?? '',
+        args: (foundCall.args ?? {}) as FocusedTool['args'],
+        response: (foundResponse?.response ?? null) as FocusedTool['response'],
+      } as FocusedTool & { id: string })
+    },
+    [focused, messages],
   )
 
   useEffect(() => {
@@ -28,26 +57,35 @@ function SessionPage() {
   }, [sessionId, queryClient, isStreaming])
 
   return (
-    <>
-      {error && (
-        <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700 flex items-center gap-2">
-          <span className="material-symbols-outlined text-[16px]">error</span>
-          <span>連線錯誤: {error}</span>
-          <button
-            onClick={() => window.location.reload()}
-            className="ml-auto text-xs text-red-600 hover:text-red-800 underline"
-          >
-            重新整理
-          </button>
-        </div>
-      )}
-      <ChatArea
-        messages={messages}
-        isStreaming={isStreaming}
-        onSendMessage={sendMessage}
-        onStop={stopGeneration}
-        sessionId={sessionId}
+    <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 overflow-hidden">
+        {error && (
+          <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[16px]">error</span>
+            <span>連線錯誤: {error}</span>
+            <button
+              onClick={() => window.location.reload()}
+              className="ml-auto text-xs text-red-600 hover:text-red-800 underline"
+            >
+              重新整理
+            </button>
+          </div>
+        )}
+        <ChatArea
+          messages={messages}
+          isStreaming={isStreaming}
+          onSendMessage={sendMessage}
+          onStop={stopGeneration}
+          sessionId={sessionId}
+          focusedToolCallId={focused?.id ?? null}
+          onToolBadgeClick={handleToolBadgeClick}
+        />
+      </div>
+      <RightDrawer
+        isOpen={!!focused}
+        onClose={() => setFocused(null)}
+        tool={focused}
       />
-    </>
+    </div>
   )
 }

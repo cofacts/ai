@@ -419,6 +419,63 @@ async def submit_cofacts_reply(
         }
 
 
+def draft_factcheck_response(
+    classification: str,
+    text: str,
+    references: str,
+) -> Dict[str, Any]:
+    """
+    Draft a Cofacts fact-check response for human editor review.
+
+    Call this tool once you have completed all research and review steps and are
+    ready to propose a reply. The human editor will review the draft in the UI
+    before submitting it to Cofacts.
+
+    Args:
+        classification: One of:
+            - "RUMOR" (含有不實訊息): The message contains misinformation.
+            - "NOT_RUMOR" (含有正確訊息): The message contains true information.
+            - "OPINIONATED" (含有個人意見): The message contains personal perspective.
+            - "NOT_ARTICLE" (不在查證範圍): The message is not within the scope of fact-checking.
+        text: The fact-check response body. Rules:
+            - Plain text only — no Markdown, no URLs, no reference citations.
+            - Emojis at the start of paragraphs are encouraged for readability.
+            - Neutral, educational tone aimed at people who shared or received the message.
+            - Include only claims confirmed by the verifier step.
+        references: Source references for the reply. Format: one source per line,
+            each line is a URL followed by a one-line summary of what that source says.
+            Only include URLs returned by investigator or verifier — never invent URLs.
+
+    Returns:
+        {"success": True, "text": "..."} on success, or
+        {"success": False, "text": "<error message>"} asking the AI to fix and retry.
+    """
+    import re
+
+    VALID_CLASSIFICATIONS = {"RUMOR", "NOT_RUMOR", "OPINIONATED", "NOT_ARTICLE"}
+    if classification not in VALID_CLASSIFICATIONS:
+        return {
+            "success": False,
+            "text": (
+                f'Invalid classification "{classification}". '
+                f'Must be one of: {", ".join(sorted(VALID_CLASSIFICATIONS))}. '
+                "Please call draft_factcheck_response again with a valid classification."
+            ),
+        }
+
+    if not re.search(r'https?://', references):
+        return {
+            "success": False,
+            "text": (
+                "references must contain at least one https:// URL. "
+                "Please provide source URLs from the investigator or verifier results, "
+                "then call draft_factcheck_response again."
+            ),
+        }
+
+    return {"success": True, "text": "草稿已儲存，請人工編輯者審閱後送出。"}
+
+
 async def resolve_vertex_redirect(url: str) -> str:
     """
     Resolve a vertexaisearch redirect URL to its final destination.
