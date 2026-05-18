@@ -178,59 +178,14 @@ function SourceCard({ source, index }: { source: ToolSource; index: number }) {
           {domain}
         </span>
       </div>
-      <p className="text-[13px] font-medium text-gray-800 leading-snug line-clamp-2">
-        {source.title || source.url}
+      <p className="text-[11px] text-gray-600 leading-snug line-clamp-2 break-all">
+        {source.url}
       </p>
     </a>
   )
 }
 
 // ── Investigator ─────────────────────────────────────────────────
-
-type GroundingSupportItem =
-  AllTools['investigator']['resp']['grounding_supports'][number]
-
-function annotateGrounding(
-  content: string,
-  groundingSupports: GroundingSupportItem[],
-  onScrollToSource: (id: number) => void,
-): React.ReactNode[] {
-  if (!groundingSupports.length) return [content]
-
-  const sorted = [...groundingSupports].sort(
-    (a, b) => a.segment.start_index - b.segment.start_index,
-  )
-
-  const nodes: React.ReactNode[] = []
-  let cursor = 0
-
-  for (const gs of sorted) {
-    const { start_index, end_index } = gs.segment
-    if (start_index > cursor) {
-      nodes.push(content.slice(cursor, start_index))
-    }
-    const segment = content.slice(start_index, end_index)
-    const ids = gs.source_ids
-    nodes.push(
-      <button
-        key={start_index}
-        onClick={() => onScrollToSource(ids[0])}
-        className="bg-yellow-100 hover:bg-yellow-200 rounded px-0.5 transition-colors cursor-pointer text-left"
-        title={`出處 ${ids.map((i) => i + 1).join(', ')}`}
-      >
-        {segment}
-        <sup className="text-[9px] text-yellow-700 ml-0.5">
-          [{ids.map((i) => i + 1).join(',')}]
-        </sup>
-      </button>,
-    )
-    cursor = end_index
-  }
-  if (cursor < content.length) {
-    nodes.push(content.slice(cursor))
-  }
-  return nodes
-}
 
 function InvestigatorContent({
   args,
@@ -239,17 +194,8 @@ function InvestigatorContent({
   args: AllTools['investigator']['args']
   response: AllTools['investigator']['resp'] | null
 }) {
-  const scrollToSource = useCallback((id: number) => {
-    const el = document.getElementById(`source-${id}`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    el?.classList.add('ring-2', 'ring-primary')
-    setTimeout(() => el?.classList.remove('ring-2', 'ring-primary'), 1500)
-  }, [])
-
   const content = response?.content ?? ''
   const sources = response?.sources ?? []
-  const groundingSupports = response?.grounding_supports ?? []
-  const annotated = annotateGrounding(content, groundingSupports, scrollToSource)
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -263,9 +209,7 @@ function InvestigatorContent({
       {content && (
         <section>
           <SectionLabel>調查結果</SectionLabel>
-          <div className="prose prose-sm max-w-none prose-p:my-1.5 leading-relaxed text-sm text-gray-800">
-            {annotated}
-          </div>
+          <MarkdownSection content={content} />
         </section>
       )}
 
