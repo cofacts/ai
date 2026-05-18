@@ -22,7 +22,7 @@ export function RightDrawer({ isOpen, onClose, tool }: RightDrawerProps) {
     <>
       {/* Desktop drawer */}
       {isOpen && (
-        <aside className="hidden md:flex flex-1 bg-white border-l border-border-subtle flex-col shadow-lg z-10">
+        <aside className="hidden md:flex flex-1 min-w-0 bg-white border-l border-border-subtle flex-col shadow-lg z-10 overflow-hidden">
           <DrawerHeader tool={tool} onClose={onClose} />
           <DrawerContent tool={tool} />
         </aside>
@@ -46,7 +46,17 @@ function toolDisplayName(name: string | null | undefined): string {
   if (name.startsWith('proofreader_'))
     return `AI 讀者 (${name.replace('proofreader_', '').toUpperCase()})`
   if (name === 'draft_factcheck_response') return '查核回應草稿'
+  if (name === 'get_single_cofacts_article') return 'Cofacts 訊息'
   return name
+}
+
+function toolTitle(tool: (FocusedTool & { id: string }) | null): string {
+  if (!tool) return 'Tool'
+  if (tool.name === 'get_single_cofacts_article') {
+    const id = tool.args.article_id ?? tool.response?.article_id
+    return id ? `Cofacts 訊息 ${id}` : 'Cofacts 訊息'
+  }
+  return toolDisplayName(tool.name)
 }
 
 function DrawerHeader({
@@ -56,18 +66,36 @@ function DrawerHeader({
   tool: (FocusedTool & { id: string }) | null
   onClose: () => void
 }) {
+  const cofactsArticleId =
+    tool?.name === 'get_single_cofacts_article'
+      ? (tool.args.article_id ?? tool.response?.article_id)
+      : undefined
+
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle bg-white shrink-0">
-      <h2 className="text-sm font-semibold text-gray-800">
-        {toolDisplayName(tool?.name)}
+    <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle bg-white shrink-0">
+      <h2 className="text-sm font-semibold text-gray-800 truncate flex-1 min-w-0">
+        {toolTitle(tool)}
       </h2>
-      <button
-        onClick={onClose}
-        className="text-gray-400 hover:text-gray-600 transition-colors"
-        aria-label="關閉"
-      >
-        <span className="material-symbols-outlined text-xl">close</span>
-      </button>
+      <div className="flex items-center gap-1 shrink-0">
+        {cofactsArticleId && (
+          <a
+            href={`https://cofacts.tw/article/${cofactsArticleId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label="在 Cofacts 查看"
+          >
+            <span className="material-symbols-outlined text-xl">open_in_new</span>
+          </a>
+        )}
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="關閉"
+        >
+          <span className="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
     </div>
   )
 }
@@ -89,6 +117,8 @@ function DrawerContent({ tool }: { tool: (FocusedTool & { id: string }) | null }
       return <ProofreaderContent args={tool.args} response={tool.response} />
     case 'draft_factcheck_response':
       return <DraftFactcheckContent args={tool.args} />
+    case 'get_single_cofacts_article':
+      return <CofactsArticleContent args={tool.args} response={tool.response} />
     default: {
       const t = tool as unknown as {
         name: string
@@ -462,6 +492,213 @@ function DraftFactcheckContent({
           {references || <span className="text-gray-300">（尚未產生）</span>}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Cofacts Article ──────────────────────────────────────────────
+
+type CofactsArticle = NonNullable<
+  AllTools['get_single_cofacts_article']['resp']['article']
+>
+type RelatedArticleNode =
+  CofactsArticle['relatedArticles']['edges'][number]['node']
+
+const REPLY_TYPE_INFO: Record<string, { label: string; className: string }> = {
+  RUMOR: {
+    label: '含有不實訊息',
+    className: 'bg-red-50 text-red-700 border border-red-200',
+  },
+  NOT_RUMOR: {
+    label: '不含不實訊息',
+    className: 'bg-green-50 text-green-700 border border-green-200',
+  },
+  OPINIONATED: {
+    label: '含有個人意見',
+    className: 'bg-blue-50 text-blue-700 border border-blue-200',
+  },
+  NOT_ARTICLE: {
+    label: '不是可查核的內容',
+    className: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+  },
+}
+
+function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
+  return (
+    <a
+      href={`https://cofacts.tw/article/${article.id}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="shrink-0 w-[210px] rounded-lg border border-gray-200 bg-gray-50 p-3 hover:bg-gray-100 transition-colors flex flex-col gap-2"
+    >
+      <p className="text-xs text-gray-700 line-clamp-4 leading-relaxed flex-1">
+        {article.text || `[${article.articleType}]`}
+      </p>
+      <div>
+        {article.factCheckCount > 0 ? (
+          <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.5">
+            {article.factCheckCount} 則查核
+          </span>
+        ) : (
+          <span className="text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
+            待查核
+          </span>
+        )}
+      </div>
+    </a>
+  )
+}
+
+function CofactsArticleContent({
+  response,
+}: {
+  args: AllTools['get_single_cofacts_article']['args']
+  response: AllTools['get_single_cofacts_article']['resp'] | null
+}) {
+  if (!response) {
+    return (
+      <p className="text-sm text-gray-400 text-center pt-8 p-4">等待資料載入…</p>
+    )
+  }
+
+  if (response.error) {
+    return (
+      <p className="text-sm text-red-400 text-center pt-8 p-4">{response.error}</p>
+    )
+  }
+
+  const article = response.article
+  if (!article) {
+    return (
+      <p className="text-sm text-gray-400 text-center pt-8 p-4">找不到此訊息</p>
+    )
+  }
+
+  const isMedia = article.articleType !== 'TEXT'
+  const totalVisits = article.stats.reduce(
+    (sum, s) => sum + s.lineVisit + s.webVisit + s.downstreamBotVisits,
+    0,
+  )
+  const formattedDate = new Date(article.createdAt).toLocaleDateString('zh-TW', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+  const relatedEdges = article.relatedArticles.edges
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+      {/* Media attachment */}
+      {isMedia && article.attachmentUrl && (
+        <section>
+          {article.articleType === 'IMAGE' && (
+            <img
+              src={article.attachmentUrl}
+              alt="訊息附件"
+              className="w-full rounded-lg"
+            />
+          )}
+          {article.articleType === 'VIDEO' && (
+            <video src={article.attachmentUrl} controls className="w-full rounded-lg" />
+          )}
+          {article.articleType === 'AUDIO' && (
+            <audio src={article.attachmentUrl} controls className="w-full" />
+          )}
+        </section>
+      )}
+
+      {/* Text content */}
+      {article.text && (
+        <section>
+          <SectionLabel>{isMedia ? '逐字稿' : '訊息內文'}</SectionLabel>
+          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+            {article.text}
+          </p>
+        </section>
+      )}
+
+      {/* Metadata */}
+      <section>
+        <SectionLabel>統計</SectionLabel>
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-600">
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">calendar_today</span>
+            初次回報：{formattedDate}
+          </span>
+          {totalVisits > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm">trending_up</span>
+              近 90 天 {totalVisits.toLocaleString()} 次造訪
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">group</span>
+            {article.communityDemandCount} 人回報
+          </span>
+        </div>
+      </section>
+
+      {/* Fact-check responses */}
+      <section>
+        <SectionLabel>查核回應（{article.factCheckCount}）</SectionLabel>
+        {article.factCheckResponses.length === 0 ? (
+          <p className="text-sm text-gray-400">尚無查核回應</p>
+        ) : (
+          <div className="space-y-3">
+            {article.factCheckResponses.map((ar, i) => {
+              const typeInfo = REPLY_TYPE_INFO[ar.reply.type] ?? {
+                label: ar.reply.type,
+                className: 'bg-gray-50 text-gray-700 border border-gray-200',
+              }
+              return (
+                <div
+                  key={i}
+                  className="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2"
+                >
+                  <span
+                    className={`inline-block text-[10px] font-bold rounded px-1.5 py-0.5 ${typeInfo.className}`}
+                  >
+                    {typeInfo.label}
+                  </span>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                    {ar.reply.text}
+                  </p>
+                  {ar.reply.reference && (
+                    <p className="text-xs text-gray-400 whitespace-pre-wrap">
+                      {ar.reply.reference}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <span>{ar.reply.user.name}</span>
+                    <span className="flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-xs">thumb_up</span>
+                      {ar.helpfulCount}
+                    </span>
+                    <span className="flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-xs">thumb_down</span>
+                      {ar.unhelpfulCount}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Related articles carousel */}
+      {relatedEdges.length > 0 && (
+        <section>
+          <SectionLabel>
+            相似可疑訊息（{article.relatedArticles.totalCount}）
+          </SectionLabel>
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+            {relatedEdges.map(({ node }) => (
+              <RelatedArticleCard key={node.id} article={node} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

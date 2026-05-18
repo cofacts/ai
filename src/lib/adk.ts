@@ -59,6 +59,63 @@ export type AllTools = {
     args: { classification?: string; text?: string; references?: string }
     resp: { success: boolean; text: string }
   }
+  get_single_cofacts_article: {
+    args: { article_id?: string }
+    resp: {
+      article_id: string
+      error?: string
+      article?: {
+        id: string
+        text: string
+        createdAt: string
+        articleType: string
+        attachmentUrl: string | null
+        factCheckCount: number
+        communityDemandCount: number
+        factCheckResponses: Array<{
+          reply: {
+            id: string
+            type: string
+            text: string
+            createdAt: string
+            reference: string
+            user: { name: string }
+          }
+          user: { name: string }
+          createdAt: string
+          helpfulCount: number
+          unhelpfulCount: number
+        }>
+        relatedArticles: {
+          totalCount: number
+          edges: Array<{
+            node: {
+              id: string
+              text: string
+              articleType: string
+              factCheckCount: number
+              createdAt: string
+              factCheckResponses: Array<{
+                reply: { id: string; type: string; text: string }
+                helpfulCount: number
+                unhelpfulCount: number
+              }>
+            }
+            score: number
+          }>
+        }
+        stats: Array<{
+          date: string
+          lineUser: number
+          lineVisit: number
+          webUser: number
+          webVisit: number
+          downstreamBotUsers: number
+          downstreamBotVisits: number
+        }>
+      } | null
+    }
+  }
 }
 
 type AdkCallBase = Omit<components['schemas']['FunctionCall'], 'name' | 'args'>
