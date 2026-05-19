@@ -1,12 +1,9 @@
-import { createFileRoute, useParams } from '@tanstack/react-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Outlet, createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
+import { useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
-import { RightDrawer } from '@/components/RightDrawer'
-import type { FocusedTool } from '@/components/RightDrawer'
 import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
-import type { FunctionCall } from '@/lib/adk'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
@@ -14,80 +11,52 @@ export const Route = createFileRoute('/_app/session/$sessionId')({
 
 function SessionPage() {
   const { sessionId } = useParams({ from: '/_app/session/$sessionId' })
+  const { toolCallId } = useParams({ strict: false }) as { toolCallId?: string }
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const {
-    messages,
-    isStreaming,
-    error,
-    sendMessage,
-    stopGeneration,
-    toolResponses,
-  } = useChat({ sessionId })
+  const { messages, isStreaming, error, sendMessage, stopGeneration, lastReplyDraftId } =
+    useChat({ sessionId })
 
-  // Store the immutable call object; response is looked up from toolResponses at render time
-  const [focusedCall, setFocusedCall] = useState<
-    (FunctionCall & { id: string }) | null
-  >(null)
   const openedCallIds = useRef<Set<string>>(new Set())
 
   const handleToolBadgeClick = useCallback(
     (id: string) => {
-      if (focusedCall?.id === id) {
-        setFocusedCall(null)
+      if (toolCallId === id) {
+        navigate({
+          to: '/session/$sessionId',
+          params: { sessionId },
+          viewTransition: true,
+          replace: true,
+        })
         return
       }
-      for (const msg of messages) {
-        for (const part of msg.parts ?? []) {
-          if (part.functionCall?.id === id) {
-            openedCallIds.current.add(id)
-            setFocusedCall(part.functionCall as FunctionCall & { id: string })
-            return
-          }
-        }
-      }
+      navigate({
+        to: '/session/$sessionId/tool/$toolCallId',
+        params: { sessionId, toolCallId: id },
+        viewTransition: true,
+        replace: toolCallId !== undefined,
+      })
     },
-    [focusedCall, messages],
+    [toolCallId, sessionId, navigate],
   )
 
-  // Auto-open the drawer when draft_factcheck_response is the last tool call,
-  // unless the drawer is already open or this call was previously shown.
+  // Auto-open: lastReplyDraftId is pre-computed by the cache reducer
   useEffect(() => {
-    if (focusedCall !== null) return
+    if (toolCallId !== undefined) return
+    if (!lastReplyDraftId) return
+    if (openedCallIds.current.has(lastReplyDraftId)) return
 
-    let lastCall: (FunctionCall & { id: string }) | undefined
-    outer: for (let i = messages.length - 1; i >= 0; i--) {
-      const parts = messages[i].parts ?? []
-      for (let j = parts.length - 1; j >= 0; j--) {
-        if (parts[j].functionCall?.id) {
-          lastCall = parts[j].functionCall as FunctionCall & { id: string }
-          break outer
-        }
-      }
-    }
-
-    if (!lastCall || lastCall.name !== 'draft_factcheck_response') return
-    if (openedCallIds.current.has(lastCall.id)) return
-
-    openedCallIds.current.add(lastCall.id)
-    setFocusedCall(lastCall)
-  }, [messages, focusedCall])
-
-  const focused: (FocusedTool & { id: string }) | null = focusedCall
-    ? ({
-        id: focusedCall.id,
-        name: focusedCall.name ?? '',
-        args: (focusedCall.args ?? {}) as FocusedTool['args'],
-        response: (toolResponses[focusedCall.id]?.response ??
-          null) as FocusedTool['response'],
-      } as FocusedTool & { id: string })
-    : null
+    openedCallIds.current.add(lastReplyDraftId)
+    navigate({
+      to: '/session/$sessionId/tool/$toolCallId',
+      params: { sessionId, toolCallId: lastReplyDraftId },
+      viewTransition: true,
+      replace: true,
+    })
+  }, [lastReplyDraftId, toolCallId, sessionId, navigate])
 
   useEffect(() => {
-    if (isStreaming) {
-      // Don't trigger ADK state update when streaming;
-      // otherwise when the stream ends, the session will be stale.
-      return
-    }
+    if (isStreaming) return
     markSessionOpened({ data: sessionId }).then(() => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
     })
@@ -114,15 +83,11 @@ function SessionPage() {
           onSendMessage={sendMessage}
           onStop={stopGeneration}
           sessionId={sessionId}
-          focusedToolCallId={focused?.id ?? null}
+          focusedToolCallId={toolCallId ?? null}
           onToolBadgeClick={handleToolBadgeClick}
         />
       </div>
-      <RightDrawer
-        isOpen={!!focused}
-        onClose={() => setFocusedCall(null)}
-        tool={focused}
-      />
+      <Outlet />
     </div>
   )
 }

@@ -1,37 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { AllTools } from '@/lib/adk'
-
-export type FocusedTool = {
-  [K in keyof AllTools]: {
-    name: K
-    args: AllTools[K]['args']
-    response: AllTools[K]['resp'] | null
-  }
-}[keyof AllTools]
+import type { AllTools, ToolInvocation } from '@/lib/adk'
 
 interface RightDrawerProps {
   isOpen: boolean
   onClose: () => void
-  tool: (FocusedTool & { id: string }) | null
+  invocation: ToolInvocation | null
 }
 
-export function RightDrawer({ isOpen, onClose, tool }: RightDrawerProps) {
+export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
   return (
     <>
       {/* Desktop drawer */}
       {isOpen && (
-        <aside className="hidden md:flex flex-1 min-w-0 bg-white border-l border-border-subtle flex-col shadow-lg z-10 overflow-hidden">
-          <DrawerHeader tool={tool} onClose={onClose} />
-          <DrawerContent tool={tool} />
+        <aside className="hidden md:flex flex-1 min-w-0 bg-white border-l border-border-subtle flex-col shadow-lg z-10 overflow-hidden [view-transition-name:right-drawer]">
+          <DrawerHeader invocation={invocation} onClose={onClose} />
+          <DrawerContent invocation={invocation} />
         </aside>
       )}
 
       {/* Mobile bottom sheet */}
       <MobileBottomSheet isOpen={isOpen} onClose={onClose}>
-        <DrawerHeader tool={tool} onClose={onClose} />
-        <DrawerContent tool={tool} />
+        <DrawerHeader invocation={invocation} onClose={onClose} />
+        <DrawerContent invocation={invocation} />
       </MobileBottomSheet>
     </>
   )
@@ -50,31 +42,31 @@ function toolDisplayName(name: string | null | undefined): string {
   return name
 }
 
-function toolTitle(tool: (FocusedTool & { id: string }) | null): string {
-  if (!tool) return 'Tool'
-  if (tool.name === 'get_single_cofacts_article') {
-    const id = tool.args.article_id ?? tool.response?.article_id
+function toolTitle(invocation: ToolInvocation | null): string {
+  if (!invocation) return 'Tool'
+  if (invocation.name === 'get_single_cofacts_article') {
+    const id = invocation.args.article_id ?? invocation.resp?.article_id
     return id ? `Cofacts 訊息 ${id}` : 'Cofacts 訊息'
   }
-  return toolDisplayName(tool.name)
+  return toolDisplayName(invocation.name)
 }
 
 function DrawerHeader({
-  tool,
+  invocation,
   onClose,
 }: {
-  tool: (FocusedTool & { id: string }) | null
+  invocation: ToolInvocation | null
   onClose: () => void
 }) {
   const cofactsArticleId =
-    tool?.name === 'get_single_cofacts_article'
-      ? (tool.args.article_id ?? tool.response?.article_id)
+    invocation?.name === 'get_single_cofacts_article'
+      ? (invocation.args.article_id ?? invocation.resp?.article_id)
       : undefined
 
   return (
     <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle bg-white shrink-0">
       <h2 className="text-sm font-semibold text-gray-800 truncate flex-1 min-w-0">
-        {toolTitle(tool)}
+        {toolTitle(invocation)}
       </h2>
       <div className="flex items-center gap-1 shrink-0">
         {cofactsArticleId && (
@@ -102,31 +94,31 @@ function DrawerHeader({
 
 // ── Content router ───────────────────────────────────────────────
 
-function DrawerContent({ tool }: { tool: (FocusedTool & { id: string }) | null }) {
-  if (!tool) return null
+function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
+  if (!invocation) return null
 
-  switch (tool.name) {
+  switch (invocation.name) {
     case 'investigator':
-      return <InvestigatorContent args={tool.args} response={tool.response} />
+      return <InvestigatorContent args={invocation.args} response={invocation.resp} />
     case 'verifier':
-      return <VerifierContent args={tool.args} response={tool.response} />
+      return <VerifierContent args={invocation.args} response={invocation.resp} />
     case 'proofreader_kmt':
     case 'proofreader_dpp':
     case 'proofreader_tpp':
     case 'proofreader_minor_parties':
-      return <ProofreaderContent args={tool.args} response={tool.response} />
+      return <ProofreaderContent args={invocation.args} response={invocation.resp} />
     case 'draft_factcheck_response':
-      return <DraftFactcheckContent args={tool.args} />
+      return <DraftFactcheckContent args={invocation.args} />
     case 'get_single_cofacts_article':
-      return <CofactsArticleContent args={tool.args} response={tool.response} />
+      return <CofactsArticleContent args={invocation.args} response={invocation.resp} />
     default: {
-      const t = tool as unknown as {
+      const t = invocation as unknown as {
         name: string
         args: Record<string, unknown>
-        response: Record<string, unknown> | null
+        resp: Record<string, unknown> | null
       }
       return (
-        <GenericToolContent name={t.name} args={t.args} response={t.response} />
+        <GenericToolContent name={t.name} args={t.args} response={t.resp} />
       )
     }
   }
@@ -739,7 +731,7 @@ function MobileBottomSheet({
         onClick={onClose}
       />
       <div
-        className="absolute bottom-0 left-0 w-full flex flex-col bg-[#F5F5F5] rounded-t-2xl bottom-sheet-shadow transition-[height] duration-100"
+        className="absolute bottom-0 left-0 w-full flex flex-col bg-[#F5F5F5] rounded-t-2xl bottom-sheet-shadow transition-[height] duration-100 [view-transition-name:right-drawer-mobile]"
         style={{ height: `${sheetHeight}vh` }}
       >
         <div

@@ -276,3 +276,29 @@
 .bottom-sheet-shadow {
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
 }
+
+/* Right drawer view transitions */
+::view-transition-old(right-drawer) {
+  animation: slide-out-to-right 0.3s ease both;
+}
+::view-transition-new(right-drawer) {
+  animation: slide-in-from-right 0.3s ease both;
+}
+::view-transition-old(right-drawer-mobile) {
+  animation: slide-out-to-bottom 0.3s ease both;
+}
+::view-transition-new(right-drawer-mobile) {
+  animation: slide-in-from-bottom 0.3s ease both;
+}
+@keyframes slide-out-to-right {
+  to { transform: translateX(100%); }
+}
+@keyframes slide-in-from-right {
+  from { transform: translateX(100%); }
+}
+@keyframes slide-out-to-bottom {
+  to { transform: translateY(100%); }
+}
+@keyframes slide-in-from-bottom {
+  from { transform: translateY(100%); }
+}
