@@ -30,11 +30,13 @@ export interface ChatMessage extends AdkContent {
   langfuseTraceId?: string
 }
 
-// ── cofacts_ai tool types ──────────────────────────────────────────
-// IMPORTANT: Keep in strict sync with adk/cofacts_ai/tools.py and agent.py.
-// args fields are all optional — LLM output may be incomplete.
-// resp fields are non-optional where the Python code guarantees them.
-
+/**
+ * Map of all cofacts_ai tool names to their `args` / `resp` shapes.
+ *
+ * **IMPORTANT:** Keep in strict sync with `adk/cofacts_ai/tools.py` and `agent.py`.
+ * - `args` fields are all optional — LLM output may be incomplete.
+ * - `resp` fields are non-optional where the Python code guarantees them.
+ */
 export type AllTools = {
   investigator: {
     args: { request?: string }
@@ -142,6 +144,7 @@ export type FunctionResponseOutput =
     }[keyof AllTools]
   | components['schemas']['FunctionResponse-Output']
 
+/** A single tool call record — discriminated union over all tool names via `name`. `resp` is `null` while the call is still in-flight. */
 export type ToolInvocation = {
   [K in keyof AllTools]: {
     id: string

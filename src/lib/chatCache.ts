@@ -3,7 +3,6 @@ import type {
   AdkEvent,
   AdkSession,
   ChatMessage,
-  SourceItem,
   ToolInvocation,
 } from './adk'
 
@@ -11,7 +10,6 @@ export interface ChatSessionState {
   messages: Array<ChatMessage>
   isStreaming: boolean
   error: string | null
-  sources: Array<SourceItem>
   toolInvocations: Record<string, ToolInvocation>
   lastReplyDraftId: string | null
 }
@@ -20,7 +18,6 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   messages: [],
   isStreaming: false,
   error: null,
-  sources: [],
   toolInvocations: {},
   lastReplyDraftId: null,
 }
@@ -341,37 +338,7 @@ export function applyEventToState(
     }
   }
 
-  // Grounding metadata (Sources)
-  let sources = prev.sources;
-  if (event.groundingMetadata?.groundingChunks) {
-    const newSources: Array<SourceItem> =
-      event.groundingMetadata.groundingChunks
-        .filter((c) => c.web?.uri)
-        .map((c) => {
-          const url = c.web!.uri!
-          let domain = ''
-          try {
-            domain = new URL(url).hostname
-          } catch {
-            domain = url
-          }
-          return {
-            url,
-            title: c.web!.title ?? 'Unknown Source',
-            domain,
-            snippet: '',
-            adopted: false,
-          }
-        })
-
-    if (newSources.length > 0) {
-      const existingUrls = new Set(sources.map((s) => s.url))
-      const unique = newSources.filter((s) => !existingUrls.has(s.url))
-      sources = [...sources, ...unique]
-    }
-  }
-
-  return { ...prev, messages, sources, toolInvocations, lastReplyDraftId }
+  return { ...prev, messages, toolInvocations, lastReplyDraftId }
 }
 
 /**

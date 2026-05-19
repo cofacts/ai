@@ -79,7 +79,6 @@ export function useChat({ sessionId }: UseChatOptions) {
     messages: data.messages,
     isStreaming: data.isStreaming,
     error,
-    sources: data.sources,
     toolInvocations: data.toolInvocations,
     lastReplyDraftId: data.lastReplyDraftId,
     sendMessage,
