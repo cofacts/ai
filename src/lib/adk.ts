@@ -142,6 +142,15 @@ export type FunctionResponseOutput =
     }[keyof AllTools]
   | components['schemas']['FunctionResponse-Output']
 
+export type ToolInvocation = {
+  [K in keyof AllTools]: {
+    id: string
+    name: K
+    args: AllTools[K]['args']
+    resp: AllTools[K]['resp'] | null
+  }
+}[keyof AllTools]
+
 export interface SourceItem {
   url: string
   title: string

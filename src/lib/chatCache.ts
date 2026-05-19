@@ -3,8 +3,8 @@ import type {
   AdkEvent,
   AdkSession,
   ChatMessage,
-  FunctionResponseOutput,
   SourceItem,
+  ToolInvocation,
 } from './adk'
 
 export interface ChatSessionState {
@@ -12,7 +12,8 @@ export interface ChatSessionState {
   isStreaming: boolean
   error: string | null
   sources: Array<SourceItem>
-  toolResponses: Record<string, FunctionResponseOutput>
+  toolInvocations: Record<string, ToolInvocation>
+  lastReplyDraftId: string | null
 }
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
@@ -20,7 +21,8 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   isStreaming: false,
   error: null,
   sources: [],
-  toolResponses: {},
+  toolInvocations: {},
+  lastReplyDraftId: null,
 }
 
 // Global registry of abort controllers per session to prevent duplicate streams
@@ -212,12 +214,34 @@ export function applyEventToState(
 
   // console.info('applyEventToState', event);
 
-  // Collect functionResponses into the map keyed by id (or name as fallback)
-  const toolResponses = { ...prev.toolResponses }
+  // Build toolInvocations from functionCall and functionResponse parts
+  const toolInvocations = { ...prev.toolInvocations }
+  let lastReplyDraftId = prev.lastReplyDraftId
+
   for (const part of event.content.parts) {
+    if (part.functionCall?.id) {
+      const { id, name, args } = part.functionCall
+      if (id && name) {
+        toolInvocations[id] = {
+          ...toolInvocations[id],
+          id,
+          name,
+          args: (args ?? {}) as ToolInvocation['args'],
+          resp: toolInvocations[id]?.resp ?? null,
+        } as ToolInvocation
+        if (name === 'draft_factcheck_response') {
+          lastReplyDraftId = id
+        }
+      }
+    }
     if (part.functionResponse) {
       const key = part.functionResponse.id ?? part.functionResponse.name
-      if (key) toolResponses[key] = part.functionResponse as FunctionResponseOutput
+      if (key && toolInvocations[key]) {
+        toolInvocations[key] = {
+          ...toolInvocations[key],
+          resp: (part.functionResponse.response ?? null) as ToolInvocation['resp'],
+        } as ToolInvocation
+      }
     }
   }
 
@@ -226,12 +250,13 @@ export function applyEventToState(
 
   if (event.content.role === 'user') {
     // Don't insert user message if it's just function responses
-    if (eventParts.length === 0) return { ...prev, toolResponses }
+    if (eventParts.length === 0) return { ...prev, toolInvocations, lastReplyDraftId }
 
     // event is user message, just append message
     return {
       ...prev,
-      toolResponses,
+      toolInvocations,
+      lastReplyDraftId,
       messages: [
         ...prev.messages,
         {
@@ -346,7 +371,7 @@ export function applyEventToState(
     }
   }
 
-  return { ...prev, messages, sources, toolResponses }
+  return { ...prev, messages, sources, toolInvocations, lastReplyDraftId }
 }
 
 /**
