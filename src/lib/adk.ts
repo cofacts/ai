@@ -154,12 +154,3 @@ export type ToolInvocation = {
   }
 }[keyof AllTools]
 
-export interface SourceItem {
-  url: string
-  title: string
-  domain: string
-  snippet: string
-  thumbnailUrl?: string
-  faviconUrl?: string
-  adopted: boolean
-}
