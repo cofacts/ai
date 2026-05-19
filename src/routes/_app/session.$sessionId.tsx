@@ -63,8 +63,8 @@ function SessionPage() {
   }, [sessionId, queryClient, isStreaming])
 
   return (
-    <div className="flex flex-1 overflow-hidden">
-      <div className="flex flex-col flex-1 overflow-hidden">
+    <>
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {error && (
           <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700 flex items-center gap-2">
             <span className="material-symbols-outlined text-[16px]">error</span>
@@ -88,6 +88,6 @@ function SessionPage() {
         />
       </div>
       <Outlet />
-    </div>
+    </>
   )
 }
