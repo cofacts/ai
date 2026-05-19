@@ -42,7 +42,7 @@ const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
 } as any)
 const AppSessionSessionIdToolToolCallIdRoute =
   AppSessionSessionIdToolToolCallIdRouteImport.update({
-    id: '/_app/session/$sessionId/tool/$toolCallId',
+    id: '/tool/$toolCallId',
     path: '/tool/$toolCallId',
     getParentRoute: () => AppSessionSessionIdRoute,
   } as any)
@@ -51,15 +51,15 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/api/run-sse': typeof ApiRunSseRoute
   '/session/$sessionId': typeof AppSessionSessionIdRouteWithChildren
-  '/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesByTo {
   '/api/run-sse': typeof ApiRunSseRoute
   '/': typeof AppIndexRoute
   '/session/$sessionId': typeof AppSessionSessionIdRouteWithChildren
-  '/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -67,8 +67,8 @@ export interface FileRoutesById {
   '/api/run-sse': typeof ApiRunSseRoute
   '/_app/': typeof AppIndexRoute
   '/_app/session/$sessionId': typeof AppSessionSessionIdRouteWithChildren
-  '/_app/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/_app/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -76,23 +76,23 @@ export interface FileRouteTypes {
     | '/'
     | '/api/run-sse'
     | '/session/$sessionId'
-    | '/session/$sessionId/tool/$toolCallId'
     | '/api/auth/callback'
+    | '/session/$sessionId/tool/$toolCallId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/api/run-sse'
     | '/'
     | '/session/$sessionId'
-    | '/session/$sessionId/tool/$toolCallId'
     | '/api/auth/callback'
+    | '/session/$sessionId/tool/$toolCallId'
   id:
     | '__root__'
     | '/_app'
     | '/api/run-sse'
     | '/_app/'
     | '/_app/session/$sessionId'
-    | '/_app/session/$sessionId/tool/$toolCallId'
     | '/api/auth/callback'
+    | '/_app/session/$sessionId/tool/$toolCallId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -153,7 +153,8 @@ interface AppSessionSessionIdRouteChildren {
 }
 
 const AppSessionSessionIdRouteChildren: AppSessionSessionIdRouteChildren = {
-  AppSessionSessionIdToolToolCallIdRoute: AppSessionSessionIdToolToolCallIdRoute,
+  AppSessionSessionIdToolToolCallIdRoute:
+    AppSessionSessionIdToolToolCallIdRoute,
 }
 
 const AppSessionSessionIdRouteWithChildren =
