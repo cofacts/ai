@@ -110,7 +110,7 @@ function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
     case 'draft_factcheck_response':
       return <DraftFactcheckContent args={invocation.args} />
     case 'get_single_cofacts_article':
-      return <CofactsArticleContent args={invocation.args} response={invocation.resp} />
+      return <CofactsArticleContent response={invocation.resp} />
     default: {
       const t = invocation as unknown as {
         name: string
@@ -488,7 +488,6 @@ function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
 function CofactsArticleContent({
   response,
 }: {
-  args: AllTools['get_single_cofacts_article']['args']
   response: AllTools['get_single_cofacts_article']['resp'] | null
 }) {
   if (!response) {
@@ -511,7 +510,7 @@ function CofactsArticleContent({
   }
 
   const isMedia = article.articleType !== 'TEXT'
-  const totalVisits = article.stats.reduce(
+  const totalVisits = (article.stats ?? []).reduce(
     (sum, s) => sum + s.lineVisit + s.webVisit + s.downstreamBotVisits,
     0,
   )
