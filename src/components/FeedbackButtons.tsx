@@ -1,67 +1,55 @@
-import { useState } from 'react'
-import { LangfuseWeb } from 'langfuse'
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { FeedbackPopoverContent } from './FeedbackPopoverContent'
-
-const langfuse = import.meta.env.VITE_LANGFUSE_PUBLIC_KEY
-  ? new LangfuseWeb({
-      publicKey: import.meta.env.VITE_LANGFUSE_PUBLIC_KEY,
-      baseUrl: import.meta.env.VITE_LANGFUSE_BASE_URL,
-    })
-  : null
+import { useAuth } from '@/lib/auth'
+import {
+  getFeedbackForTrace,
+  submitFeedbackForTrace,
+} from '@/server/feedbackScores.functions'
 
 interface FeedbackButtonsProps {
   traceId: string
 }
 
 export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
+  const { user } = useAuth()
   const [feedbackGiven, setFeedbackGiven] = useState<1 | -1 | null>(null)
   const [isPopoverOpen, setIsPopoverOpen] = useState(false)
 
-  const handleFeedback = (e: React.MouseEvent, value: 1 | -1) => {
+  const { data: persistedFeedback } = useQuery({
+    queryKey: ['feedback', traceId, user?.id ?? null],
+    queryFn: () => getFeedbackForTrace({ data: traceId }),
+    enabled: !!user,
+    staleTime: Infinity,
+  })
+
+  useEffect(() => {
+    if (persistedFeedback) setFeedbackGiven(persistedFeedback.value)
+  }, [persistedFeedback])
+
+  const submitFeedback = useMutation({
+    mutationFn: (input: { value: 1 | -1 | 0; comment?: string }) =>
+      submitFeedbackForTrace({ data: { traceId, ...input } }),
+  })
+
+  const handleFeedback = (value: 1 | -1) => {
     const next = feedbackGiven === value ? null : value
     setFeedbackGiven(next)
 
     if (next === null) {
-      // Re-clicking same button -> clear feedback
       setIsPopoverOpen(false)
-      if (langfuse) {
-        langfuse.score({
-          id: `user-${traceId}`,
-          traceId,
-          name: 'user-thumbs',
-          value: 0,
-          dataType: 'NUMERIC',
-          comment: '',
-        })
-      }
+      submitFeedback.mutate({ value: 0, comment: '' })
     } else {
-      // New feedback
       setIsPopoverOpen(true)
-      if (langfuse) {
-        langfuse.score({
-          id: `user-${traceId}`,
-          traceId,
-          name: 'user-thumbs',
-          value: next,
-          dataType: 'NUMERIC',
-        })
-      }
+      submitFeedback.mutate({ value: next })
     }
   }
 
   const handleCommentSubmit = (comment: string) => {
     setIsPopoverOpen(false)
-    if (langfuse && feedbackGiven !== null) {
-      langfuse.score({
-        id: `user-${traceId}`,
-        traceId,
-        name: 'user-thumbs',
-        value: feedbackGiven,
-        dataType: 'NUMERIC',
-        comment,
-      })
-    }
+    if (feedbackGiven === null) return
+    submitFeedback.mutate({ value: feedbackGiven, comment })
   }
 
   return (
@@ -74,7 +62,7 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
       >
         <div className="flex gap-3">
           <PopoverTrigger
-            onClick={(e) => handleFeedback(e, 1)}
+            onClick={() => handleFeedback(1)}
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               feedbackGiven === 1
                 ? 'text-primary'
@@ -86,7 +74,7 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
             </span>
           </PopoverTrigger>
           <PopoverTrigger
-            onClick={(e) => handleFeedback(e, -1)}
+            onClick={() => handleFeedback(-1)}
             className={`p-1 rounded hover:bg-gray-100 transition-colors ${
               feedbackGiven === -1
                 ? 'text-destructive'

@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
-import { ADK_APP_NAME, ADK_USER_ID, adkClient } from './adkClient'
+import { ADK_APP_NAME, adkClient } from './adkClient'
 import { handleAdkError, handleAdkResponseError } from './adk-errors'
+import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
 
 const SESSION_TITLE_KEY = 'title'
 
@@ -22,11 +23,12 @@ export interface SessionListItem {
 
 export const listSessions = createServerFn({ method: 'GET' }).handler(
   async () => {
+    const userId = await resolveAdkUserIdOrThrow()
     const { data, error } = await adkClient.GET(
       '/apps/{app_name}/users/{user_id}/sessions',
       {
         params: {
-          path: { app_name: ADK_APP_NAME, user_id: ADK_USER_ID },
+          path: { app_name: ADK_APP_NAME, user_id: userId },
         },
       },
     )
@@ -58,13 +60,14 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
 export const getSession = createServerFn({ method: 'GET' })
   .inputValidator((sessionId: string) => sessionId)
   .handler(async ({ data: sessionId }) => {
+    const userId = await resolveAdkUserIdOrThrow()
     const { data, error } = await adkClient.GET(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
         params: {
           path: {
             app_name: ADK_APP_NAME,
-            user_id: ADK_USER_ID,
+            user_id: userId,
             session_id: sessionId,
           },
         },
@@ -82,13 +85,14 @@ interface CreateSessionInput {
 export const createSession = createServerFn({ method: 'POST' })
   .inputValidator((input: CreateSessionInput) => input)
   .handler(async ({ data: { sessionId, name } }) => {
+    const userId = await resolveAdkUserIdOrThrow()
     const { response } = await adkClient.POST(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
         params: {
           path: {
             app_name: ADK_APP_NAME,
-            user_id: ADK_USER_ID,
+            user_id: userId,
             session_id: sessionId,
           },
         },
@@ -118,13 +122,14 @@ interface UpdateSessionInput {
 export const updateSessionTitle = createServerFn({ method: 'POST' })
   .inputValidator((input: UpdateSessionInput) => input)
   .handler(async ({ data: { sessionId, title } }) => {
+    const userId = await resolveAdkUserIdOrThrow()
     const { data, error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
         params: {
           path: {
             app_name: ADK_APP_NAME,
-            user_id: ADK_USER_ID,
+            user_id: userId,
             session_id: sessionId,
           },
         },
@@ -175,13 +180,14 @@ export const getSessionArtifact = createServerFn({ method: 'GET' })
 export const markSessionOpened = createServerFn({ method: 'POST' })
   .inputValidator((sessionId: string) => sessionId)
   .handler(async ({ data: sessionId }) => {
+    const userId = await resolveAdkUserIdOrThrow()
     const { error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
         params: {
           path: {
             app_name: ADK_APP_NAME,
-            user_id: ADK_USER_ID,
+            user_id: userId,
             session_id: sessionId,
           },
         },

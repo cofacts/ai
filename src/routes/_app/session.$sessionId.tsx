@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
 import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
+import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
@@ -56,10 +57,18 @@ function SessionPage() {
   }, [lastReplyDraftId, toolCallId, sessionId, navigate])
 
   useEffect(() => {
-    if (isStreaming) return
-    markSessionOpened({ data: sessionId }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ['sessions'] })
-    })
+    if (isStreaming) {
+      // Don't trigger ADK state update when streaming;
+      // otherwise when the stream ends, the session will be stale.
+      return
+    }
+    markSessionOpened({ data: sessionId })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      })
+      .catch((err) => {
+        if (isAuthExpiredError(err)) handleAuthExpired()
+      })
   }, [sessionId, queryClient, isStreaming])
 
   return (

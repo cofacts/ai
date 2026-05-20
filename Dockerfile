@@ -9,8 +9,6 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source and build
 COPY . .
-ARG VITE_LANGFUSE_PUBLIC_KEY
-ARG VITE_LANGFUSE_BASE_URL
 RUN pnpm run build
 
 # --- runtime ---

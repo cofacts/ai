@@ -4,8 +4,8 @@
 // queries work — and forwards the JWT as Bearer auth.
 //
 // On network error, non-2xx response, or GraphQL `errors` array, this throws.
-// Callers that want a soft-fail (e.g. `getCurrentUserServerFn` returning null
-// when the user isn't logged in) wrap the call in try/catch.
+// Callers that want a soft-fail wrap the call in try/catch and handle null /
+// partial data themselves.
 //
 // Server-only: depends on h3's getCookie via @tanstack/react-start/server. Do
 // not import from client code.

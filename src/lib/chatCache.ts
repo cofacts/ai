@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
+import { handleAuthExpired } from './authExpired'
 import type {
   AdkEvent,
   AdkSession,
@@ -74,6 +75,9 @@ export async function startChatStream({
     })
 
     if (!response.ok) {
+      if (response.status === 401) {
+        handleAuthExpired()
+      }
       throw new Error(`ADK request failed: HTTP ${response.status}`)
     }
 

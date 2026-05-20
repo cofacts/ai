@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { SessionListItem } from '@/lib/chatSessions.functions'
 import { useSessions } from '@/hooks/useSessions'
 import { updateSessionTitle } from '@/lib/chatSessions.functions'
+import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
 
 interface SidebarProps {
   isOpen: boolean
@@ -63,7 +64,11 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
       })
       await queryClient.invalidateQueries({ queryKey: ['sessions'] })
     } catch (err) {
-      console.error('Failed to update session title:', err)
+      if (isAuthExpiredError(err)) {
+        handleAuthExpired()
+      } else {
+        console.error('Failed to update session title:', err)
+      }
     } finally {
       handleCancelEdit()
     }

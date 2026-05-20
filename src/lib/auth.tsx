@@ -9,17 +9,38 @@
 // flow is initiated via the `login` server function (which hides the upstream
 // rumors-api origin).
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import type { QueryClient } from '@tanstack/react-query'
+import type { CofactsUser } from '@/server/me.functions'
 import { logout as logoutServerFn } from '@/server/auth.functions'
 import { getCurrentUserServerFn } from '@/server/me.functions'
-import type { CofactsUser } from '@/server/me.functions'
 import { LoginModal } from '@/components/LoginModal'
+import { AUTH_EXPIRED_EVENT } from './authExpired'
 
 export type { CofactsUser }
 
 const ME_QUERY_KEY = ['me'] as const
+
+// Drop user-scoped caches so the previous user's session list and chat
+// messages cannot be read by an anonymous viewer in the same tab. Both
+// queries use staleTime/gcTime: Infinity, so removeQueries (not invalidate)
+// is required for immediate eviction.
+export function clearUserScopedCache(queryClient: QueryClient) {
+  queryClient.setQueryData(ME_QUERY_KEY, null)
+  queryClient.removeQueries({ queryKey: ['sessions'] })
+  queryClient.removeQueries({ queryKey: ['chat'] })
+  queryClient.removeQueries({ queryKey: ['feedback'] })
+}
 
 interface AuthState {
   user: CofactsUser | null
@@ -38,6 +59,7 @@ export function AuthProvider({
   serverLoadedUser?: CofactsUser | null
 }) {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const callLogout = useServerFn(logoutServerFn)
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null)
 
@@ -47,6 +69,18 @@ export function AuthProvider({
     initialData: serverLoadedUser ?? null,
     staleTime: Infinity,
   })
+
+  // Owns the AUTH_EXPIRED_EVENT reaction: clear user-scoped caches and
+  // open LoginModal anchored to the current pathname so re-auth lands the
+  // user back where they were.
+  useEffect(() => {
+    const onAuthExpired = () => {
+      clearUserScopedCache(queryClient)
+      setPendingRedirect(router.state.location.pathname)
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
+  }, [router, queryClient])
 
   const login = useCallback((redirectTo?: string) => {
     setPendingRedirect(redirectTo ?? '')
@@ -58,7 +92,7 @@ export function AuthProvider({
     } catch {
       // best-effort: clear local state even if the network call fails
     }
-    queryClient.setQueryData(ME_QUERY_KEY, null)
+    clearUserScopedCache(queryClient)
   }, [callLogout, queryClient])
 
   const value = useMemo<AuthState>(
