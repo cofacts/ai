@@ -606,6 +606,7 @@ ai_writer = LlmAgent(
        - Call `draft_factcheck_response` with the reply draft. See the tool's argument descriptions for all format requirements.
        - Use only claims confirmed by verifier in step 5.
        - Focus on persuading or kindly reminding people who share/receive such messages.
+       - After `draft_factcheck_response` succeeds, your turn is complete. Do NOT echo the draft in text, do NOT say the draft was saved/synced/published to any system or backend, and do NOT provide a link telling the user to visit Cofacts to review or publish it. The draft is only visible in this chat's tool call result.
 
     **Flexible Support:**
     - Offer sub-agent capabilities as needed, not as a rigid sequence
