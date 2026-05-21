@@ -600,12 +600,19 @@ ai_writer = LlmAgent(
        - Investigator summarizes pages and can err — verifier reads the originals directly.
        - Do not pass site names or descriptions; only real `https://` links.
 
-    6. **Source Evaluation**: Have political perspective agents review key sources and materials used
+    6. **Draft & Proofreader Review**:
+       - Write a draft reply in plain text (do NOT call the tool yet).
+       - Send the draft along with the cited sources to the political perspective agents and ask:
+         "Does this reply address your concerns? Is the tone neutral? Are the sources credible from your perspective?"
+       - Based on their feedback, revise the draft and re-send as needed.
+       - Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
 
     7. **Compose Reply**:
-       - Call `draft_factcheck_response` with the reply draft. See the tool's argument descriptions for all format requirements.
+       - Before calling the tool, explain your classification choice and the key points of the reply in text.
+       - Call `draft_factcheck_response` — this is the goal of the whole process. See the tool's argument descriptions for all format requirements.
        - Use only claims confirmed by verifier in step 5.
        - Focus on persuading or kindly reminding people who share/receive such messages.
+       - After the tool returns success, ask the user to open the tool call result above to review the draft and share any feedback.
 
     **Flexible Support:**
     - Offer sub-agent capabilities as needed, not as a rigid sequence
@@ -613,10 +620,6 @@ ai_writer = LlmAgent(
     - Provide verification support when asked
     - Help organize and structure their insights
     - Assist with formatting and presentation
-
-    ## Cofacts Reply Format:
-
-    Use `draft_factcheck_response` to submit the reply. All format rules are in that tool's argument descriptions.
 
     ## How to Use Political Perspective Agents:
 
@@ -630,7 +633,7 @@ ai_writer = LlmAgent(
        - Provide the suspicious message.
        - Ask: "What questions/feelings does this evoke? What makes you angry or confused?"
 
-    2. **Reviewing the Reply** (Later):
+    2. **Reviewing the Reply** (Before Drafting):
        - Provide the suspicious message AND your draft reply.
        - Ask: "Does this reply answer your questions? Which doubts remain unresolved?"
 
@@ -641,6 +644,10 @@ ai_writer = LlmAgent(
     - Evaluate whether sources might seem biased to certain political viewpoints
     - Ensure final replies will be credible across political divides
     - Identify potential blind spots in analysis
+
+    ## Cofacts Reply Format:
+
+    Use `draft_factcheck_response` to submit the reply. All format rules are in that tool's argument descriptions.
 
     ## Quality Standards:
 

@@ -428,8 +428,9 @@ def draft_factcheck_response(
     Draft a Cofacts fact-check response for human editor review.
 
     Call this tool once you have completed all research and review steps and are
-    ready to propose a reply. The human editor will review the draft in the UI
-    before submitting it to Cofacts.
+    ready to propose a reply. Before calling, share your analysis and reasoning
+    in text — explain your classification choice and the key points of the reply.
+    Then call this tool as the concluding action.
 
     Args:
         classification: One of:
@@ -473,7 +474,14 @@ def draft_factcheck_response(
             ),
         }
 
-    return {"success": True, "text": "Draft saved. Click the tool call result above to review it, then submit to Cofacts when ready."}
+    return {
+        "success": True,
+        "text": (
+            "The draft is now displayed to the user as a tool call result in this conversation. "
+            "Guide the user to open the tool call result above to read the draft, "
+            "then ask if they have any feedback or edits before submitting to Cofacts."
+        ),
+    }
 
 
 async def resolve_vertex_redirect(url: str) -> str:
