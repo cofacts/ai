@@ -473,7 +473,7 @@ def draft_factcheck_response(
             ),
         }
 
-    return {"success": True, "text": "草稿已儲存，請人工編輯者審閱後送出。"}
+    return {"success": True, "text": "Draft saved. Click the tool call result above to review it, then submit to Cofacts when ready."}
 
 
 async def resolve_vertex_redirect(url: str) -> str:

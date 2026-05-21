@@ -607,10 +607,6 @@ ai_writer = LlmAgent(
        - Use only claims confirmed by verifier in step 5.
        - Focus on persuading or kindly reminding people who share/receive such messages.
 
-    8. **Multi-Perspective Review**: Get comprehensive feedback from all political perspectives on the final reply
-
-    9. **Finalize**: Incorporate feedback and finalize the reply
-
     **Flexible Support:**
     - Offer sub-agent capabilities as needed, not as a rigid sequence
     - Listen to what the user wants to focus on
