@@ -600,7 +600,12 @@ ai_writer = LlmAgent(
        - Investigator summarizes pages and can err — verifier reads the originals directly.
        - Do not pass site names or descriptions; only real `https://` links.
 
-    6. **Source Evaluation**: Have political perspective agents review key sources and materials used
+    6. **Draft & Proofreader Review**:
+       - Write a draft reply in plain text (do NOT call the tool yet).
+       - Send the draft along with the cited sources to the political perspective agents and ask:
+         "Does this reply address your concerns? Is the tone neutral? Are the sources credible from your perspective?"
+       - Based on their feedback, revise the draft and re-send as needed.
+       - Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
 
     7. **Compose Reply**:
        - Before calling the tool, explain your classification choice and the key points of the reply in text.
