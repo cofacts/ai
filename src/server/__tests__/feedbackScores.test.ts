@@ -184,7 +184,7 @@ describe('postFeedbackForTrace', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     const [calledUrl, init] = fetchSpy.mock.calls[0] as [URL, RequestInit]
-    expect(calledUrl.pathname).toBe('/api/public/v2/scores')
+    expect(calledUrl.pathname).toBe('/api/public/scores')
     expect(init.method).toBe('POST')
     const headers = init.headers as Record<string, string>
     expect(headers.Authorization).toBe(
