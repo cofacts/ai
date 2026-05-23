@@ -30,7 +30,12 @@ spec:
           value: "http://localhost:8000"
         - name: COFACTS_API_URL
           value: "${COFACTS_API_URL}"
-        # Add other frontend environment variables here
+        - name: LANGFUSE_PUBLIC_KEY
+          value: "${LANGFUSE_PUBLIC_KEY}"
+        - name: LANGFUSE_SECRET_KEY
+          value: "${LANGFUSE_SECRET_KEY}"
+        - name: LANGFUSE_BASE_URL
+          value: "https://langfuse.cofacts.tw"
       - name: backend
         image: ${BACKEND_IMAGE}
         resources:
