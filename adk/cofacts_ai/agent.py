@@ -10,6 +10,7 @@ This module implements a hierarchical agent system with:
 
 import asyncio
 import json
+import re
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -247,6 +248,43 @@ ai_investigator = LlmAgent(
 )
 
 
+_YOUTUBE_URL_RE = re.compile(
+    r"https?://(?:www\.)?(?:youtube\.com/watch\?[^\s]*v=|youtu\.be/)[^\s\"'<>]+"
+)
+
+
+def inject_youtube_filedata(
+    callback_context: CallbackContext, llm_request
+) -> None:
+    """Before-model callback for ai_verifier.
+
+    Scans the conversation contents for YouTube URLs and appends them as
+    FileData parts so Gemini can watch the videos. The original URLs are kept
+    intact so url_context still fetches their title/description metadata.
+    """
+    youtube_urls = []
+    for content in llm_request.contents:
+        if not content.parts:
+            continue
+        for part in content.parts:
+            if part.text:
+                youtube_urls.extend(_YOUTUBE_URL_RE.findall(part.text))
+
+    if not youtube_urls:
+        return None
+
+    llm_request.contents.append(
+        genai_types.Content(
+            role="user",
+            parts=[
+                genai_types.Part(file_data=genai_types.FileData(file_uri=url))
+                for url in dict.fromkeys(youtube_urls)  # deduplicate, preserve order
+            ],
+        )
+    )
+    return None
+
+
 # AI Verifier - Faithful passage reporter from URLs
 ai_verifier = LlmAgent(
     name="verifier",
@@ -255,13 +293,16 @@ ai_verifier = LlmAgent(
     #
     model="gemini-3-flash-preview",
     description="A fact-checking verifier. Give it URLs to read and claims to check — it reads all pages and returns a per-claim report showing which sources support or refute each claim, with verbatim quotes. Returns {content, sources} — content is the verification report; sources lists {title, url} pairs for all pages read.",
+    before_model_callback=inject_youtube_filedata,
     after_model_callback=append_url_context_sources,
     instruction="""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
 
     ## Your Task
-    1. Use url_context to read all provided URLs in one call (up to 20)
+    1. Use url_context to read all provided URLs in one call (up to 20).
+       For YouTube URLs, the video content is already loaded in the context as well —
+       use what you see/hear in the video to verify claims, in addition to the page metadata.
     2. For each claim, assess whether each URL's content directly supports it
     3. Write a verification report
 
