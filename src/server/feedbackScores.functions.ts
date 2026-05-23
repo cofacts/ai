@@ -101,7 +101,7 @@ export async function postFeedbackForTrace(
   const secretKey = process.env.LANGFUSE_SECRET_KEY
   if (!baseUrl || !publicKey || !secretKey) return
 
-  const url = new URL('/api/public/v2/scores', baseUrl)
+  const url = new URL('/api/public/scores', baseUrl)
   const auth = Buffer.from(`${publicKey}:${secretKey}`).toString('base64')
   // Deterministic id makes repeated submissions for the same trace upsert
   // (Langfuse merges scores by id within the project), so toggling thumbs
