@@ -564,6 +564,26 @@ async def after_tool(
         return None
 
 
+def handle_writer_tool_error(
+    tool: BaseTool,
+    args: dict,
+    tool_context: Any,
+    error: Exception,
+) -> Optional[dict]:
+    """on_tool_error_callback for ai_writer.
+
+    Catches any exception thrown by a tool so the writer turn does not crash.
+    Returns a structured error dict the writer can read and react to.
+    """
+    return {
+        "error": type(error).__name__,
+        "message": (
+            f"[SYSTEM] Tool '{tool.name}' failed with {type(error).__name__}: {error}. "
+            "Please note this failure and continue with available information."
+        ),
+    }
+
+
 # Main AI Writer - Orchestrator agent
 #
 # Note: Due to ADK limitations, we cannot mix built-in tools (google_search, url_context)
@@ -585,6 +605,7 @@ ai_writer = LlmAgent(
         )
     ),
     after_tool_callback=after_tool,
+    on_tool_error_callback=handle_writer_tool_error,
     after_agent_callback=update_last_event_time,
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
