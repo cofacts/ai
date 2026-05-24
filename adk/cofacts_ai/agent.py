@@ -262,6 +262,8 @@ def inject_youtube_filedata(
     into the same parts array so Gemini can watch the videos inline.
     The original URLs are kept intact so url_context still fetches their
     title/description metadata.
+
+    Ref: https://ai.google.dev/gemini-api/docs/video-understanding#youtube
     """
     for content in llm_request.contents:
         if content.role != "user" or not content.parts:
