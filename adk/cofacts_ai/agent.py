@@ -322,6 +322,21 @@ ai_verifier = LlmAgent(
     - A source supports a claim only if its content contains direct, specific evidence — not merely related topic
     - Quote the supporting passage verbatim
     - Do not add analysis or verdicts beyond what the sources say
+
+    ## Hard Rules — No Exceptions
+
+    **No training knowledge**: For video or media content, report ONLY what is directly visible or
+    audible. Never use background knowledge to identify the event name, date, location, organizer,
+    or a person's full identity. If the video does not explicitly state it, write
+    "影片未說明 / cannot be determined from this video."
+
+    **Video title and hashtags are not evidence**: The title, description, and hashtags of a YouTube
+    video are added by the uploader and may be inaccurate or intentionally misleading.
+    Do NOT treat them as evidence about the event depicted in the video.
+
+    **No invented citations**: The Sources list MUST ONLY contain URLs that were provided as input.
+    Never cite a news article, report, or webpage that was not in the original URL list —
+    even if you believe such articles exist.
     """,
     tools=[url_context],
 )
