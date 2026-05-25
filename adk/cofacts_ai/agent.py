@@ -304,9 +304,11 @@ ai_verifier = LlmAgent(
     read all the URLs and determine which sources actually support each claim.
 
     ## Your Task
-    1. Use url_context to read all provided URLs in one call (up to 20).
-       For YouTube URLs, the video content is already loaded in the context as well —
-       use what you see/hear in the video to verify claims, in addition to the page metadata.
+    1. Call url_context for ALL provided URLs in one call (up to 20) — this is MANDATORY.
+       url_context fetches the web PAGE metadata (title, publish date, description), which is
+       always required regardless of what else is visible in this conversation.
+       Note: for video URLs (e.g. YouTube), page metadata and video frames are complementary —
+       url_context gives you the upload date; the video gives you observable content.
     2. For each claim, assess whether each URL's content directly supports it
     3. Write a verification report
 
@@ -334,9 +336,9 @@ ai_verifier = LlmAgent(
     or a person's full identity. If the video does not explicitly state it, write
     "影片未說明 / cannot be determined from this video."
 
-    **Two-layer reporting for video content**: Report uploader-provided metadata and directly
-    observed content as separate, clearly labelled layers:
-    - 「影片標題/描述（上傳者提供）」: quote verbatim — present as what the uploader wrote, not as confirmed fact
+    **When video content is loaded in context**: Report three layers in this order:
+    - 「頁面 metadata（url_context 取得）」: uploadDate/publishedAt, uploader, title — quoted verbatim. uploadDate is REQUIRED: a video can show old footage while being recently uploaded, and only the page tells you when it was published online.
+    - 「影片標題/描述（上傳者提供）」: quote verbatim — treat as the uploader's claim, not confirmed fact
     - 「影片可觀察內容」: what is visible/audible in the video — speech, on-screen text, logos, surroundings
     The writer has broader context to judge whether the title is accurate or misleading.
 
