@@ -13,6 +13,7 @@ import json
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
@@ -502,6 +503,51 @@ async def after_tool(
         return None
 
 
+_ARTICLE_TYPE_MIME = {
+    "IMAGE": "image/webp",
+    "VIDEO": "video/mp4",
+    "AUDIO": "audio/mpeg",
+}
+
+
+async def inject_article_attachment(
+    callback_context: CallbackContext,
+    llm_request,
+) -> None:
+    """Inject media file_data into get_single_cofacts_article FunctionResponse parts.
+
+    Converts the signed GCS HTTPS URL in attachmentUrl to a gs:// URI and sets
+    FunctionResponse.parts so Gemini can perceive the media directly, without any
+    download/upload or extra tool calls.
+    """
+    for content in llm_request.contents:
+        if content.role != "user":
+            continue
+        for part in content.parts or []:
+            fr = part.function_response
+            if not fr or fr.name != "get_single_cofacts_article":
+                continue
+            if fr.parts:
+                continue
+            article = (fr.response or {}).get("article") or {}
+            article_type = article.get("articleType")
+            attachment_url = article.get("attachmentUrl")
+            if not attachment_url or article_type not in _ARTICLE_TYPE_MIME:
+                continue
+            parsed = urlparse(attachment_url)
+            if parsed.netloc != "storage.googleapis.com":
+                continue
+            gs_uri = "gs:/" + parsed.path
+            fr.parts = [
+                genai_types.FunctionResponsePart(
+                    file_data=genai_types.FunctionResponseFileData(
+                        file_uri=gs_uri,
+                        mime_type=_ARTICLE_TYPE_MIME[article_type],
+                    )
+                )
+            ]
+
+
 # Main AI Writer - Orchestrator agent
 #
 # Note: Due to ADK limitations, we cannot mix built-in tools (google_search, url_context)
@@ -522,6 +568,7 @@ ai_writer = LlmAgent(
             include_thoughts=True, thinking_level=genai_types.ThinkingLevel.HIGH
         )
     ),
+    before_model_callback=inject_article_attachment,
     after_tool_callback=after_tool,
     after_agent_callback=update_last_event_time,
     instruction=f"""
