@@ -353,7 +353,7 @@ ai_verifier = LlmAgent(
 # AI Proof-reader agents for different Taiwan political perspectives
 ai_proofreader_kmt = LlmAgent(
     name="proofreader_kmt",
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.HIGH
@@ -402,7 +402,7 @@ ai_proofreader_kmt = LlmAgent(
 
 ai_proofreader_dpp = LlmAgent(
     name="proofreader_dpp",
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.HIGH
@@ -451,7 +451,7 @@ ai_proofreader_dpp = LlmAgent(
 
 ai_proofreader_tpp = LlmAgent(
     name="proofreader_tpp",
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.HIGH
@@ -500,7 +500,7 @@ ai_proofreader_tpp = LlmAgent(
 
 ai_proofreader_minor_parties = LlmAgent(
     name="proofreader_minor_parties",
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.HIGH
