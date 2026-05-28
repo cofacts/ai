@@ -1,9 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { getCookie } from '@tanstack/react-start/server'
 import type { components } from '@/lib/adk-types'
 import { ADK_APP_NAME, adkClient } from '@/lib/adkClient'
 import { handleAdkResponseError } from '@/lib/adk-errors'
 import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
 import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
+import { SESSION_COOKIE_NAME } from '@/server/sessionCookie'
 
 type RunRequest = components['schemas']['RunAgentRequest']
 type ChatInput = Omit<RunRequest, 'appName' | 'userId' | 'streaming'>
@@ -37,6 +39,7 @@ export const Route = createFileRoute('/api/run-sse')({
         }
 
         const input = (await request.json()) as ChatInput
+        const token = getCookie(SESSION_COOKIE_NAME)
 
         const { response } = await adkClient.POST('/run_sse', {
           parseAs: 'stream',
@@ -45,6 +48,7 @@ export const Route = createFileRoute('/api/run-sse')({
             appName: ADK_APP_NAME,
             userId,
             streaming: true,
+            stateDelta: token ? { 'temp:cofacts_token': token } : undefined,
           },
           // When the client aborts the fetch, request.signal fires (via srvx),
           // which in turn aborts the ADK SSE connection.

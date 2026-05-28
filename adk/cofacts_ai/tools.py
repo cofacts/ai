@@ -10,6 +10,7 @@ import json
 import asyncio
 from typing import Dict, List, Any, Optional
 import httpx
+from google.adk.tools.tool_context import ToolContext
 
 
 # GraphQL fragment for common Article fields
@@ -122,7 +123,8 @@ COMMON_ARTICLE_FIELDS = """
 async def _execute_cofacts_graphql(
     query: str,
     variables: Dict[str, Any],
-    operation_name: str = "GraphQL request"
+    operation_name: str = "GraphQL request",
+    auth_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Execute a GraphQL query against Cofacts API with standardized error handling.
@@ -131,10 +133,16 @@ async def _execute_cofacts_graphql(
         query: The GraphQL query string
         variables: Variables for the GraphQL query
         operation_name: Name of the operation for error reporting
+        auth_token: Optional JWT token issued by rumors-api for authenticated requests
 
     Returns:
         Response containing either data or error information
     """
+    headers: Dict[str, str] = {"Content-Type": "application/json"}
+    if auth_token:
+        headers["x-app-id"] = "RUMORS_SITE"
+        headers["Authorization"] = f"Bearer {auth_token}"
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -143,9 +151,7 @@ async def _execute_cofacts_graphql(
                     "query": query,
                     "variables": variables
                 },
-                headers={
-                    "Content-Type": "application/json"
-                }
+                headers=headers,
             )
             response.raise_for_status()
 
@@ -174,7 +180,8 @@ async def search_cofacts_database(
     after: Optional[str] = None,
     reply_count_max: Optional[int] = None,
     days_back: Optional[int] = None,
-    order_by: str = "_score"
+    order_by: str = "_score",
+    tool_context: ToolContext = None,
 ) -> Dict[str, Any]:
     """
     Search the Cofacts database for articles using various filters.
@@ -285,7 +292,8 @@ async def search_cofacts_database(
         result = await _execute_cofacts_graphql(
             query=graphql_query,
             variables=variables,
-            operation_name="search Cofacts database"
+            operation_name="search Cofacts database",
+            auth_token=tool_context.state.get("temp:cofacts_token") if tool_context else None,
         )
 
         if "error" in result:
@@ -303,7 +311,8 @@ async def search_cofacts_database(
 
 
 async def get_single_cofacts_article(
-    article_id: str
+    article_id: str,
+    tool_context: ToolContext = None,
 ) -> Dict[str, Any]:
     """
     Get a single article from Cofacts database by ID.
@@ -335,7 +344,8 @@ async def get_single_cofacts_article(
         result = await _execute_cofacts_graphql(
             query=graphql_query,
             variables=variables,
-            operation_name="get specific Cofacts article"
+            operation_name="get specific Cofacts article",
+            auth_token=tool_context.state.get("temp:cofacts_token") if tool_context else None,
         )
 
         if "error" in result:
