@@ -20,7 +20,7 @@ app = get_fast_api_app(
 @app.middleware("http")
 async def _inject_cofacts_token(request: Request, call_next):
     auth = request.headers.get("authorization", "")
-    token = auth.removeprefix("Bearer ").strip() or None
+    token = auth[7:].strip() or None if auth.lower().startswith("bearer ") else None
     t = cofacts_token_var.set(token)
     try:
         return await call_next(request)

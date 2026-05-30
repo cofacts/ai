@@ -12,8 +12,6 @@ import os
 from typing import Any, Dict, List, Optional
 
 import httpx
-from google.adk.tools.tool_context import ToolContext
-
 from .auth_context import cofacts_token_var
 
 # GraphQL fragment for common Article fields
@@ -184,7 +182,6 @@ async def search_cofacts_database(
     reply_count_max: Optional[int] = None,
     days_back: Optional[int] = None,
     order_by: str = "_score",
-    tool_context: ToolContext = None,
 ) -> Dict[str, Any]:
     """
     Search the Cofacts database for articles using various filters.
@@ -311,7 +308,6 @@ async def search_cofacts_database(
 
 async def get_single_cofacts_article(
     article_id: str,
-    tool_context: ToolContext = None,
 ) -> Dict[str, Any]:
     """
     Get a single article from Cofacts database by ID.
