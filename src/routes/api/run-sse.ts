@@ -48,8 +48,8 @@ export const Route = createFileRoute('/api/run-sse')({
             appName: ADK_APP_NAME,
             userId,
             streaming: true,
-            stateDelta: token ? { 'temp:cofacts_token': token } : undefined,
           },
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           // When the client aborts the fetch, request.signal fires (via srvx),
           // which in turn aborts the ADK SSE connection.
           signal: request.signal,

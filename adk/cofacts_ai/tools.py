@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional
 import httpx
 from google.adk.tools.tool_context import ToolContext
 
+from .auth_context import cofacts_token_var
+
 # GraphQL fragment for common Article fields
 COMMON_ARTICLE_FIELDS = """
   fragment CommonArticleFields on Article {
@@ -292,7 +294,7 @@ async def search_cofacts_database(
             query=graphql_query,
             variables=variables,
             operation_name="search Cofacts database",
-            auth_token=tool_context.state.get("temp:cofacts_token") if tool_context else None,
+            auth_token=cofacts_token_var.get(),
         )
 
         if "error" in result:
@@ -342,7 +344,7 @@ async def get_single_cofacts_article(
             query=graphql_query,
             variables=variables,
             operation_name="get specific Cofacts article",
-            auth_token=tool_context.state.get("temp:cofacts_token") if tool_context else None,
+            auth_token=cofacts_token_var.get(),
         )
 
         if "error" in result:
