@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { AllTools, ToolInvocation } from '@/lib/adk'
+import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -142,7 +142,6 @@ function MarkdownSection({ content }: { content: string }) {
   )
 }
 
-type ToolSource = NonNullable<AllTools['investigator']['resp']['sources']>[number]
 
 function SourceCard({ source, index }: { source: ToolSource; index: number }) {
   const domain = source.url
@@ -186,8 +185,8 @@ function InvestigatorContent({
   args: AllTools['investigator']['args']
   response: AllTools['investigator']['resp'] | null
 }) {
-  const content = response?.content ?? response?.result ?? ''
-  const sources = response?.sources ?? []
+  const content = response ? ('content' in response ? response.content : response.result) : ''
+  const sources = response && 'content' in response ? response.sources : []
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -232,8 +231,8 @@ function VerifierContent({
   args: AllTools['verifier']['args']
   response: AllTools['verifier']['resp'] | null
 }) {
-  const content = response?.content ?? response?.result ?? ''
-  const sources = response?.sources ?? []
+  const content = response ? ('content' in response ? response.content : response.result) : ''
+  const sources = response && 'content' in response ? response.sources : []
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">

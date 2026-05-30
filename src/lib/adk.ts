@@ -30,6 +30,16 @@ export interface ChatMessage extends AdkContent {
   langfuseTraceId?: string
 }
 
+/** A source URL/title pair included in grounded investigator / verifier responses. */
+export type ToolSource = { title: string; url: string }
+
+/**
+ * ADK wraps a sub-agent's plain-text output as `{ result: string }` when the
+ * text cannot be parsed as JSON — e.g. when Gemini omits grounding metadata
+ * and the after-model callback falls back to a retry instruction or raw text.
+ */
+type AdkFallbackResp = { result: string }
+
 /**
  * Map of all cofacts_ai tool names to their `args` / `resp` shapes.
  *
@@ -40,23 +50,30 @@ export interface ChatMessage extends AdkContent {
 export type AllTools = {
   investigator: {
     args: { request?: string }
-    resp: {
-      content?: string
-      sources?: Array<{ title: string; url: string }>
-      grounding_supports?: Array<{
-        segment: { start_index: number; end_index: number; text: string }
-        source_ids: number[]
-      }>
-      result?: string // ADK fallback when grounding metadata is absent
-    }
+    /**
+     * Structured response when `google_search` returns grounding metadata.
+     * Falls back to `AdkFallbackResp` when Gemini omits grounding metadata
+     * intermittently (the callback injects a retry instruction as plain text).
+     */
+    resp:
+      | {
+          content: string
+          sources: Array<ToolSource>
+          grounding_supports: Array<{
+            segment: { start_index: number; end_index: number; text: string }
+            source_ids: number[]
+          }>
+        }
+      | AdkFallbackResp
   }
   verifier: {
     args: { request?: string }
-    resp: {
-      content?: string
-      sources?: Array<{ title: string; url: string }>
-      result?: string // ADK fallback when grounding metadata is absent
-    }
+    /**
+     * Structured response when `url_context` returns grounding metadata.
+     * Falls back to `AdkFallbackResp` when Gemini omits grounding metadata
+     * intermittently (the callback returns `None`, leaving raw LLM text).
+     */
+    resp: { content: string; sources: Array<ToolSource> } | AdkFallbackResp
   }
   proofreader_kmt: { args: { request?: string }; resp: { result: string } }
   proofreader_dpp: { args: { request?: string }; resp: { result: string } }
