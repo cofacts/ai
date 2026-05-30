@@ -6,11 +6,12 @@ Each Article may have multiple ArticleReplies (fact-check responses from collabo
 and ReplyRequests (additional context provided by reporters or collaborators).
 """
 
-import json
 import asyncio
-from typing import Dict, List, Any, Optional
-import httpx
+import json
+import os
+from typing import Any, Dict, List, Optional
 
+import httpx
 
 # GraphQL fragment for common Article fields
 COMMON_ARTICLE_FIELDS = """
@@ -120,9 +121,7 @@ COMMON_ARTICLE_FIELDS = """
 
 
 async def _execute_cofacts_graphql(
-    query: str,
-    variables: Dict[str, Any],
-    operation_name: str = "GraphQL request"
+    query: str, variables: Dict[str, Any], operation_name: str = "GraphQL request"
 ) -> Dict[str, Any]:
     """
     Execute a GraphQL query against Cofacts API with standardized error handling.
@@ -137,15 +136,13 @@ async def _execute_cofacts_graphql(
     """
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            api_base = os.environ.get(
+                "COFACTS_API_URL", "https://api.cofacts.tw"
+            ).rstrip("/")
             response = await client.post(
-                "https://api.cofacts.tw/graphql",
-                json={
-                    "query": query,
-                    "variables": variables
-                },
-                headers={
-                    "Content-Type": "application/json"
-                }
+                f"{api_base}/graphql",
+                json={"query": query, "variables": variables},
+                headers={"Content-Type": "application/json"},
             )
             response.raise_for_status()
 
@@ -174,7 +171,7 @@ async def search_cofacts_database(
     after: Optional[str] = None,
     reply_count_max: Optional[int] = None,
     days_back: Optional[int] = None,
-    order_by: str = "_score"
+    order_by: str = "_score",
 ) -> Dict[str, Any]:
     """
     Search the Cofacts database for articles using various filters.
@@ -221,10 +218,7 @@ async def search_cofacts_database(
         filter_obj = {}
 
         if query:
-            filter_obj["moreLikeThis"] = {
-                "like": query,
-                "minimumShouldMatch": "0"
-            }
+            filter_obj["moreLikeThis"] = {"like": query, "minimumShouldMatch": "0"}
 
         if article_ids:
             filter_obj["ids"] = article_ids
@@ -234,11 +228,12 @@ async def search_cofacts_database(
 
         if days_back is not None:
             from datetime import datetime, timedelta
+
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days_back)
             filter_obj["createdAt"] = {
                 "GTE": start_date.isoformat(),
-                "LTE": end_date.isoformat()
+                "LTE": end_date.isoformat(),
             }
 
         # Build orderBy based on order_by parameter
@@ -279,22 +274,20 @@ async def search_cofacts_database(
             "filter": filter_obj,
             "orderBy": order_by_obj,
             "first": limit,
-            "after": after
+            "after": after,
         }
 
         result = await _execute_cofacts_graphql(
             query=graphql_query,
             variables=variables,
-            operation_name="search Cofacts database"
+            operation_name="search Cofacts database",
         )
 
         if "error" in result:
             return result
 
         # Extract ListArticles data from the successful response
-        return {
-            "data": result["data"]["ListArticles"]
-        }
+        return {"data": result["data"]["ListArticles"]}
 
     except Exception as e:
         return {
@@ -302,9 +295,7 @@ async def search_cofacts_database(
         }
 
 
-async def get_single_cofacts_article(
-    article_id: str
-) -> Dict[str, Any]:
+async def get_single_cofacts_article(article_id: str) -> Dict[str, Any]:
     """
     Get a single article from Cofacts database by ID.
 
@@ -335,7 +326,7 @@ async def get_single_cofacts_article(
         result = await _execute_cofacts_graphql(
             query=graphql_query,
             variables=variables,
-            operation_name="get specific Cofacts article"
+            operation_name="get specific Cofacts article",
         )
 
         if "error" in result:
@@ -356,15 +347,12 @@ async def get_single_cofacts_article(
     except Exception as e:
         return {
             "error": f"Failed to get Cofacts article: {str(e)}",
-            "article_id": article_id
+            "article_id": article_id,
         }
 
 
 async def submit_cofacts_reply(
-    article_id: str,
-    reply_type: str,
-    text: str,
-    reference: str
+    article_id: str, reply_type: str, text: str, reference: str
 ) -> Dict[str, Any]:
     """
     Submit a fact-check reply to Cofacts (requires authentication).
@@ -397,11 +385,7 @@ async def submit_cofacts_reply(
         }
         """
 
-        variables = {
-            "text": text,
-            "type": reply_type,
-            "reference": reference
-        }
+        variables = {"text": text, "type": reply_type, "reference": reference}
 
         # This is a placeholder - you'll need to implement proper authentication
         return {
@@ -409,13 +393,13 @@ async def submit_cofacts_reply(
             "article_id": article_id,
             "reply_type": reply_type,
             "text_length": len(text),
-            "reference_length": len(reference)
+            "reference_length": len(reference),
         }
 
     except Exception as e:
         return {
             "error": f"Failed to submit Cofacts reply: {str(e)}",
-            "article_id": article_id
+            "article_id": article_id,
         }
 
 
@@ -459,12 +443,12 @@ def draft_factcheck_response(
             "success": False,
             "text": (
                 f'Invalid classification "{classification}". '
-                f'Must be one of: {", ".join(sorted(VALID_CLASSIFICATIONS))}. '
+                f"Must be one of: {', '.join(sorted(VALID_CLASSIFICATIONS))}. "
                 "Please call draft_factcheck_response again with a valid classification."
             ),
         }
 
-    if not re.search(r'https?://', references):
+    if not re.search(r"https?://", references):
         return {
             "success": False,
             "text": (
