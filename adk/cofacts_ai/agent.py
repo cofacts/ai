@@ -565,38 +565,47 @@ async def inject_article_attachment(
     callback_context: CallbackContext,
     llm_request,
 ) -> None:
-    """Inject media file_data into get_single_cofacts_article FunctionResponse parts.
+    """Inject media file_data into the content alongside the get_single_cofacts_article FunctionResponse.
 
-    Converts the signed GCS HTTPS URL in attachmentUrl to a gs:// URI and sets
-    FunctionResponse.parts so Gemini can perceive the media directly, without any
-    download/upload or extra tool calls.
+    Converts the signed GCS HTTPS URL in attachmentUrl to a gs:// URI and appends
+    a Part(file_data=...) sibling so Gemini can perceive the media directly.
+    FunctionResponse.parts is a Python SDK-only field not transmitted to the model;
+    the file_data must live at the content.parts level to be seen by the LLM.
     """
     for content in llm_request.contents:
         if content.role != "user":
             continue
+
+        if any(p.file_data for p in content.parts or []):
+            continue
+
+        article_fr = None
         for part in content.parts or []:
             fr = part.function_response
-            if not fr or fr.name != "get_single_cofacts_article":
-                continue
-            if fr.parts:
-                continue
-            article = (fr.response or {}).get("article") or {}
-            article_type = article.get("articleType")
-            attachment_url = article.get("attachmentUrl")
-            if not attachment_url or article_type not in _ARTICLE_TYPE_MIME:
-                continue
-            parsed = urlparse(attachment_url)
-            if parsed.netloc != "storage.googleapis.com":
-                continue
-            gs_uri = "gs:/" + parsed.path
-            fr.parts = [
-                genai_types.FunctionResponsePart(
-                    file_data=genai_types.FunctionResponseFileData(
-                        file_uri=gs_uri,
-                        mime_type=_ARTICLE_TYPE_MIME[article_type],
-                    )
+            if fr and fr.name == "get_single_cofacts_article":
+                article_fr = fr
+                break
+
+        if article_fr is None:
+            continue
+
+        article = (article_fr.response or {}).get("article") or {}
+        article_type = article.get("articleType")
+        attachment_url = article.get("attachmentUrl")
+        if not attachment_url or article_type not in _ARTICLE_TYPE_MIME:
+            continue
+        parsed = urlparse(attachment_url)
+        if parsed.netloc != "storage.googleapis.com":
+            continue
+        gs_uri = "gs:/" + parsed.path
+        content.parts = list(content.parts) + [
+            genai_types.Part(
+                file_data=genai_types.FileData(
+                    file_uri=gs_uri,
+                    mime_type=_ARTICLE_TYPE_MIME[article_type],
                 )
-            ]
+            )
+        ]
 
 
 def handle_writer_tool_error(
