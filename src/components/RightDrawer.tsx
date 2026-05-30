@@ -142,7 +142,7 @@ function MarkdownSection({ content }: { content: string }) {
   )
 }
 
-type ToolSource = { title: string; url: string }
+type ToolSource = NonNullable<AllTools['investigator']['resp']['sources']>[number]
 
 function SourceCard({ source, index }: { source: ToolSource; index: number }) {
   const domain = source.url
