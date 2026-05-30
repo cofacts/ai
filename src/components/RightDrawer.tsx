@@ -142,7 +142,7 @@ function MarkdownSection({ content }: { content: string }) {
   )
 }
 
-type ToolSource = AllTools['investigator']['resp']['sources'][number]
+type ToolSource = { title: string; url: string }
 
 function SourceCard({ source, index }: { source: ToolSource; index: number }) {
   const domain = source.url
@@ -186,7 +186,7 @@ function InvestigatorContent({
   args: AllTools['investigator']['args']
   response: AllTools['investigator']['resp'] | null
 }) {
-  const content = response?.content ?? ''
+  const content = response?.content ?? response?.result ?? ''
   const sources = response?.sources ?? []
 
   return (
@@ -232,7 +232,7 @@ function VerifierContent({
   args: AllTools['verifier']['args']
   response: AllTools['verifier']['resp'] | null
 }) {
-  const content = response?.content ?? ''
+  const content = response?.content ?? response?.result ?? ''
   const sources = response?.sources ?? []
 
   return (

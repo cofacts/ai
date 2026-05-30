@@ -41,17 +41,22 @@ export type AllTools = {
   investigator: {
     args: { request?: string }
     resp: {
-      content: string
-      sources: Array<{ title: string; url: string }>
-      grounding_supports: Array<{
+      content?: string
+      sources?: Array<{ title: string; url: string }>
+      grounding_supports?: Array<{
         segment: { start_index: number; end_index: number; text: string }
         source_ids: number[]
       }>
+      result?: string // ADK fallback when grounding metadata is absent
     }
   }
   verifier: {
     args: { request?: string }
-    resp: { content: string; sources: Array<{ title: string; url: string }> }
+    resp: {
+      content?: string
+      sources?: Array<{ title: string; url: string }>
+      result?: string // ADK fallback when grounding metadata is absent
+    }
   }
   proofreader_kmt: { args: { request?: string }; resp: { result: string } }
   proofreader_dpp: { args: { request?: string }; resp: { result: string } }
