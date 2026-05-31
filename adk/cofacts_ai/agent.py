@@ -10,6 +10,7 @@ This module implements a hierarchical agent system with:
 
 import asyncio
 import json
+import logging
 import re
 import time
 from datetime import datetime
@@ -19,6 +20,7 @@ from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.apps import App
+from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.tools import google_search, url_context
 from google.adk.tools.agent_tool import AgentTool
@@ -35,6 +37,8 @@ from .tools import (
 )
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Initialize Langfuse instrumentation for observability
 setup_instrumentation()
@@ -214,7 +218,7 @@ _YOUTUBE_URL_RE = re.compile(
 
 
 def inject_youtube_filedata(
-    callback_context: CallbackContext, llm_request: Any
+    callback_context: CallbackContext, llm_request: LlmRequest
 ) -> None:
     """Before-model callback for ai_investigator and ai_verifier.
 
@@ -225,20 +229,23 @@ def inject_youtube_filedata(
 
     Ref: https://ai.google.dev/gemini-api/docs/video-understanding#youtube
     """
-    for content in llm_request.contents:
-        if content.role != "user" or not content.parts:
-            continue
-        youtube_urls = []
-        for part in content.parts:
-            if part.text:
-                youtube_urls.extend(_YOUTUBE_URL_RE.findall(part.text))
+    try:
         seen = set()
-        for url in youtube_urls:
-            if url not in seen:
-                seen.add(url)
-                content.parts.append(
-                    genai_types.Part(file_data=genai_types.FileData(file_uri=url))
-                )
+        for content in llm_request.contents:
+            if content.role != "user" or not content.parts:
+                continue
+            youtube_urls = []
+            for part in content.parts:
+                if part.text:
+                    youtube_urls.extend(_YOUTUBE_URL_RE.findall(part.text))
+            for url in youtube_urls:
+                if url not in seen:
+                    seen.add(url)
+                    content.parts.append(
+                        genai_types.Part(file_data=genai_types.FileData(file_uri=url))
+                    )
+    except Exception:
+        logger.exception("inject_youtube_filedata failed; skipping YouTube injection")
     return None
 
 
@@ -304,11 +311,11 @@ ai_verifier = LlmAgent(
     read all the URLs and determine which sources actually support each claim.
 
     ## Your Task
-    1. Call url_context for ALL provided URLs in one call (up to 20) — this is MANDATORY.
-       url_context fetches the web PAGE metadata (title, publish date, description), which is
-       always required regardless of what else is visible in this conversation.
-       Note: for video URLs (e.g. YouTube), page metadata and video frames are complementary —
-       url_context gives you the upload date; the video gives you observable content.
+    1. Call url_context for ALL provided URLs in one call (up to 20) — this is MANDATORY, even for video URLs.
+       url_context fetches web PAGE metadata (title, publish date, description) from the HTML.
+       For video URLs like YouTube, page metadata and video frames are complementary:
+       - url_context → upload date, uploader name, page title/description
+       - FileData → observable video content (speech, visuals, on-screen text)
     2. For each claim, assess whether each URL's content directly supports it
     3. Write a verification report
 
