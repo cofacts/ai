@@ -10,6 +10,8 @@ This module implements a hierarchical agent system with:
 
 import asyncio
 import json
+import logging
+import re
 import time
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -18,6 +20,7 @@ from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.apps import App
+from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.tools import google_search, url_context
 from google.adk.tools.agent_tool import AgentTool
@@ -34,6 +37,8 @@ from .tools import (
 )
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Initialize Langfuse instrumentation for observability
 setup_instrumentation()
@@ -207,6 +212,43 @@ async def save_search_widget(
     return None
 
 
+_YOUTUBE_URL_RE = re.compile(
+    r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?[^\s\"'<>]*v=|shorts/|live/|embed/|v/)|youtu\.be/)[^\s\"'<>]+"
+)
+
+
+def inject_youtube_filedata(
+    callback_context: CallbackContext, llm_request: LlmRequest
+) -> None:
+    """Before-model callback for ai_investigator and ai_verifier.
+
+    For each user message that contains YouTube URLs, appends FileData parts
+    into the same parts array so Gemini can watch the videos inline.
+    The original URLs are kept intact so url_context still fetches their
+    title/description metadata.
+
+    Ref: https://ai.google.dev/gemini-api/docs/video-understanding#youtube
+    """
+    try:
+        seen = set()
+        for content in llm_request.contents:
+            if content.role != "user" or not content.parts:
+                continue
+            youtube_urls = []
+            for part in content.parts:
+                if part.text:
+                    youtube_urls.extend(_YOUTUBE_URL_RE.findall(part.text))
+            for url in youtube_urls:
+                if url not in seen:
+                    seen.add(url)
+                    content.parts.append(
+                        genai_types.Part(file_data=genai_types.FileData(file_uri=url))
+                    )
+    except Exception:
+        logger.exception("inject_youtube_filedata failed; skipping YouTube injection")
+    return None
+
+
 # AI Web Searcher - Google Search snippet reporter
 ai_investigator = LlmAgent(
     name="investigator",
@@ -220,6 +262,7 @@ ai_investigator = LlmAgent(
             thinking_level=genai_types.ThinkingLevel.MEDIUM
         )
     ),
+    before_model_callback=inject_youtube_filedata,
     after_model_callback=[append_grounding_sources, save_search_widget],
     instruction="""
     You are an AI Investigator for fact-checking. Search the web and faithfully report
@@ -242,6 +285,12 @@ ai_investigator = LlmAgent(
     - Report faithfully; do not analyze, synthesize, or editorialize
     - The writer draws conclusions — your job is to relay what sources say
     - If sources disagree, report both sides; let the writer reconcile
+
+    ## When a YouTube video is in context
+    If a YouTube video has been loaded into this conversation, first describe what you directly
+    observe (who appears, what is said, visible text and logos). Do NOT infer identity, event name,
+    or date from training knowledge — only from what is visible or audible. Then search the web
+    for corroborating information.
     """,
     tools=[google_search],
 )
@@ -255,13 +304,18 @@ ai_verifier = LlmAgent(
     #
     model="gemini-3-flash-preview",
     description="A fact-checking verifier. Give it URLs to read and claims to check — it reads all pages and returns a per-claim report showing which sources support or refute each claim, with verbatim quotes. Returns {content, sources} — content is the verification report; sources lists {title, url} pairs for all pages read.",
+    before_model_callback=inject_youtube_filedata,
     after_model_callback=append_url_context_sources,
     instruction="""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
 
     ## Your Task
-    1. Use url_context to read all provided URLs in one call (up to 20)
+    1. Call url_context for ALL provided URLs in one call (up to 20) — this is MANDATORY, even for video URLs.
+       url_context fetches web PAGE metadata (title, publish date, description) from the HTML.
+       For video URLs like YouTube, page metadata and video frames are complementary:
+       - url_context → upload date, uploader name, page title/description
+       - FileData → observable video content (speech, visuals, on-screen text)
     2. For each claim, assess whether each URL's content directly supports it
     3. Write a verification report
 
@@ -281,6 +335,23 @@ ai_verifier = LlmAgent(
     - A source supports a claim only if its content contains direct, specific evidence — not merely related topic
     - Quote the supporting passage verbatim
     - Do not add analysis or verdicts beyond what the sources say
+
+    ## Hard Rules — No Exceptions
+
+    **No training knowledge**: For video or media content, report ONLY what is directly visible or
+    audible. Never use background knowledge to identify the event name, date, location, organizer,
+    or a person's full identity. If the video does not explicitly state it, write
+    "影片未說明 / cannot be determined from this video."
+
+    **When video content is loaded in context**: Report three layers in this order:
+    - 「頁面 metadata（url_context 取得）」: uploadDate/publishedAt, uploader, title — quoted verbatim. uploadDate is REQUIRED: a video can show old footage while being recently uploaded, and only the page tells you when it was published online.
+    - 「影片標題/描述（上傳者提供）」: quote verbatim — treat as the uploader's claim, not confirmed fact
+    - 「影片可觀察內容」: what is visible/audible in the video — speech, on-screen text, logos, surroundings
+    The writer has broader context to judge whether the title is accurate or misleading.
+
+    **No invented citations**: The Sources list MUST ONLY contain URLs that were provided as input.
+    Never cite a news article, report, or webpage that was not in the original URL list —
+    even if you believe such articles exist.
     """,
     tools=[url_context],
 )
@@ -289,7 +360,7 @@ ai_verifier = LlmAgent(
 # AI Proof-reader agents for different Taiwan political perspectives
 ai_proofreader_kmt = LlmAgent(
     name="proofreader_kmt",
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.HIGH
@@ -338,7 +409,7 @@ ai_proofreader_kmt = LlmAgent(
 
 ai_proofreader_dpp = LlmAgent(
     name="proofreader_dpp",
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.HIGH
@@ -387,7 +458,7 @@ ai_proofreader_dpp = LlmAgent(
 
 ai_proofreader_tpp = LlmAgent(
     name="proofreader_tpp",
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.HIGH
@@ -436,7 +507,7 @@ ai_proofreader_tpp = LlmAgent(
 
 ai_proofreader_minor_parties = LlmAgent(
     name="proofreader_minor_parties",
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.HIGH
@@ -502,6 +573,26 @@ async def after_tool(
         return None
 
 
+def handle_writer_tool_error(
+    tool: BaseTool,
+    args: dict,
+    tool_context: Any,
+    error: Exception,
+) -> Optional[dict]:
+    """on_tool_error_callback for ai_writer.
+
+    Catches any exception thrown by a tool so the writer turn does not crash.
+    Returns a structured error dict the writer can read and react to.
+    """
+    return {
+        "error": type(error).__name__,
+        "message": (
+            f"[SYSTEM] Tool '{tool.name}' failed with {type(error).__name__}: {error}. "
+            "Please note this failure and continue with available information."
+        ),
+    }
+
+
 # Main AI Writer - Orchestrator agent
 #
 # Note: Due to ADK limitations, we cannot mix built-in tools (google_search, url_context)
@@ -523,6 +614,7 @@ ai_writer = LlmAgent(
         )
     ),
     after_tool_callback=after_tool,
+    on_tool_error_callback=handle_writer_tool_error,
     after_agent_callback=update_last_event_time,
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
