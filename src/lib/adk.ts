@@ -80,7 +80,16 @@ export type AllTools = {
   proofreader_tpp: { args: { request?: string }; resp: { result: string } }
   proofreader_minor_parties: { args: { request?: string }; resp: { result: string } }
   draft_factcheck_response: {
-    args: { classification?: string; text?: string; references?: string }
+    args: {
+      classification?: string
+      text?: string
+      references?: string
+      claim_sources?: Array<{
+        claim?: string
+        source_url?: string
+        verifier_confirmed?: boolean
+      }>
+    }
     resp: { success: boolean; text: string }
   }
   get_single_cofacts_article: {
