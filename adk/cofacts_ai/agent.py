@@ -81,9 +81,8 @@ async def append_grounding_sources(
     """
     After-model callback for ai_investigator.
 
-    Transforms the raw LLM response into structured JSON {content, sources, grounding_supports}:
+    Transforms the raw LLM response into structured JSON {content, sources}:
     - Resolves grounding chunk redirect URLs in parallel; builds sources[] (1:1 with chunks)
-    - Preserves Gemini's grounding_supports segment positions for frontend visualization
     - If grounding metadata is missing (intermittent), injects a retry instruction for the writer
     - If response was blocked by copyright filter (RECITATION), injects a retry with different terms
     """
@@ -119,34 +118,11 @@ async def append_grounding_sources(
     # ── B: Build content from all text parts ─────────────────────────────────
     content = "".join(p.text or "" for p in llm_response.content.parts)
 
-    # ── C: Build grounding_supports preserving Gemini segment positions ──────
-    grounding_supports = []
-    seen_texts: set[str] = set()
-    for support in metadata.grounding_supports or []:
-        seg = support.segment
-        if not seg or not seg.text:
-            continue
-        if seg.text in seen_texts:
-            continue
-        seen_texts.add(seg.text)
-        src_ids = sorted(set(support.grounding_chunk_indices or []))
-        grounding_supports.append(
-            {
-                "segment": {
-                    "start_index": seg.start_index,
-                    "end_index": seg.end_index,
-                    "text": seg.text,
-                },
-                "source_ids": src_ids,
-            }
-        )
-
     # ── Write back as JSON so writer's after_tool_callback gets structured output
     serialized = json.dumps(
         {
             "content": content,
             "sources": sources_list,
-            "grounding_supports": grounding_supports,
         },
         ensure_ascii=False,
     )
@@ -160,9 +136,8 @@ async def append_url_context_sources(
     After-model callback for ai_verifier.
 
     Captures clean URL-title pairs from url_context grounding_chunks and wraps
-    the response as {content, sources} JSON. Intentionally omits grounding_supports
-    (too scattered for url_context). url_context returns real URLs directly —
-    no redirect resolution or hallucination stripping needed.
+    the response as {content, sources} JSON. url_context returns real URLs
+    directly — no redirect resolution or hallucination stripping needed.
     """
     if not llm_response.grounding_metadata:
         return None
@@ -256,7 +231,7 @@ ai_investigator = LlmAgent(
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
     #
     model="gemini-3-flash-preview",
-    description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources, grounding_supports} — sources lists reliable {title, url} pairs; grounding_supports maps content passages to source indices.",
+    description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources} — sources lists reliable {title, url} pairs.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.MEDIUM
@@ -304,6 +279,11 @@ ai_verifier = LlmAgent(
     #
     model="gemini-3-flash-preview",
     description="A fact-checking verifier. Give it URLs to read and claims to check — it reads all pages and returns a per-claim report showing which sources support or refute each claim, with verbatim quotes. Returns {content, sources} — content is the verification report; sources lists {title, url} pairs for all pages read.",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.HIGH
+        )
+    ),
     before_model_callback=inject_youtube_filedata,
     after_model_callback=append_url_context_sources,
     instruction="""
@@ -629,7 +609,7 @@ ai_writer = LlmAgent(
     - Identifying factual statements vs. opinions
     - Checking for political blind spots using proofreader agents
     - Ensuring the final response is readable, neutral, and persuasive
-    - Not insisting on rigid processes; adapt to the user's workflow
+    - Following the user's lead on what to focus on next
     - Providing gentle guidance to help them write responses their target audience can actually understand
 
     Focus on collaboration, not automation - the goal is human + AI working together.
@@ -659,21 +639,24 @@ ai_writer = LlmAgent(
        - Proceed with full fact-checking process
 
     2. **Claim Analysis & Strategy**:
+       - **If the message centers on a video or a linked URL whose claims are NOT in the article text**: your FIRST action is to delegate claim extraction — you cannot watch a video or read a page yourself, only `investigator`/`verifier` can. Call `verifier` with the URL and ask it to "watch the video / read the page and enumerate every distinct factual claim it makes, verbatim where possible" (prefer `verifier`: it both watches via FileData and reads page metadata such as upload date). Do not guess the message's claims, and do not start web searches, until you have this enumerated claim list.
        - Identify factual statements vs. opinions in the message
        - If message contains opinions based on factual statements: prioritize verifying factual claims first
        - Determine target audience: people who might forward this message or receive it
+       - **Track editorial constraints**: whenever the user gives a direction about HOW the reply should be written — a wording to avoid (e.g. "don't introduce a technical term the original message never used"), a framing or angle to take (e.g. "explain it from an ordinary reader's perspective"), or a tone/length preference (e.g. "keep it empathetic, not accusatory") — record it in a visible bullet list and carry it forward for the WHOLE conversation; never silently drop one. You will re-print and re-check this list before drafting (Step 7).
 
     3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message
 
     4. **Delegate Research**: Use the `investigator` to research claims
        - Describe what you want to know; investigator searches the web and reports findings with sources.
-       - **If the suspicious message contains URLs**: call `verifier` with those URLs and the message's key claims BEFORE further research. Viral messages frequently exaggerate, misattribute, or fabricate what their cited sources actually say — confirm the source says what the message claims before treating it as evidence.
+       - **If the suspicious message contains URLs / a video**: you should already have its claims from the claim-extraction step (Step 2). Viral messages frequently exaggerate, misattribute, or fabricate what their cited sources actually say — so treat those extracted claims as the message's *assertions*, not as confirmed facts, and verify them like any other claim.
        - **NO HALLUCINATION**: NEVER guess or invent a URL. Use only URLs from `sources[].url` returned by agents.
-       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator` returns `{{"content": "...", "sources": [...], "grounding_supports": [...]}}`.
-         `sources` is a list of `{{"title": "...", "url": "..."}}` — the ONLY reliable URLs.
+       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator` returns `{{"content": "...", "sources": [...]}}`.
+         `sources` is a list of `{{"title": "...", "url": "..."}}` — the search results it found, and the ONLY reliable URLs. Treat them as CANDIDATES only: the `content` does not tell you which source actually backs which statement, so send the relevant `sources` URLs to `verifier` and let it (which reads each page) decide what each one really supports. Never cite a URL just because it appears in `sources`.
          Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
        - **VERIFIER RESPONSE SCHEMA**: `verifier` returns `{{"content": "...", "sources": [...]}}`.
          `content` is a per-claim verification report with verbatim quotes; `sources` lists all pages read.
+       - **Investigator DISCOVERS, verifier CONFIRMS.** `investigator` only finds candidate sources; `verifier` is the source of truth for which URL actually supports which claim. Your final citations come from `verifier`'s ✓ output, never from investigator's flat list alone (a long source list does not tell you which page says what).
 
     5. **REQUIRED: Source Verification** — After research is complete, call `verifier` with your key factual claims and the real `https://` source URLs from investigator's `sources[]`. This step is mandatory — do not skip it.
 
@@ -688,9 +671,10 @@ ai_writer = LlmAgent(
        - https://...
        ```
 
-       - Every specific fact or number you plan to cite in the reply must appear in verifier's output.
+       - Every specific fact or number you plan to cite in the reply must appear in verifier's output, marked ✓ against a specific URL.
        - Investigator summarizes pages and can err — verifier reads the originals directly.
        - Do not pass site names or descriptions; only real `https://` links.
+       - Build your final `references` and the `claim_sources` mapping (see `draft_factcheck_response`) ONLY from claims `verifier` marked ✓. A claim `verifier` marked ✗ (its sources do not support it) must be dropped or re-verified against a DIFFERENT source — NEVER re-submit the same URL or relabel a different URL for it, and never carry it into the draft.
 
     6. **Draft & Proofreader Review**:
        - Write a draft reply in plain text (do NOT call the tool yet).
@@ -699,16 +683,17 @@ ai_writer = LlmAgent(
        - Based on their feedback, revise the draft and re-send as needed.
        - Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
 
-    7. **Compose Reply**:
-       - Before calling the tool, explain your classification choice and the key points of the reply in text.
-       - Call `draft_factcheck_response` — this is the goal of the whole process. See the tool's argument descriptions for all format requirements.
+    7. **Compose Reply — only after ALL research, verification, and proofreader review are complete**:
+       - **NEVER call `draft_factcheck_response` in the same turn as any other tool.** (Running other tools in parallel with each other is fine — e.g. several `investigator` or `proofreader` calls at once — but drafting must come last, after their results are back; drafting earlier means concluding before you have the evidence.)
+       - First re-print your tracked editorial-constraints list (from Step 2) and confirm every constraint is met and every cited claim is verifier-confirmed.
+       - Then explain your classification choice and the key points of the reply in text.
+       - Call `draft_factcheck_response` — this is the goal of the whole process. See the tool's argument descriptions for all format requirements, including the `claim_sources` mapping (one entry per factual claim → the verifier-confirmed URL that backs it).
        - Use only claims confirmed by verifier in step 5.
        - Focus on persuading or kindly reminding people who share/receive such messages.
        - After the tool returns success, ask the user to open the tool call result above to review the draft and share any feedback.
 
     **Flexible Support:**
-    - Offer sub-agent capabilities as needed, not as a rigid sequence
-    - Listen to what the user wants to focus on
+    - Listen to what the user wants to focus on, and follow their lead on sequencing
     - Provide verification support when asked
     - Help organize and structure their insights
     - Assist with formatting and presentation

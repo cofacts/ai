@@ -407,6 +407,7 @@ def draft_factcheck_response(
     classification: str,
     text: str,
     references: str,
+    claim_sources: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Draft a Cofacts fact-check response for human editor review.
@@ -430,6 +431,18 @@ def draft_factcheck_response(
         references: Source references for the reply. Format: one source per line,
             each line is a URL followed by a one-line summary of what that source says.
             Only include URLs returned by investigator or verifier — never invent URLs.
+        claim_sources: Per-claim source coverage — REQUIRED unless classification is
+            "NOT_ARTICLE". One entry per distinct factual claim/number in `text`, each:
+            {
+              "claim": "<the factual claim or number as stated in text>",
+              "source_url": "<the URL that backs it — must also appear in references>",
+              "verifier_confirmed": true  // true ONLY if the verifier step returned ✓
+                                          // for this claim against this exact URL
+            }
+            This forces you to show which source backs which fact. The call is rejected
+            if any claim is not verifier_confirmed, or if a source_url is missing from
+            references — drop or re-verify such claims before drafting (do not relabel
+            a different URL for a claim the verifier marked ✗).
 
     Returns:
         {"success": True, "text": "..."} on success, or
@@ -457,6 +470,79 @@ def draft_factcheck_response(
                 "then call draft_factcheck_response again."
             ),
         }
+
+    # Per-claim source coverage gate. NOT_ARTICLE (out of scope) is exempt; every
+    # other classification — including OPINIONATED, which still cites real facts —
+    # must map each factual claim to a verifier-confirmed URL that is in references.
+    if classification != "NOT_ARTICLE":
+        if not claim_sources:
+            return {
+                "success": False,
+                "text": (
+                    "claim_sources is required for this classification. Provide one entry "
+                    "per factual claim/number in your reply, each "
+                    '{"claim": "...", "source_url": "...", "verifier_confirmed": true}, '
+                    "where verifier_confirmed is true only for claims the verifier marked ✓. "
+                    "Run the verifier step first if you have not, then call "
+                    "draft_factcheck_response again."
+                ),
+            }
+
+        # The leading token of each non-empty references line is the URL
+        # ("URL one-line-summary"); match against that set rather than a
+        # substring of the whole string (a short URL can be a substring of a
+        # longer listed one).
+        reference_urls = {
+            line.split(None, 1)[0]
+            for line in (ln.strip() for ln in references.splitlines())
+            if line
+        }
+
+        malformed = []
+        unconfirmed = []
+        not_in_references = []
+        for entry in claim_sources:
+            if not isinstance(entry, dict):
+                malformed.append(str(entry))
+                continue
+            claim = str(entry.get("claim") or "").strip()
+            url = str(entry.get("source_url") or "").strip()
+            if not claim or not url:
+                malformed.append(json.dumps(entry, ensure_ascii=False))
+                continue
+            if entry.get("verifier_confirmed") is not True:
+                unconfirmed.append(claim)
+            if url not in reference_urls:
+                not_in_references.append(url)
+
+        if malformed:
+            return {
+                "success": False,
+                "text": (
+                    "Each claim_sources entry must be an object with non-empty 'claim' and "
+                    "'source_url'. Fix these entries and call draft_factcheck_response again: "
+                    + "; ".join(malformed)
+                ),
+            }
+        if unconfirmed:
+            return {
+                "success": False,
+                "text": (
+                    "These claims are not verifier-confirmed, so they cannot appear in the "
+                    "reply. Drop each one, OR verify it against a source with the verifier "
+                    "and set verifier_confirmed=true, then call draft_factcheck_response "
+                    "again: " + "; ".join(unconfirmed)
+                ),
+            }
+        if not_in_references:
+            return {
+                "success": False,
+                "text": (
+                    "These source_url values are not present in references. Add each source "
+                    "(URL + one-line summary) to references so the citation is visible, then "
+                    "call draft_factcheck_response again: " + "; ".join(not_in_references)
+                ),
+            }
 
     return {
         "success": True,
