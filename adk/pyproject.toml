@@ -15,4 +15,5 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "sqlalchemy>=2.0.48",
     "asyncpg>=0.31.0",
+    "uvicorn>=0.41.0",
 ]
