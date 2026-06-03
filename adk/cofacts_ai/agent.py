@@ -17,6 +17,9 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
+from google import genai
+import google.auth
+import google.auth.transport.requests
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.apps import App
@@ -535,14 +538,90 @@ ai_proofreader_minor_parties = LlmAgent(
 )
 
 
+# OAuth scopes needed to read the Cofacts media bucket when registering GCS
+# objects with the Gemini Files API.
+_GCS_READ_SCOPES = [
+    "https://www.googleapis.com/auth/devstorage.read_only",
+    "https://www.googleapis.com/auth/cloud-platform",
+]
+
+_genai_client: Optional[genai.Client] = None
+_gcs_credentials = None
+
+
+def _get_genai_client() -> genai.Client:
+    """Lazily build a genai client for Files API registration (reuses GOOGLE_API_KEY)."""
+    global _genai_client
+    if _genai_client is None:
+        _genai_client = genai.Client()
+    return _genai_client
+
+
+def _get_gcs_credentials():
+    """Application Default Credentials with GCS read scope, refreshed on demand.
+
+    Works both on Cloud Run (runtime service account via metadata) and in
+    docker-compose/local (service-account JSON via GOOGLE_APPLICATION_CREDENTIALS).
+    """
+    global _gcs_credentials
+    if _gcs_credentials is None:
+        _gcs_credentials, _ = google.auth.default(scopes=_GCS_READ_SCOPES)
+    if not _gcs_credentials.valid:
+        _gcs_credentials.refresh(google.auth.transport.requests.Request())
+    return _gcs_credentials
+
+
+def _signed_url_to_gs(url: str) -> Optional[str]:
+    """Convert a signed GCS HTTPS URL to its gs:// URI (dropping the query string).
+
+    Handles both path-style (storage.googleapis.com/<bucket>/<object>) and
+    virtual-hosted style (<bucket>.storage.googleapis.com/<object>). Returns None
+    if the URL is not a recognizable GCS URL.
+    """
+    from urllib.parse import urlparse, unquote
+
+    parsed = urlparse(url)
+    host = parsed.netloc
+    path = unquote(parsed.path).lstrip("/")
+    if host == "storage.googleapis.com":
+        return f"gs://{path}" if path else None
+    if host.endswith(".storage.googleapis.com"):
+        bucket = host[: -len(".storage.googleapis.com")]
+        return f"gs://{bucket}/{path}" if bucket and path else None
+    return None
+
+
+def _convert_attachment_to_gs(tool_response: Any) -> Optional[dict]:
+    """Rewrite get_single_cofacts_article's attachmentUrl from a signed HTTPS URL to
+    a gs:// URI, so the writer never sees (and cannot forward) the signed URL. The
+    media is perceived via the file_data injected in inject_article_attachment."""
+    if not isinstance(tool_response, dict):
+        return None
+    article = tool_response.get("article")
+    if not isinstance(article, dict):
+        return None
+    url = article.get("attachmentUrl")
+    if not isinstance(url, str) or not url.startswith("http"):
+        return None
+    gs_uri = _signed_url_to_gs(url)
+    if not gs_uri:
+        return None
+    new_article = {**article, "attachmentUrl": gs_uri}
+    return {**tool_response, "article": new_article}
+
+
 async def after_tool(
     tool: BaseTool,
     args: dict,
     tool_context: CallbackContext,
     tool_response: Any,
 ) -> Optional[Any]:
-    """Deserializes the JSON response from investigator/verifier into a dict so
-    the writer LLM receives structured output."""
+    """Post-processes tool responses for the writer:
+    - get_single_cofacts_article: rewrite the signed attachment URL to a gs:// URI.
+    - investigator/verifier: deserialize the JSON string into a dict.
+    """
+    if tool.name == "get_single_cofacts_article":
+        return _convert_attachment_to_gs(tool_response)
     if tool.name not in ("investigator", "verifier"):
         return None
     if not isinstance(tool_response, str):
@@ -564,10 +643,13 @@ async def inject_article_attachment(
     callback_context: CallbackContext,
     llm_request,
 ) -> None:
-    """Inject media file_data into the content alongside the get_single_cofacts_article FunctionResponse.
+    """Inject media file_data alongside the get_single_cofacts_article FunctionResponse.
 
-    Converts the signed GCS HTTPS URL in attachmentUrl to a gs:// URI and appends
-    a Part(file_data=...) sibling so Gemini can perceive the media directly.
+    after_tool rewrites attachmentUrl into a gs:// URI. Here we register that GCS
+    object with the Gemini Files API and append a Part(file_data=...) sibling with
+    the returned files/... handle so Gemini can perceive the media directly. Unlike
+    a signed URL, the gs:// URI never expires and is re-read from conversation
+    history every turn, so follow-up turns keep working without re-calling the tool.
     FunctionResponse.parts is a Python SDK-only field not transmitted to the model;
     the file_data must live at the content.parts level to be seen by the LLM.
     """
@@ -590,13 +672,37 @@ async def inject_article_attachment(
 
         article = (article_fr.response or {}).get("article") or {}
         article_type = article.get("articleType")
-        attachment_url = article.get("attachmentUrl")
-        if not attachment_url or article_type not in _ARTICLE_TYPE_MIME:
+        gs_uri = article.get("attachmentUrl")
+        if (
+            not gs_uri
+            or not gs_uri.startswith("gs://")
+            or article_type not in _ARTICLE_TYPE_MIME
+        ):
             continue
+
+        try:
+            registered = await _get_genai_client().aio.files.register_files(
+                auth=_get_gcs_credentials(),
+                uris=[gs_uri],
+            )
+            files = getattr(registered, "files", None) or []
+            if not files or not getattr(files[0], "uri", None):
+                logger.warning("register_files returned no usable file for %s", gs_uri)
+                continue
+            file_uri = files[0].uri
+        except Exception:
+            logger.exception(
+                "Failed to register GCS file %s; skipping media injection. "
+                "Check that the app and Gemini API service agents have Storage "
+                "Object Viewer on the bucket.",
+                gs_uri,
+            )
+            continue
+
         content.parts = list(content.parts) + [
             genai_types.Part(
                 file_data=genai_types.FileData(
-                    file_uri=attachment_url,
+                    file_uri=file_uri,
                     mime_type=_ARTICLE_TYPE_MIME[article_type],
                 )
             )

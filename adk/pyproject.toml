@@ -8,6 +8,7 @@ dependencies = [
     "pydantic",
     "google-adk",
     "google-genai",
+    "google-auth",
     "httpx",
     "langfuse",
     "opentelemetry-sdk",
