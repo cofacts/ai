@@ -547,6 +547,7 @@ _GCS_READ_SCOPES = [
 
 _genai_client: Optional[genai.Client] = None
 _gcs_credentials = None
+_gcs_credentials_lock = asyncio.Lock()
 
 
 def _get_genai_client() -> genai.Client:
@@ -557,17 +558,28 @@ def _get_genai_client() -> genai.Client:
     return _genai_client
 
 
-def _get_gcs_credentials():
+async def _get_gcs_credentials():
     """Application Default Credentials with GCS read scope, refreshed on demand.
 
     Works both on Cloud Run (runtime service account via metadata) and in
     docker-compose/local (service-account JSON via GOOGLE_APPLICATION_CREDENTIALS).
+    google.auth.default() and credential refresh perform blocking network I/O, so
+    they run in a worker thread; an asyncio.Lock serializes init/refresh to avoid
+    concurrent refreshes of the shared credentials object.
     """
     global _gcs_credentials
-    if _gcs_credentials is None:
-        _gcs_credentials, _ = google.auth.default(scopes=_GCS_READ_SCOPES)
-    if not _gcs_credentials.valid:
-        _gcs_credentials.refresh(google.auth.transport.requests.Request())
+    async with _gcs_credentials_lock:
+        if _gcs_credentials is None:
+
+            def _load_creds():
+                creds, _ = google.auth.default(scopes=_GCS_READ_SCOPES)
+                return creds
+
+            _gcs_credentials = await asyncio.to_thread(_load_creds)
+        if not _gcs_credentials.valid:
+            await asyncio.to_thread(
+                _gcs_credentials.refresh, google.auth.transport.requests.Request()
+            )
     return _gcs_credentials
 
 
@@ -581,7 +593,7 @@ def _signed_url_to_gs(url: str) -> Optional[str]:
     from urllib.parse import urlparse, unquote
 
     parsed = urlparse(url)
-    host = parsed.netloc
+    host = parsed.hostname or ""
     path = unquote(parsed.path).lstrip("/")
     if host == "storage.googleapis.com":
         return f"gs://{path}" if path else None
@@ -591,21 +603,23 @@ def _signed_url_to_gs(url: str) -> Optional[str]:
     return None
 
 
-def _convert_attachment_to_gs(tool_response: Any) -> Optional[dict]:
+def _convert_attachment_to_gs(tool_response: Any) -> Any:
     """Rewrite get_single_cofacts_article's attachmentUrl from a signed HTTPS URL to
     a gs:// URI, so the writer never sees (and cannot forward) the signed URL. The
-    media is perceived via the file_data injected in inject_article_attachment."""
+    media is perceived via the file_data injected in inject_article_attachment.
+
+    Returns the original tool_response unchanged when there is nothing to rewrite."""
     if not isinstance(tool_response, dict):
-        return None
+        return tool_response
     article = tool_response.get("article")
     if not isinstance(article, dict):
-        return None
+        return tool_response
     url = article.get("attachmentUrl")
     if not isinstance(url, str) or not url.startswith("http"):
-        return None
+        return tool_response
     gs_uri = _signed_url_to_gs(url)
     if not gs_uri:
-        return None
+        return tool_response
     new_article = {**article, "attachmentUrl": gs_uri}
     return {**tool_response, "article": new_article}
 
@@ -681,8 +695,9 @@ async def inject_article_attachment(
             continue
 
         try:
+            gcs_auth = await _get_gcs_credentials()
             registered = await _get_genai_client().aio.files.register_files(
-                auth=_get_gcs_credentials(),
+                auth=gcs_auth,
                 uris=[gs_uri],
             )
             files = getattr(registered, "files", None) or []
