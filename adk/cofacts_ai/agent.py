@@ -27,6 +27,7 @@ from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.base_tool import BaseTool
 from google.genai import types as genai_types
 
+from .gcs_signing import inject_article_attachment
 from .instrumentation import LangfuseTracingPlugin, setup_instrumentation
 from .tools import (
     draft_factcheck_response,
@@ -551,56 +552,6 @@ async def after_tool(
         return json.loads(tool_response)
     except json.JSONDecodeError:
         return None
-
-
-_ARTICLE_TYPE_MIME = {
-    "IMAGE": "image/webp",
-    "VIDEO": "video/mp4",
-    "AUDIO": "audio/mpeg",
-}
-
-
-async def inject_article_attachment(
-    callback_context: CallbackContext,
-    llm_request,
-) -> None:
-    """Inject media file_data into the content alongside the get_single_cofacts_article FunctionResponse.
-
-    Converts the signed GCS HTTPS URL in attachmentUrl to a gs:// URI and appends
-    a Part(file_data=...) sibling so Gemini can perceive the media directly.
-    FunctionResponse.parts is a Python SDK-only field not transmitted to the model;
-    the file_data must live at the content.parts level to be seen by the LLM.
-    """
-    for content in llm_request.contents:
-        if content.role != "user":
-            continue
-
-        if any(p.file_data for p in content.parts or []):
-            continue
-
-        article_fr = None
-        for part in content.parts or []:
-            fr = part.function_response
-            if fr and fr.name == "get_single_cofacts_article":
-                article_fr = fr
-                break
-
-        if article_fr is None:
-            continue
-
-        article = (article_fr.response or {}).get("article") or {}
-        article_type = article.get("articleType")
-        attachment_url = article.get("attachmentUrl")
-        if not attachment_url or article_type not in _ARTICLE_TYPE_MIME:
-            continue
-        content.parts = list(content.parts) + [
-            genai_types.Part(
-                file_data=genai_types.FileData(
-                    file_uri=attachment_url,
-                    mime_type=_ARTICLE_TYPE_MIME[article_type],
-                )
-            )
-        ]
 
 
 def handle_writer_tool_error(
