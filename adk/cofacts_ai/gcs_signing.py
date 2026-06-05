@@ -194,6 +194,9 @@ async def inject_article_attachment(
             genai_types.Part(
                 file_data=genai_types.FileData(
                     file_uri=attachment_url,
+                    # Coarse MIME type derived from articleType enum; the actual
+                    # subtype (e.g. image/jpeg vs image/webp) may differ, but
+                    # Gemini is permissive enough to handle the mismatch.
                     mime_type=_ARTICLE_TYPE_MIME[article_type],
                 )
             )
