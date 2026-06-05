@@ -684,7 +684,12 @@ async def inject_article_attachment(
         if article_fr is None:
             continue
 
-        article = (article_fr.response or {}).get("article") or {}
+        response = article_fr.response
+        if not isinstance(response, dict):
+            continue
+        article = response.get("article")
+        if not isinstance(article, dict):
+            continue
         article_type = article.get("articleType")
         gs_uri = article.get("attachmentUrl")
         if (
