@@ -69,21 +69,21 @@ async def _get_gcs_credentials():
     return _gcs_credentials
 
 
-def _signed_url_to_gs(url: str) -> Optional[str]:
-    """Convert a signed GCS HTTPS URL to its gs:// URI (dropping the query string).
+def _parse_gcs_https_url(url: str) -> Optional[tuple[str, str]]:
+    """Return (bucket, blob) from a GCS HTTPS URL, or None if unrecognized.
 
     Handles both path-style (storage.googleapis.com/<bucket>/<object>) and
-    virtual-hosted style (<bucket>.storage.googleapis.com/<object>). Returns None
-    if the URL is not a recognizable GCS URL.
+    virtual-hosted style (<bucket>.storage.googleapis.com/<object>).
     """
     parsed = urlparse(url)
     host = parsed.hostname or ""
     path = unquote(parsed.path).lstrip("/")
     if host == "storage.googleapis.com":
-        return f"gs://{path}" if path else None
+        bucket, _, blob = path.partition("/")
+        return (bucket, blob) if bucket and blob else None
     if host.endswith(".storage.googleapis.com"):
         bucket = host[: -len(".storage.googleapis.com")]
-        return f"gs://{bucket}/{path}" if bucket and path else None
+        return (bucket, path) if bucket and path else None
     return None
 
 
@@ -110,11 +110,8 @@ def _signed_url_expiry(url: str) -> Optional[datetime]:
     return None
 
 
-async def _resign_gs_uri(gs_uri: str) -> Optional[str]:
-    """Mint a fresh V4 signed GET URL for a gs:// object using GCS credentials."""
-    bucket_name, _, blob_name = gs_uri[len("gs://") :].partition("/")
-    if not bucket_name or not blob_name:
-        return None
+async def _resign_gcs_blob(bucket_name: str, blob_name: str) -> Optional[str]:
+    """Mint a fresh V4 signed GET URL for a GCS object using GCS credentials."""
     creds = await _get_gcs_credentials()
 
     def _sign() -> str:
@@ -136,8 +133,8 @@ async def _refresh_attachment_url(url: str) -> str:
     """Return a still-valid signed URL for the attachment.
 
     If the stored URL is unsigned/unrecognized or still valid beyond the margin,
-    it is returned unchanged. If it is expired (or about to), re-sign it from the
-    underlying gs:// object. On any signing failure, fall back to the original URL
+    it is returned unchanged. If it is expired (or about to), re-sign it using the
+    bucket and blob extracted from the URL. On any signing failure, fall back to the original URL
     (best effort) so the turn never crashes.
     """
     expiry = _signed_url_expiry(url)
@@ -145,11 +142,11 @@ async def _refresh_attachment_url(url: str) -> str:
         return url
     if expiry - datetime.now(timezone.utc) > timedelta(minutes=_RESIGN_MARGIN_MINUTES):
         return url
-    gs_uri = _signed_url_to_gs(url)
-    if not gs_uri:
+    bucket_blob = _parse_gcs_https_url(url)
+    if not bucket_blob:
         return url
     try:
-        fresh = await _resign_gs_uri(gs_uri)
+        fresh = await _resign_gcs_blob(*bucket_blob)
     except Exception:
         logger.exception("Failed to re-sign expired attachment URL; using original")
         return url
