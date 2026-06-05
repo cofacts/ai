@@ -757,7 +757,12 @@ def handle_writer_tool_error(
 # This architecture respects ADK constraints while maintaining full functionality.
 ai_writer = LlmAgent(
     name="writer",
-    model="gemini-3-flash-preview",
+    # Switched off gemini-3-flash-preview: that preview model emits empty/garbage
+    # output (no thinking, no content) on the turn carrying a Files-API file_data
+    # video handle, even though the video tokens are consumed. gemini-2.5-flash
+    # handles the registered fileUri + tools + HIGH thinking correctly, supports
+    # the same File API media path, and is cheaper.
+    model="gemini-2.5-flash",
     description="AI agent that orchestrates fact-checking process and composes final fact-check replies for Cofacts.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
