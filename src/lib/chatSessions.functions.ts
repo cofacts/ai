@@ -156,7 +156,7 @@ export const getSearchWidget = createServerFn({ method: 'GET' })
   .handler(
     async ({ data: { sessionId, toolCallId } }): Promise<string | null> => {
       const userId = await resolveAdkUserIdOrThrow()
-      const { data } = await adkClient.GET(
+      const { data, error } = await adkClient.GET(
         '/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{artifact_name}',
         {
           params: {
@@ -169,6 +169,10 @@ export const getSearchWidget = createServerFn({ method: 'GET' })
           },
         },
       )
+      if (error) {
+        console.error('[getSearchWidget]', error)
+        return null
+      }
       const base64 = data?.inlineData?.data
       if (!base64) return null
       return Buffer.from(base64, 'base64').toString('utf-8')

@@ -28,7 +28,7 @@ export function SearchSuggestions({
     queryKey: ['search-widget', sessionId, toolCallId],
     queryFn: () =>
       getSearchWidget({ data: { sessionId: sessionId ?? '', toolCallId } }),
-    enabled: hasResponse,
+    enabled: hasResponse && !!toolCallId,
     staleTime: Infinity,
     gcTime: Infinity,
     refetchOnWindowFocus: false,
