@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useParams } from '@tanstack/react-router'
-import { useSearchWidget } from '@/hooks/useSearchWidget'
+import { useQuery } from '@tanstack/react-query'
+import { useChat } from '@/hooks/useChat'
+import { getSearchWidget } from '@/lib/chatSessions.functions'
 
 /**
  * Renders Google's Search "suggestion pills" HTML (the grounding
@@ -19,7 +21,20 @@ export function SearchSuggestions({
   className?: string
 }) {
   const { sessionId } = useParams({ strict: false })
-  const html = useSearchWidget(sessionId ?? '', toolCallId)
+  const { toolInvocations } = useChat({ sessionId: sessionId ?? '' })
+  const hasResponse =
+    toolCallId in toolInvocations && toolInvocations[toolCallId].resp != null
+  const { data: html } = useQuery({
+    queryKey: ['search-widget', sessionId, toolCallId],
+    queryFn: () =>
+      getSearchWidget({ data: { sessionId: sessionId ?? '', toolCallId } }),
+    enabled: hasResponse,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
