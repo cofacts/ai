@@ -3,7 +3,7 @@ import { UserMessage } from './UserMessage'
 import { AgentMessage } from './AgentMessage'
 import { FeedbackButtons } from './FeedbackButtons'
 import { ChatInput } from './ChatInput'
-import type { ChatMessage, ToolInvocation } from '@/lib/adk'
+import type { ChatMessage } from '@/lib/adk'
 
 interface ChatAreaProps {
   messages: Array<ChatMessage>
@@ -13,7 +13,6 @@ interface ChatAreaProps {
   sessionId?: string
   focusedToolCallId?: string | null
   onToolBadgeClick?: (id: string) => void
-  toolInvocations?: Record<string, ToolInvocation>
 }
 
 export function ChatArea({
@@ -24,7 +23,6 @@ export function ChatArea({
   sessionId,
   focusedToolCallId,
   onToolBadgeClick,
-  toolInvocations,
 }: ChatAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -57,7 +55,6 @@ export function ChatArea({
                   focusedToolCallId={focusedToolCallId}
                   onToolBadgeClick={onToolBadgeClick}
                   sessionId={sessionId}
-                  toolInvocations={toolInvocations}
                 />
               )}
               {

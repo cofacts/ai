@@ -43,6 +43,10 @@ logger = logging.getLogger(__name__)
 # Initialize Langfuse instrumentation for observability
 setup_instrumentation()
 
+# Invocation-scoped state key under which the investigator stashes the Google
+# Search entry-point HTML, to be picked up by the writer's after_tool callback.
+SEARCH_WIDGET_STATE_KEY = "temp:investigator_search_widget"
+
 # lastEventTime: records when the agent turn last completed, used by the sidebar
 # for sorting and unread-dot logic. We cannot rely on ADK's built-in lastUpdateTime
 # because any session state PATCH (including the client writing lastOpenedAt)
@@ -182,7 +186,7 @@ async def stash_search_widget(
         and metadata.search_entry_point
         and metadata.search_entry_point.rendered_content
     ):
-        callback_context.state["temp:investigator_search_widget"] = (
+        callback_context.state[SEARCH_WIDGET_STATE_KEY] = (
             metadata.search_entry_point.rendered_content
         )
     return None
@@ -555,10 +559,10 @@ async def after_tool(
         return None
 
     if tool.name == "investigator":
-        html = tool_context.state.get("temp:investigator_search_widget")
+        html = tool_context.state.get(SEARCH_WIDGET_STATE_KEY)
         # Always clear so a later investigator call without grounding can't reuse
         # a stale widget from a previous call.
-        tool_context.state["temp:investigator_search_widget"] = None
+        tool_context.state[SEARCH_WIDGET_STATE_KEY] = None
         if html and tool_context.function_call_id:
             await tool_context.save_artifact(
                 filename=f"search-widget-{tool_context.function_call_id}.html",

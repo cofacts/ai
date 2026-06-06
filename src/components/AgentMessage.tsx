@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
-import type { ChatMessage, ToolInvocation } from '@/lib/adk'
+import type { ChatMessage } from '@/lib/adk'
 import { cn } from '@/lib/utils'
 import { useSearchWidget } from '@/hooks/useSearchWidget'
 
@@ -11,7 +11,6 @@ interface AgentMessageProps {
   focusedToolCallId?: string | null
   onToolBadgeClick?: (id: string) => void
   sessionId?: string
-  toolInvocations?: Record<string, ToolInvocation>
 }
 
 /**
@@ -21,13 +20,11 @@ interface AgentMessageProps {
 function InvestigatorBadgePills({
   sessionId,
   toolCallId,
-  enabled,
 }: {
   sessionId?: string
   toolCallId: string
-  enabled: boolean
 }) {
-  const html = useSearchWidget(sessionId, toolCallId, enabled)
+  const html = useSearchWidget(sessionId, toolCallId)
   if (!html) return null
   return (
     <SearchSuggestions html={html} className="flex-1 min-w-0 overflow-x-auto" />
@@ -40,7 +37,6 @@ export function AgentMessage({
   focusedToolCallId,
   onToolBadgeClick,
   sessionId,
-  toolInvocations,
 }: AgentMessageProps) {
   return (
     <div className="flex flex-col items-start w-full">
@@ -109,7 +105,6 @@ export function AgentMessage({
                   <InvestigatorBadgePills
                     sessionId={sessionId}
                     toolCallId={id}
-                    enabled={toolInvocations?.[id]?.resp != null}
                   />
                 )}
               </div>

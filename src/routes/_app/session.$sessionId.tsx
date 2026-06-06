@@ -27,7 +27,6 @@ function SessionPage() {
     sendMessage,
     stopGeneration,
     lastReplyDraftId,
-    toolInvocations,
   } = useChat({ sessionId })
 
   const openedCallIds = useRef<Set<string>>(new Set())
@@ -106,7 +105,6 @@ function SessionPage() {
           sessionId={sessionId}
           focusedToolCallId={toolCallId ?? null}
           onToolBadgeClick={handleToolBadgeClick}
-          toolInvocations={toolInvocations}
         />
       </div>
       <Outlet />

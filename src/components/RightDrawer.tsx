@@ -222,7 +222,7 @@ function InvestigatorContent({
     : ''
   const sources = response && 'content' in response ? response.sources : []
   // The search-widget artifact is only written once the call completes.
-  const searchWidget = useSearchWidget(sessionId, toolCallId, response != null)
+  const searchWidget = useSearchWidget(sessionId, toolCallId)
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
