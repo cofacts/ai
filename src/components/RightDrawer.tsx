@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import { useSearchWidget } from '@/hooks/useSearchWidget'
+import { getArticleAttachmentUrl } from '@/server/articles.functions'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -551,6 +553,45 @@ function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
   )
 }
 
+// Fetches a browser-loadable, freshly signed attachment URL for the article
+// (the tool result only carries a non-loadable gs:// URI). Kept as its own
+// component so the useQuery hook is unconditional — CofactsArticleContent
+// returns early before it would reach a hook.
+function ArticleMedia({
+  articleId,
+  articleType,
+}: {
+  articleId: string
+  articleType: string
+}) {
+  const {
+    data: url,
+    isPending,
+    isError,
+  } = useQuery({
+    queryKey: ['cofacts-article-attachment', articleId],
+    queryFn: () => getArticleAttachmentUrl({ data: articleId }),
+    staleTime: Infinity,
+  })
+
+  if (isPending) {
+    return <div className="w-full h-48 rounded-lg bg-gray-100 animate-pulse" />
+  }
+  if (isError || !url) {
+    return <p className="text-sm text-gray-400">附件載入失敗</p>
+  }
+  if (articleType === 'IMAGE') {
+    return <img src={url} alt="訊息附件" className="w-full rounded-lg" />
+  }
+  if (articleType === 'VIDEO') {
+    return <video src={url} controls className="w-full rounded-lg" />
+  }
+  if (articleType === 'AUDIO') {
+    return <audio src={url} controls className="w-full" />
+  }
+  return null
+}
+
 function CofactsArticleContent({
   response,
 }: {
@@ -596,26 +637,14 @@ function CofactsArticleContent({
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
-      {/* Media attachment */}
+      {/* Media attachment — attachmentUrl from the tool is a gs:// URI the
+          browser can't load, so ArticleMedia fetches a fresh signed URL. */}
       {isMedia && article.attachmentUrl && (
         <section>
-          {article.articleType === 'IMAGE' && (
-            <img
-              src={article.attachmentUrl}
-              alt="訊息附件"
-              className="w-full rounded-lg"
-            />
-          )}
-          {article.articleType === 'VIDEO' && (
-            <video
-              src={article.attachmentUrl}
-              controls
-              className="w-full rounded-lg"
-            />
-          )}
-          {article.articleType === 'AUDIO' && (
-            <audio src={article.attachmentUrl} controls className="w-full" />
-          )}
+          <ArticleMedia
+            articleId={article.id}
+            articleType={article.articleType}
+          />
         </section>
       )}
 

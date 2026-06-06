@@ -45,8 +45,12 @@ spec:
         env:
         - name: PORT
           value: "8000"
-        - name: GOOGLE_API_KEY
-          value: "${GOOGLE_API_KEY}"
+        - name: GOOGLE_GENAI_USE_VERTEXAI
+          value: "true"
+        - name: GOOGLE_CLOUD_PROJECT
+          value: "${GC_PROJECT_ID}"
+        - name: GOOGLE_CLOUD_LOCATION
+          value: "global"
         - name: LANGFUSE_PUBLIC_KEY
           value: "${LANGFUSE_PUBLIC_KEY}"
         - name: LANGFUSE_SECRET_KEY

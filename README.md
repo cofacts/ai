@@ -6,7 +6,7 @@ This is the web application for [Cofacts.ai](https://cofacts.ai), a chat-based A
 
 - Node.js 18+
 - Python 3.12+
-- Google AI Studio API Key (for the ADK agent) (see https://aistudio.google.com/app/apikey)
+- Google Cloud CLI (`gcloud`) with application default credentials
 - pnpm
 
 > **Note:** This repository includes a pnpm-lock.yaml file. Please ensure you have pnpm installed.
@@ -35,13 +35,19 @@ pnpm install:agent
 > source adk/.venv/bin/activate
 > ```
 
-3. Set up environment variables:
+3. Authenticate with Google Cloud for Vertex AI:
+
+```bash
+gcloud auth application-default login
+```
+
+4. Set up environment variables:
 
 For the ADK backend agent:
 ```bash
 cp adk/cofacts_ai/.env.example adk/cofacts_ai/.env
 ```
-Edit `adk/cofacts_ai/.env` and fill in the required values (at minimum `GOOGLE_API_KEY`).
+Edit `adk/cofacts_ai/.env` and fill in the required values.
 
 For the frontend UI (Vite / TanStack Start):
 ```bash
@@ -49,7 +55,7 @@ cp .env.example .env
 ```
 Edit `.env` to configure your browser-safe variables (e.g. Langfuse keys).
 
-4. Start the development server:
+5. Start the development server:
 
 ```bash
 pnpm dev
@@ -64,6 +70,39 @@ This will start both the UI and agent servers concurrently:
 ## Deployment
 
 This project uses GitHub Actions for automated deployments to Google Cloud Run.
+
+### Vertex AI IAM requirements
+
+The agent talks to Gemini through Vertex AI and feeds it Cofacts media as
+`gs://` URIs, which involves two separate identities and two separate
+permissions. Both must be granted on the project set via `GC_PROJECT_ID`:
+
+1. **Calling the model** — the Cloud Run runtime service account
+   (`SERVICE_ACCOUNT_EMAIL`) needs **Vertex AI User** (`roles/aiplatform.user`,
+   which includes `aiplatform.endpoints.predict`):
+
+   ```bash
+   gcloud projects add-iam-policy-binding "$GC_PROJECT_ID" \
+     --member="serviceAccount:<SERVICE_ACCOUNT_EMAIL>" \
+     --role="roles/aiplatform.user"
+   ```
+
+   Missing this surfaces as `403 PERMISSION_DENIED` on
+   `aiplatform.endpoints.predict` for the model resource.
+
+2. **Reading the media** — when Gemini fetches a media object from GCS,
+   it uses the Vertex AI service agent
+   (`service-<PROJECT_NUMBER>@gcp-sa-aiplatform.iam.gserviceaccount.com`), **not**
+   the runtime service account. That agent needs read access to the media bucket:
+
+   ```bash
+   gcloud storage buckets add-iam-policy-binding gs://<MEDIA_BUCKET> \
+     --member="serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-aiplatform.iam.gserviceaccount.com" \
+     --role="roles/storage.objectViewer"
+   ```
+
+   Missing this surfaces as a `storage.objects.get` denial on the bucket object
+   (note: it's a cross-project grant if the bucket lives in another project).
 
 ### Local Docker Testing
 
@@ -155,7 +194,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 If you see "I'm having trouble connecting to my tools", make sure:
 
 1. The ADK agent is running on port 8000
-2. Your Google API key is set correctly
+2. You have run `gcloud auth application-default login`
 3. Both servers started successfully
 
 ### Python Dependencies
