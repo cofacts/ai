@@ -333,11 +333,26 @@ ai_verifier = LlmAgent(
     or a person's full identity. If the video does not explicitly state it, write
     "影片未說明 / cannot be determined from this video."
 
-    **When video content is loaded in context**: Report three layers in this order:
-    - 「頁面 metadata（url_context 取得）」: uploadDate/publishedAt, uploader, title — quoted verbatim. uploadDate is REQUIRED: a video can show old footage while being recently uploaded, and only the page tells you when it was published online.
+    **When video or audio content is loaded in context**: You are the ONLY agent that
+    can watch/listen — the writer never sees the media and acts solely on what you report,
+    so anything you omit is invisible to the whole pipeline. Report these layers in order:
+    - 「頁面 metadata（url_context 取得）」: uploadDate/publishedAt, uploader, title — quoted verbatim. uploadDate is REQUIRED: a video can show old footage while being recently uploaded, and only the page tells you when it was published online. (For Cofacts gs:// media there is no page — skip this layer.)
     - 「影片標題/描述（上傳者提供）」: quote verbatim — treat as the uploader's claim, not confirmed fact
-    - 「影片可觀察內容」: what is visible/audible in the video — speech, on-screen text, logos, surroundings
+    - 「可觀察內容 claim 清單」: an EXHAUSTIVE, numbered, atomic inventory of every distinct
+      assertion the media makes — one assertion per line, covering BOTH the spoken/audio
+      content AND the visual layer (on-screen text/captions, logos, locations, who appears,
+      what they do). Paraphrase each claim in one clause rather than transcribing long
+      passages; quote verbatim ONLY short fragments where the exact wording IS the claim
+      (an on-screen number, a name, a slogan). Do not merge two assertions into one line, do
+      not editorialize, and do not skip a claim because it seems minor — the writer decides
+      what matters. Keep observation (what is shown/said) separate from inference; if you are
+      unsure what something is, say so rather than guessing.
     The writer has broader context to judge whether the title is accurate or misleading.
+
+    **Targeted re-watch**: The writer may follow up asking you to re-examine one specific
+    thing (a timestamp, a face, a piece of on-screen text, a logo, a background detail). When
+    it does, watch again and report ONLY that aspect, in detail — do not re-dump the whole
+    inventory.
 
     **No invented citations**: The Sources list MUST ONLY contain URLs that were provided as input.
     Never cite a news article, report, or webpage that was not in the original URL list —
@@ -664,7 +679,10 @@ ai_writer = LlmAgent(
        - Proceed with full fact-checking process
 
     2. **Claim Analysis & Strategy**:
-       - **If the message centers on a video or a linked URL whose claims are NOT in the article text**: your FIRST action is to delegate claim extraction — you cannot watch a video or read a page yourself, only `investigator`/`verifier` can. Call `verifier` with the URL and ask it to "watch the video / read the page and enumerate every distinct factual claim it makes, verbatim where possible" (prefer `verifier`: it both watches via FileData and reads page metadata such as upload date). Do not guess the message's claims, and do not start web searches, until you have this enumerated claim list.
+       - **If the message centers on a video/audio or a linked URL**: you cannot watch a video, listen to audio, or read a page yourself — only `verifier` can (it watches/listens via FileData and reads page metadata such as upload date). Delegate claim extraction before guessing claims or starting web searches:
+         - **For a Cofacts VIDEO/AUDIO article**: the spoken content is usually already transcribed into the article text Cofacts returns — read it there for the *spoken* claims. Still call `verifier` with the media URL to (a) enumerate the *visual* layer (on-screen text, logos, who/where) that the transcript misses, and (b) confirm the transcript matches what is actually said. Ask it to "watch/listen and return an exhaustive, atomic, numbered claim inventory."
+         - **For a linked external URL or YouTube video** (claims NOT in the article text): your FIRST action is to call `verifier` with the URL and ask it to "watch the video / read the page and return an exhaustive, atomic, numbered claim inventory."
+         - You can follow up and ask `verifier` to re-watch one specific aspect (a timestamp, a face, a piece of on-screen text) without re-running the whole inventory.
        - Identify factual statements vs. opinions in the message
        - If message contains opinions based on factual statements: prioritize verifying factual claims first
        - Determine target audience: people who might forward this message or receive it

@@ -26,6 +26,16 @@ _ARTICLE_TYPE_MIME = {
     "AUDIO": "audio/mpeg",
 }
 
+# Article media types injected directly into the writer's request. Only IMAGE:
+# a still image has no temporal narration for the orchestrator to get captured by
+# or parrot back, and the writer genuinely needs to see it (manipulated charts,
+# photos). VIDEO/AUDIO are deliberately excluded — handing the orchestrator
+# temporal media destabilizes it (it narrates/confabulates the playback instead
+# of orchestrating). For those the writer relies on the transcript Cofacts
+# already extracts into the article text, and delegates watching/listening to the
+# verifier, which returns an enumerated claim inventory (see inject_cofacts_media_filedata).
+_WRITER_INJECTED_TYPES = {"IMAGE"}
+
 # Matches a Cofacts media reference in free text — a gs:// URI or a GCS HTTPS
 # URL (signed or not) for the cofacts-media-collection bucket. Used to spot the
 # media URL the writer forwards to the verifier in a plain-text instruction.
@@ -101,6 +111,10 @@ async def inject_article_attachment(
     SDK-only field not transmitted to the model; the file_data must live at the
     content.parts level to be seen by the LLM.
 
+    Only IMAGE articles are injected (see _WRITER_INJECTED_TYPES); VIDEO/AUDIO are
+    left for the verifier to watch/listen to, while the writer works from the
+    transcript in the article text.
+
     after_tool already rewrites the writer-visible attachmentUrl to gs://, so the
     stored value is normally a gs:// URI; signed_url_to_gs(...) returns None for a
     gs:// value and we fall back to it unchanged.
@@ -125,7 +139,7 @@ async def inject_article_attachment(
         article = (article_fr.response or {}).get("article") or {}
         article_type = article.get("articleType")
         attachment_url = article.get("attachmentUrl")
-        if not attachment_url or article_type not in _ARTICLE_TYPE_MIME:
+        if not attachment_url or article_type not in _WRITER_INJECTED_TYPES:
             continue
         gs_uri = signed_url_to_gs(attachment_url) or attachment_url
         content.parts = list(content.parts) + [
