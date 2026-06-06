@@ -99,7 +99,7 @@ def _mime_for_media_uri(uri: str) -> str:
     return _ARTICLE_TYPE_MIME["VIDEO"]
 
 
-async def inject_article_attachment(
+def inject_article_attachment(
     callback_context: CallbackContext,
     llm_request: LlmRequest,
 ) -> None:
