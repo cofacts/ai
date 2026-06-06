@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useParams } from '@tanstack/react-router'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
-import { useSearchWidget } from '@/hooks/useSearchWidget'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
 
 interface RightDrawerProps {
@@ -194,28 +192,6 @@ function SourceCard({ source, index }: { source: ToolSource; index: number }) {
 
 // ── Investigator ─────────────────────────────────────────────────
 
-/**
- * Google Search suggestion pills for an investigator tool-call. Split out so the
- * `useSearchWidget` hook only runs once we have a concrete `sessionId`.
- */
-function InvestigatorSearchWidget({
-  sessionId,
-  toolCallId,
-}: {
-  sessionId: string
-  toolCallId: string
-}) {
-  // The search-widget artifact is only written once the call completes.
-  const searchWidget = useSearchWidget(sessionId, toolCallId)
-  if (!searchWidget) return null
-  return (
-    <section>
-      <SectionLabel>Google 搜尋建議</SectionLabel>
-      <SearchSuggestions html={searchWidget} className="overflow-x-auto" />
-    </section>
-  )
-}
-
 function InvestigatorContent({
   args,
   response,
@@ -225,7 +201,6 @@ function InvestigatorContent({
   response: AllTools['investigator']['resp'] | null
   toolCallId: string
 }) {
-  const { sessionId } = useParams({ strict: false })
   const content = response
     ? 'content' in response
       ? response.content
@@ -249,12 +224,7 @@ function InvestigatorContent({
         </section>
       )}
 
-      {sessionId && (
-        <InvestigatorSearchWidget
-          sessionId={sessionId}
-          toolCallId={toolCallId}
-        />
-      )}
+      <SearchSuggestions toolCallId={toolCallId} className="overflow-x-auto" />
 
       {sources.length > 0 && (
         <section>

@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { useParams } from '@tanstack/react-router'
+import { useSearchWidget } from '@/hooks/useSearchWidget'
 
 /**
  * Renders Google's Search "suggestion pills" HTML (the grounding
@@ -10,15 +12,18 @@ import { useEffect, useRef } from 'react'
  * open in a new tab so a pill launches a Google search without navigating away.
  */
 export function SearchSuggestions({
-  html,
+  toolCallId,
   className,
 }: {
-  html: string
+  toolCallId: string
   className?: string
 }) {
+  const { sessionId } = useParams({ strict: false })
+  const html = useSearchWidget(sessionId ?? '', toolCallId)
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (!html) return
     const host = hostRef.current
     if (!host) return
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' })
@@ -36,6 +41,8 @@ export function SearchSuggestions({
       anchor.setAttribute('rel', 'noopener noreferrer')
     }
   }, [html])
+
+  if (!html) return null
 
   return <div ref={hostRef} className={className} />
 }
