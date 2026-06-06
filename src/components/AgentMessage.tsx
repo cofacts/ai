@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useParams } from '@tanstack/react-router'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { ChatMessage } from '@/lib/adk'
 import { cn } from '@/lib/utils'
@@ -10,21 +11,15 @@ interface AgentMessageProps {
   showAvatar?: boolean
   focusedToolCallId?: string | null
   onToolBadgeClick?: (id: string) => void
-  sessionId?: string
 }
 
 /**
  * Google Search suggestion pills shown to the right of an investigator badge.
  * Fetches the widget artifact for this tool-call once the call has completed.
  */
-function InvestigatorBadgePills({
-  sessionId,
-  toolCallId,
-}: {
-  sessionId: string
-  toolCallId: string
-}) {
-  const html = useSearchWidget(sessionId, toolCallId)
+function InvestigatorBadgePills({ toolCallId }: { toolCallId: string }) {
+  const { sessionId } = useParams({ strict: false })
+  const html = useSearchWidget(sessionId ?? '', toolCallId)
   if (!html) return null
   return (
     <SearchSuggestions html={html} className="flex-1 min-w-0 overflow-x-auto" />
@@ -36,7 +31,6 @@ export function AgentMessage({
   showAvatar = true,
   focusedToolCallId,
   onToolBadgeClick,
-  sessionId,
 }: AgentMessageProps) {
   return (
     <div className="flex flex-col items-start w-full">
@@ -101,11 +95,8 @@ export function AgentMessage({
                   </span>
                   <span>{name}</span>
                 </button>
-                {isInvestigator && id && sessionId && (
-                  <InvestigatorBadgePills
-                    sessionId={sessionId}
-                    toolCallId={id}
-                  />
+                {isInvestigator && id && (
+                  <InvestigatorBadgePills toolCallId={id} />
                 )}
               </div>
             )

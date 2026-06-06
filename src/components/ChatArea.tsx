@@ -54,7 +54,6 @@ export function ChatArea({
                   showAvatar={msg.author !== prevMsg?.author}
                   focusedToolCallId={focusedToolCallId}
                   onToolBadgeClick={onToolBadgeClick}
-                  sessionId={sessionId}
                 />
               )}
               {
