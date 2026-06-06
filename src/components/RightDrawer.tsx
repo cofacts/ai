@@ -1,29 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { SearchSuggestions } from './SearchSuggestions'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
+import { useSearchWidget } from '@/hooks/useSearchWidget'
 
 interface RightDrawerProps {
   isOpen: boolean
   onClose: () => void
   invocation: ToolInvocation | null
+  sessionId?: string
 }
 
-export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
+export function RightDrawer({
+  isOpen,
+  onClose,
+  invocation,
+  sessionId,
+}: RightDrawerProps) {
   return (
     <>
       {/* Desktop drawer */}
       {isOpen && (
         <aside className="hidden md:flex flex-1 min-w-0 bg-white border-l border-border-subtle flex-col shadow-lg z-10 overflow-hidden [view-transition-name:right-drawer]">
           <DrawerHeader invocation={invocation} onClose={onClose} />
-          <DrawerContent invocation={invocation} />
+          <DrawerContent invocation={invocation} sessionId={sessionId} />
         </aside>
       )}
 
       {/* Mobile bottom sheet */}
       <MobileBottomSheet isOpen={isOpen} onClose={onClose}>
         <DrawerHeader invocation={invocation} onClose={onClose} />
-        <DrawerContent invocation={invocation} />
+        <DrawerContent invocation={invocation} sessionId={sessionId} />
       </MobileBottomSheet>
     </>
   )
@@ -77,7 +85,9 @@ function DrawerHeader({
             className="text-gray-400 hover:text-gray-600 transition-colors"
             aria-label="在 Cofacts 查看"
           >
-            <span className="material-symbols-outlined text-xl">open_in_new</span>
+            <span className="material-symbols-outlined text-xl">
+              open_in_new
+            </span>
           </a>
         )}
         <button
@@ -94,19 +104,36 @@ function DrawerHeader({
 
 // ── Content router ───────────────────────────────────────────────
 
-function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
+function DrawerContent({
+  invocation,
+  sessionId,
+}: {
+  invocation: ToolInvocation | null
+  sessionId?: string
+}) {
   if (!invocation) return null
 
   switch (invocation.name) {
     case 'investigator':
-      return <InvestigatorContent args={invocation.args} response={invocation.resp} />
+      return (
+        <InvestigatorContent
+          args={invocation.args}
+          response={invocation.resp}
+          sessionId={sessionId}
+          toolCallId={invocation.id}
+        />
+      )
     case 'verifier':
-      return <VerifierContent args={invocation.args} response={invocation.resp} />
+      return (
+        <VerifierContent args={invocation.args} response={invocation.resp} />
+      )
     case 'proofreader_kmt':
     case 'proofreader_dpp':
     case 'proofreader_tpp':
     case 'proofreader_minor_parties':
-      return <ProofreaderContent args={invocation.args} response={invocation.resp} />
+      return (
+        <ProofreaderContent args={invocation.args} response={invocation.resp} />
+      )
     case 'draft_factcheck_response':
       return <DraftFactcheckContent args={invocation.args} />
     case 'get_single_cofacts_article':
@@ -141,7 +168,6 @@ function MarkdownSection({ content }: { content: string }) {
     </div>
   )
 }
-
 
 function SourceCard({ source, index }: { source: ToolSource; index: number }) {
   const domain = source.url
@@ -181,12 +207,22 @@ function SourceCard({ source, index }: { source: ToolSource; index: number }) {
 function InvestigatorContent({
   args,
   response,
+  sessionId,
+  toolCallId,
 }: {
   args: AllTools['investigator']['args']
   response: AllTools['investigator']['resp'] | null
+  sessionId?: string
+  toolCallId: string
 }) {
-  const content = response ? ('content' in response ? response.content : response.result) : ''
+  const content = response
+    ? 'content' in response
+      ? response.content
+      : response.result
+    : ''
   const sources = response && 'content' in response ? response.sources : []
+  // The search-widget artifact is only written once the call completes.
+  const searchWidget = useSearchWidget(sessionId, toolCallId, response != null)
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -201,6 +237,13 @@ function InvestigatorContent({
         <section>
           <SectionLabel>調查結果</SectionLabel>
           <MarkdownSection content={content} />
+        </section>
+      )}
+
+      {searchWidget && (
+        <section>
+          <SectionLabel>Google 搜尋建議</SectionLabel>
+          <SearchSuggestions html={searchWidget} className="overflow-x-auto" />
         </section>
       )}
 
@@ -231,7 +274,11 @@ function VerifierContent({
   args: AllTools['verifier']['args']
   response: AllTools['verifier']['resp'] | null
 }) {
-  const content = response ? ('content' in response ? response.content : response.result) : ''
+  const content = response
+    ? 'content' in response
+      ? response.content
+      : response.result
+    : ''
   const sources = response && 'content' in response ? response.sources : []
 
   return (
@@ -491,13 +538,17 @@ function CofactsArticleContent({
 }) {
   if (!response) {
     return (
-      <p className="text-sm text-gray-400 text-center pt-8 p-4">等待資料載入…</p>
+      <p className="text-sm text-gray-400 text-center pt-8 p-4">
+        等待資料載入…
+      </p>
     )
   }
 
   if (response.error) {
     return (
-      <p className="text-sm text-red-400 text-center pt-8 p-4">{response.error}</p>
+      <p className="text-sm text-red-400 text-center pt-8 p-4">
+        {response.error}
+      </p>
     )
   }
 
@@ -513,11 +564,14 @@ function CofactsArticleContent({
     (sum, s) => sum + s.lineVisit + s.webVisit + s.downstreamBotVisits,
     0,
   )
-  const formattedDate = new Date(article.createdAt).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
+  const formattedDate = new Date(article.createdAt).toLocaleDateString(
+    'zh-TW',
+    {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    },
+  )
   const relatedEdges = article.relatedArticles.edges
 
   return (
@@ -533,7 +587,11 @@ function CofactsArticleContent({
             />
           )}
           {article.articleType === 'VIDEO' && (
-            <video src={article.attachmentUrl} controls className="w-full rounded-lg" />
+            <video
+              src={article.attachmentUrl}
+              controls
+              className="w-full rounded-lg"
+            />
           )}
           {article.articleType === 'AUDIO' && (
             <audio src={article.attachmentUrl} controls className="w-full" />
@@ -556,12 +614,16 @@ function CofactsArticleContent({
         <SectionLabel>統計</SectionLabel>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-600">
           <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-sm">calendar_today</span>
+            <span className="material-symbols-outlined text-sm">
+              calendar_today
+            </span>
             初次回報：{formattedDate}
           </span>
           {totalVisits > 0 && (
             <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">trending_up</span>
+              <span className="material-symbols-outlined text-sm">
+                trending_up
+              </span>
               近 90 天 {totalVisits.toLocaleString()} 次造訪
             </span>
           )}
@@ -605,11 +667,15 @@ function CofactsArticleContent({
                   <div className="flex items-center gap-2 text-xs text-gray-400">
                     <span>{ar.reply.user.name}</span>
                     <span className="flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-xs">thumb_up</span>
+                      <span className="material-symbols-outlined text-xs">
+                        thumb_up
+                      </span>
                       {ar.helpfulCount}
                     </span>
                     <span className="flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-xs">thumb_down</span>
+                      <span className="material-symbols-outlined text-xs">
+                        thumb_down
+                      </span>
                       {ar.unhelpfulCount}
                     </span>
                   </div>

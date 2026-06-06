@@ -33,27 +33,28 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
       },
     )
     if (error) handleAdkError(error)
-    return (data ?? []).map((session): SessionListItem => {
-      const stateTitle = session.state?.[SESSION_TITLE_KEY]
-      const lastEventTime = session.state?.[SESSION_LAST_EVENT_TIME_KEY]
-      const lastOpenedAt = session.state?.[SESSION_LAST_OPENED_KEY]
+    return (data ?? [])
+      .map((session): SessionListItem => {
+        const stateTitle = session.state?.[SESSION_TITLE_KEY]
+        const lastEventTime = session.state?.[SESSION_LAST_EVENT_TIME_KEY]
+        const lastOpenedAt = session.state?.[SESSION_LAST_OPENED_KEY]
 
-      // list_sessions always returns events=[] in both SQLite and PostgreSQL backends.
-      // We cannot provide meaningful fallback for data in the state.
-      return {
-        id: session.id,
-        title:
-          typeof stateTitle === 'string' && stateTitle
-            ? stateTitle
-            : session.id,
-        lastUpdateTime: session.lastUpdateTime,
-        lastEventTime:
-          typeof lastEventTime === 'number' ? lastEventTime : undefined,
-        lastOpenedAt:
-          typeof lastOpenedAt === 'number' ? lastOpenedAt : undefined,
-      }
-    })
-    .sort((a, b) => (b.lastEventTime ?? 0) - (a.lastEventTime ?? 0))
+        // list_sessions always returns events=[] in both SQLite and PostgreSQL backends.
+        // We cannot provide meaningful fallback for data in the state.
+        return {
+          id: session.id,
+          title:
+            typeof stateTitle === 'string' && stateTitle
+              ? stateTitle
+              : session.id,
+          lastUpdateTime: session.lastUpdateTime,
+          lastEventTime:
+            typeof lastEventTime === 'number' ? lastEventTime : undefined,
+          lastOpenedAt:
+            typeof lastOpenedAt === 'number' ? lastOpenedAt : undefined,
+        }
+      })
+      .sort((a, b) => (b.lastEventTime ?? 0) - (a.lastEventTime ?? 0))
   },
 )
 
@@ -142,40 +143,38 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
     return data
   })
 
-export const listSessionArtifacts = createServerFn({ method: 'GET' })
-  .inputValidator((sessionId: string) => sessionId)
-  .handler(async ({ data: sessionId }) => {
-    const { data, error } = await adkClient.GET(
-      '/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts',
-      {
-        params: {
-          path: { app_name: ADK_APP_NAME, user_id: ADK_USER_ID, session_id: sessionId },
-        },
-      },
-    )
-    if (error) handleAdkError(error)
-    return data ?? []
-  })
-
-export const getSessionArtifact = createServerFn({ method: 'GET' })
-  .inputValidator((input: { sessionId: string; artifactName: string }) => input)
-  .handler(async ({ data: { sessionId, artifactName } }) => {
-    const { data, error } = await adkClient.GET(
-      '/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{artifact_name}',
-      {
-        params: {
-          path: {
-            app_name: ADK_APP_NAME,
-            user_id: ADK_USER_ID,
-            session_id: sessionId,
-            artifact_name: artifactName,
+/**
+ * Fetches the Google Search "suggestion pills" HTML for one investigator
+ * tool-call, saved by the writer agent as an artifact keyed by the tool-call id.
+ *
+ * Returns the decoded HTML string, or `null` when no widget exists for this call
+ * (e.g. the search returned no grounding, or the in-memory artifact was lost
+ * after a server restart). Missing widgets are normal, so non-auth failures are
+ * swallowed — this is a purely decorative feature and must never break the page.
+ */
+export const getSearchWidget = createServerFn({ method: 'GET' })
+  .inputValidator((input: { sessionId: string; toolCallId: string }) => input)
+  .handler(
+    async ({ data: { sessionId, toolCallId } }): Promise<string | null> => {
+      const userId = await resolveAdkUserIdOrThrow()
+      const { data } = await adkClient.GET(
+        '/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{artifact_name}',
+        {
+          params: {
+            path: {
+              app_name: ADK_APP_NAME,
+              user_id: userId,
+              session_id: sessionId,
+              artifact_name: `search-widget-${toolCallId}.html`,
+            },
           },
         },
-      },
-    )
-    if (error) handleAdkError(error)
-    return data
-  })
+      )
+      const base64 = data?.inlineData?.data
+      if (!base64) return null
+      return Buffer.from(base64, 'base64').toString('utf-8')
+    },
+  )
 
 export const markSessionOpened = createServerFn({ method: 'POST' })
   .inputValidator((sessionId: string) => sessionId)

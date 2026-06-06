@@ -163,27 +163,28 @@ async def append_url_context_sources(
     return _set_text_content(llm_response, serialized)
 
 
-async def save_search_widget(
+async def stash_search_widget(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
-    """Save Google Search Widget HTML as an ADK artifact (Google policy compliance)."""
+    """Stash the Google Search entry-point HTML in invocation-scoped state.
+
+    The HTML (Google's "search suggestion pills") must be shown to users to
+    satisfy Google's grounding terms, but it must NOT leak into the LLM-visible
+    tool response. We cannot save an artifact keyed by the tool-call id here —
+    the investigator runs as an AgentTool sub-agent and does not know its parent
+    function_call_id. Instead we stash the HTML in `temp:` state; AgentTool
+    merges this state delta back into the writer's tool_context, and the writer's
+    after_tool callback persists it as an artifact keyed by the tool-call id.
+    """
     metadata = llm_response.grounding_metadata
-    if not metadata:
-        return None
-    if not (
-        metadata.search_entry_point and metadata.search_entry_point.rendered_content
+    if (
+        metadata
+        and metadata.search_entry_point
+        and metadata.search_entry_point.rendered_content
     ):
-        return None
-    filename = f"search-widget-{int(time.time() * 1000)}.html"
-    await callback_context.save_artifact(
-        filename=filename,
-        artifact=genai_types.Part(
-            inline_data=genai_types.Blob(
-                mime_type="text/html",
-                data=metadata.search_entry_point.rendered_content.encode("utf-8"),
-            )
-        ),
-    )
+        callback_context.state["temp:investigator_search_widget"] = (
+            metadata.search_entry_point.rendered_content
+        )
     return None
 
 
@@ -238,7 +239,7 @@ ai_investigator = LlmAgent(
         )
     ),
     before_model_callback=inject_youtube_filedata,
-    after_model_callback=[append_grounding_sources, save_search_widget],
+    after_model_callback=[append_grounding_sources, stash_search_widget],
     instruction="""
     You are an AI Investigator for fact-checking. Search the web and faithfully report
     what search results say — do not draw conclusions or form opinions.
@@ -542,9 +543,32 @@ async def after_tool(
     tool_response: Any,
 ) -> Optional[Any]:
     """Deserializes the JSON response from investigator/verifier into a dict so
-    the writer LLM receives structured output."""
+    the writer LLM receives structured output.
+
+    For investigator calls, also persists the Google Search entry-point HTML
+    (stashed in temp state by `stash_search_widget`) as an artifact keyed by this
+    tool-call id, so the frontend can fetch and display the search-suggestion
+    pills. This deliberately does not touch the returned response — the HTML must
+    stay out of the LLM-visible context.
+    """
     if tool.name not in ("investigator", "verifier"):
         return None
+
+    if tool.name == "investigator":
+        html = tool_context.state.get("temp:investigator_search_widget")
+        # Always clear so a later investigator call without grounding can't reuse
+        # a stale widget from a previous call.
+        tool_context.state["temp:investigator_search_widget"] = None
+        if html and tool_context.function_call_id:
+            await tool_context.save_artifact(
+                filename=f"search-widget-{tool_context.function_call_id}.html",
+                artifact=genai_types.Part(
+                    inline_data=genai_types.Blob(
+                        mime_type="text/html", data=html.encode("utf-8")
+                    )
+                ),
+            )
+
     if not isinstance(tool_response, str):
         return None
     try:
