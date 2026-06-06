@@ -65,6 +65,39 @@ This will start both the UI and agent servers concurrently:
 
 This project uses GitHub Actions for automated deployments to Google Cloud Run.
 
+### Vertex AI IAM requirements
+
+The agent talks to Gemini through Vertex AI and feeds it Cofacts media as
+`gs://` URIs, which involves two separate identities and two separate
+permissions. Both must be granted on the project set via `GC_PROJECT_ID`:
+
+1. **Calling the model** — the Cloud Run runtime service account
+   (`SERVICE_ACCOUNT_EMAIL`) needs **Vertex AI User** (`roles/aiplatform.user`,
+   which includes `aiplatform.endpoints.predict`):
+
+   ```bash
+   gcloud projects add-iam-policy-binding "$GC_PROJECT_ID" \
+     --member="serviceAccount:<SERVICE_ACCOUNT_EMAIL>" \
+     --role="roles/aiplatform.user"
+   ```
+
+   Missing this surfaces as `403 PERMISSION_DENIED` on
+   `aiplatform.endpoints.predict` for the model resource.
+
+2. **Reading the media** — when Gemini fetches a `gs://cofacts-media-collection`
+   object, it uses the Vertex AI service agent
+   (`service-<PROJECT_NUMBER>@gcp-sa-aiplatform.iam.gserviceaccount.com`), **not**
+   the runtime service account. That agent needs read access to the bucket:
+
+   ```bash
+   gcloud storage buckets add-iam-policy-binding gs://cofacts-media-collection \
+     --member="serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-aiplatform.iam.gserviceaccount.com" \
+     --role="roles/storage.objectViewer"
+   ```
+
+   Missing this surfaces as a `storage.objects.get` denial on the bucket object
+   (note: it's a cross-project grant if the bucket lives in another project).
+
 ### Local Docker Testing
 
 To build and test both Docker images locally (mirroring what the CI pipeline does):
