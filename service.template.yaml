@@ -55,6 +55,11 @@ spec:
           value: "https://langfuse.cofacts.tw"
         - name: DATABASE_URL
           value: "${DATABASE_URL}"
+        # Persist artifacts (e.g. Google Search suggestion widgets) to GCS so
+        # they survive across revisions/instances, alongside the Postgres
+        # session store above.
+        - name: GCS_ARTIFACT_BUCKET
+          value: "${GCS_ARTIFACT_BUCKET}"
         - name: COFACTS_API_URL
           value: "${COFACTS_API_URL}"
         startupProbe:
