@@ -35,6 +35,11 @@ _COFACTS_MEDIA_URL_RE = re.compile(
     r"|cofacts-media-collection\.storage\.googleapis\.com)/[^\s\"'<>]+"
 )
 
+# Punctuation that commonly trails a URL in prose (sentence end, wrapping
+# parens/quotes) and is not part of the URL itself. Stripped from matches —
+# a gs:// path has no query string to absorb a stray char.
+_URL_TRAILING_PUNCT = ".,;:!?)]}>\"'"
+
 
 def _parse_gcs_https_url(url: str) -> Optional[tuple[str, str]]:
     """Return (bucket, blob) from a GCS HTTPS URL, or None if unrecognized.
@@ -149,7 +154,14 @@ def inject_cofacts_media_filedata(
     inject_youtube_filedata for YouTube URLs.
     """
     try:
-        seen = set()
+        # Seed with media already attached anywhere in the request so we never
+        # inject a duplicate FileData for the same object.
+        seen = {
+            p.file_data.file_uri
+            for content in llm_request.contents
+            for p in content.parts or []
+            if p.file_data and p.file_data.file_uri
+        }
         for content in llm_request.contents:
             if content.role != "user" or not content.parts:
                 continue
@@ -158,6 +170,7 @@ def inject_cofacts_media_filedata(
                 if part.text:
                     urls.extend(_COFACTS_MEDIA_URL_RE.findall(part.text))
             for url in urls:
+                url = url.rstrip(_URL_TRAILING_PUNCT)
                 gs_uri = url if url.startswith("gs://") else signed_url_to_gs(url)
                 if not gs_uri or gs_uri in seen:
                     continue
