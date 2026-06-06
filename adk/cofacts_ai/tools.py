@@ -12,6 +12,8 @@ import os
 from typing import Any, Dict, List, Optional
 
 import httpx
+from .auth_context import cofacts_token_var
+from .media_filedata import signed_url_to_gs
 
 # GraphQL fragment for common Article fields
 COMMON_ARTICLE_FIELDS = """
@@ -121,7 +123,10 @@ COMMON_ARTICLE_FIELDS = """
 
 
 async def _execute_cofacts_graphql(
-    query: str, variables: Dict[str, Any], operation_name: str = "GraphQL request"
+    query: str,
+    variables: Dict[str, Any],
+    operation_name: str = "GraphQL request",
+    auth_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Execute a GraphQL query against Cofacts API with standardized error handling.
@@ -130,10 +135,16 @@ async def _execute_cofacts_graphql(
         query: The GraphQL query string
         variables: Variables for the GraphQL query
         operation_name: Name of the operation for error reporting
+        auth_token: Optional JWT token issued by rumors-api for authenticated requests
 
     Returns:
         Response containing either data or error information
     """
+    headers: Dict[str, str] = {"Content-Type": "application/json"}
+    if auth_token:
+        headers["x-app-id"] = "RUMORS_SITE"
+        headers["Authorization"] = f"Bearer {auth_token}"
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             api_base = os.environ.get(
@@ -142,7 +153,7 @@ async def _execute_cofacts_graphql(
             response = await client.post(
                 f"{api_base}/graphql",
                 json={"query": query, "variables": variables},
-                headers={"Content-Type": "application/json"},
+                headers=headers,
             )
             response.raise_for_status()
 
@@ -281,13 +292,20 @@ async def search_cofacts_database(
             query=graphql_query,
             variables=variables,
             operation_name="search Cofacts database",
+            auth_token=cofacts_token_var.get(),
         )
 
         if "error" in result:
             return result
 
-        # Extract ListArticles data from the successful response
-        return {"data": result["data"]["ListArticles"]}
+        list_articles = result["data"]["ListArticles"]
+        for edge in list_articles.get("edges") or []:
+            article = (edge.get("node") or {})
+            url = article.get("attachmentUrl")
+            if url:
+                article["attachmentUrl"] = signed_url_to_gs(url) or url
+
+        return {"data": list_articles}
 
     except Exception as e:
         return {
@@ -295,7 +313,9 @@ async def search_cofacts_database(
         }
 
 
-async def get_single_cofacts_article(article_id: str) -> Dict[str, Any]:
+async def get_single_cofacts_article(
+    article_id: str,
+) -> Dict[str, Any]:
     """
     Get a single article from Cofacts database by ID.
 
@@ -327,6 +347,7 @@ async def get_single_cofacts_article(article_id: str) -> Dict[str, Any]:
             query=graphql_query,
             variables=variables,
             operation_name="get specific Cofacts article",
+            auth_token=cofacts_token_var.get(),
         )
 
         if "error" in result:
@@ -338,6 +359,15 @@ async def get_single_cofacts_article(article_id: str) -> Dict[str, Any]:
                 "error": f"Article not found",
                 "article_id": article_id,
             }
+
+        # Rewrite the signed HTTPS attachmentUrl to a non-expiring, Vertex-native
+        # gs:// URI here, in the tool we control, so every consumer (the writer
+        # and anything it forwards to the verifier) only ever sees the gs:// form.
+        # signed_url_to_gs returns None for a value that is not a GCS HTTPS URL
+        # (e.g. already gs://), in which case we keep the original unchanged.
+        attachment_url = article.get("attachmentUrl")
+        if attachment_url:
+            article["attachmentUrl"] = signed_url_to_gs(attachment_url) or attachment_url
 
         return {
             "article_id": article_id,
