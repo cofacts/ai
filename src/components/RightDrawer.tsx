@@ -504,8 +504,7 @@ function ArticleMedia({
   } = useQuery({
     queryKey: ['cofacts-article-attachment', articleId],
     queryFn: () => getArticleAttachmentUrl({ data: articleId }),
-    // Signed URLs are short-lived; refetch if the drawer is reopened later.
-    staleTime: 5 * 60_000,
+    staleTime: Infinity,
   })
 
   if (isPending) {
