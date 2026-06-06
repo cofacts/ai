@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { SearchSuggestions } from './SearchSuggestions'
 import type { ChatMessage } from '@/lib/adk'
 import { cn } from '@/lib/utils'
 
@@ -52,6 +53,7 @@ export function AgentMessage({
           if (part.functionCall) {
             const { id, name } = part.functionCall
             const isFocused = !!id && id === focusedToolCallId
+            const isInvestigator = name === 'investigator'
             return (
               <div key={i} className="flex items-center gap-2 pl-1">
                 <span className="material-symbols-outlined text-gray-300 text-xs">
@@ -59,7 +61,7 @@ export function AgentMessage({
                 </span>
                 <button
                   className={cn(
-                    'tool-badge transition-all',
+                    'tool-badge transition-all shrink-0',
                     isFocused
                       ? 'bg-primary/10 ring-1 ring-primary/40'
                       : 'hover:bg-gray-200',
@@ -78,6 +80,9 @@ export function AgentMessage({
                   </span>
                   <span>{name}</span>
                 </button>
+                {isInvestigator && id && (
+                  <SearchSuggestions toolCallId={id} className="flex-1 min-w-0 overflow-x-auto" />
+                )}
               </div>
             )
           }

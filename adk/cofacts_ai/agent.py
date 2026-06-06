@@ -123,13 +123,21 @@ async def append_grounding_sources(
     content = "".join(p.text or "" for p in llm_response.content.parts)
 
     # ── Write back as JSON so writer's after_tool_callback gets structured output
-    serialized = json.dumps(
-        {
-            "content": content,
-            "sources": sources_list,
-        },
-        ensure_ascii=False,
-    )
+    response_dict: dict = {"content": content, "sources": sources_list}
+
+    # Embed the search-widget HTML so after_tool can persist it as an artifact
+    # and strip it before the LLM sees the tool result. Using the response (not
+    # state) avoids any DB writes: temp: state is stripped by AgentTool before
+    # forwarding, and non-temp: state would pollute the session the list loads.
+    if (
+        metadata.search_entry_point
+        and metadata.search_entry_point.rendered_content
+    ):
+        response_dict["_search_widget_html"] = (
+            metadata.search_entry_point.rendered_content
+        )
+
+    serialized = json.dumps(response_dict, ensure_ascii=False)
     return _set_text_content(llm_response, serialized)
 
 
@@ -165,30 +173,6 @@ async def append_url_context_sources(
         ensure_ascii=False,
     )
     return _set_text_content(llm_response, serialized)
-
-
-async def save_search_widget(
-    callback_context: CallbackContext, llm_response: LlmResponse
-) -> Optional[LlmResponse]:
-    """Save Google Search Widget HTML as an ADK artifact (Google policy compliance)."""
-    metadata = llm_response.grounding_metadata
-    if not metadata:
-        return None
-    if not (
-        metadata.search_entry_point and metadata.search_entry_point.rendered_content
-    ):
-        return None
-    filename = f"search-widget-{int(time.time() * 1000)}.html"
-    await callback_context.save_artifact(
-        filename=filename,
-        artifact=genai_types.Part(
-            inline_data=genai_types.Blob(
-                mime_type="text/html",
-                data=metadata.search_entry_point.rendered_content.encode("utf-8"),
-            )
-        ),
-    )
-    return None
 
 
 _YOUTUBE_URL_RE = re.compile(
@@ -242,7 +226,7 @@ ai_investigator = LlmAgent(
         )
     ),
     before_model_callback=inject_youtube_filedata,
-    after_model_callback=[append_grounding_sources, save_search_widget],
+    after_model_callback=append_grounding_sources,
     instruction="""
     You are an AI Investigator for fact-checking. Search the web and faithfully report
     what search results say — do not draw conclusions or form opinions.
@@ -572,11 +556,34 @@ async def after_tool(
     output. This must happen in a callback because investigator/verifier are
     AgentTools whose return value we cannot otherwise post-process.
 
-    (The article attachmentUrl -> gs:// rewrite lives in get_single_cofacts_article
-    itself, a tool we own and control directly.)
+    For investigator calls, also extracts and strips the `_search_widget_html`
+    field that append_grounding_sources embeds in the JSON. The HTML is saved as
+    a GCS artifact keyed by the tool-call id so the frontend can fetch and display
+    the search-suggestion pills; it must not reach the LLM.
     """
     if tool.name not in ("investigator", "verifier"):
         return None
+
+    if tool.name == "investigator":
+        if isinstance(tool_response, str):
+            try:
+                parsed = json.loads(tool_response)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                html = parsed.pop("_search_widget_html", None)
+                if html and tool_context.function_call_id:
+                    await tool_context.save_artifact(
+                        filename=f"search-widget-{tool_context.function_call_id}.html",
+                        artifact=genai_types.Part(
+                            inline_data=genai_types.Blob(
+                                mime_type="text/html", data=html.encode("utf-8")
+                            )
+                        ),
+                    )
+                return parsed
+        return tool_response
+
     if not isinstance(tool_response, str):
         return None
     try:

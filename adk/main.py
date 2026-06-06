@@ -10,9 +10,12 @@ from cofacts_ai.auth_context import cofacts_token_var
 _agents_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_agents_dir, "cofacts_ai", ".env"))
 
+_gcs_bucket = os.environ.get("GCS_ARTIFACT_BUCKET")
+
 app = get_fast_api_app(
     agents_dir=_agents_dir,
     session_service_uri=os.environ.get("DATABASE_URL"),
+    artifact_service_uri=f"gs://{_gcs_bucket}" if _gcs_bucket else None,
     web=False,
 )
 

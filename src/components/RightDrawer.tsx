@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { SearchSuggestions } from './SearchSuggestions'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
 
@@ -101,7 +102,13 @@ function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
 
   switch (invocation.name) {
     case 'investigator':
-      return <InvestigatorContent args={invocation.args} response={invocation.resp} />
+      return (
+        <InvestigatorContent
+          args={invocation.args}
+          response={invocation.resp}
+          toolCallId={invocation.id}
+        />
+      )
     case 'verifier':
       return <VerifierContent args={invocation.args} response={invocation.resp} />
     case 'proofreader_kmt':
@@ -183,9 +190,11 @@ function SourceCard({ source, index }: { source: ToolSource; index: number }) {
 function InvestigatorContent({
   args,
   response,
+  toolCallId,
 }: {
   args: AllTools['investigator']['args']
   response: AllTools['investigator']['resp'] | null
+  toolCallId: string
 }) {
   const content = response ? ('content' in response ? response.content : response.result) : ''
   const sources = response && 'content' in response ? response.sources : []
@@ -205,6 +214,8 @@ function InvestigatorContent({
           <MarkdownSection content={content} />
         </section>
       )}
+
+      <SearchSuggestions toolCallId={toolCallId} className="overflow-x-auto" />
 
       {sources.length > 0 && (
         <section>
