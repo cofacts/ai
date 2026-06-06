@@ -204,6 +204,28 @@ function SourceCard({ source, index }: { source: ToolSource; index: number }) {
 
 // ── Investigator ─────────────────────────────────────────────────
 
+/**
+ * Google Search suggestion pills for an investigator tool-call. Split out so the
+ * `useSearchWidget` hook only runs once we have a concrete `sessionId`.
+ */
+function InvestigatorSearchWidget({
+  sessionId,
+  toolCallId,
+}: {
+  sessionId: string
+  toolCallId: string
+}) {
+  // The search-widget artifact is only written once the call completes.
+  const searchWidget = useSearchWidget(sessionId, toolCallId)
+  if (!searchWidget) return null
+  return (
+    <section>
+      <SectionLabel>Google 搜尋建議</SectionLabel>
+      <SearchSuggestions html={searchWidget} className="overflow-x-auto" />
+    </section>
+  )
+}
+
 function InvestigatorContent({
   args,
   response,
@@ -221,8 +243,6 @@ function InvestigatorContent({
       : response.result
     : ''
   const sources = response && 'content' in response ? response.sources : []
-  // The search-widget artifact is only written once the call completes.
-  const searchWidget = useSearchWidget(sessionId, toolCallId)
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -240,11 +260,11 @@ function InvestigatorContent({
         </section>
       )}
 
-      {searchWidget && (
-        <section>
-          <SectionLabel>Google 搜尋建議</SectionLabel>
-          <SearchSuggestions html={searchWidget} className="overflow-x-auto" />
-        </section>
+      {sessionId && (
+        <InvestigatorSearchWidget
+          sessionId={sessionId}
+          toolCallId={toolCallId}
+        />
       )}
 
       {sources.length > 0 && (

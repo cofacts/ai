@@ -21,7 +21,7 @@ function InvestigatorBadgePills({
   sessionId,
   toolCallId,
 }: {
-  sessionId?: string
+  sessionId: string
   toolCallId: string
 }) {
   const html = useSearchWidget(sessionId, toolCallId)
@@ -101,7 +101,7 @@ export function AgentMessage({
                   </span>
                   <span>{name}</span>
                 </button>
-                {isInvestigator && id && (
+                {isInvestigator && id && sessionId && (
                   <InvestigatorBadgePills
                     sessionId={sessionId}
                     toolCallId={id}

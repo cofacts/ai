@@ -8,24 +8,20 @@ import { getSearchWidget } from '@/lib/chatSessions.functions'
  * so we wait for the tool-call's response to land (tracked in the chat state's
  * `toolInvocations`) before fetching.
  *
- * Returns `html` as the decoded HTML string, or `null`/`undefined` when there is
- * no widget for this call.
+ * Returns `html` as the decoded HTML string, or `null` when there is no widget
+ * for this call.
  */
-export function useSearchWidget(
-  sessionId: string | undefined,
-  toolCallId: string | undefined,
-) {
-  const { toolInvocations } = useChat({ sessionId: sessionId ?? '' })
-  const invocation = toolCallId ? toolInvocations[toolCallId] : undefined
-  const hasResponse = invocation?.resp != null
+export function useSearchWidget(sessionId: string, toolCallId: string) {
+  const { toolInvocations } = useChat({ sessionId })
+  // The widget artifact is only written once the investigator response lands;
+  // the tool-call id is absent from the map until then.
+  const hasResponse =
+    toolCallId in toolInvocations && toolInvocations[toolCallId].resp != null
 
   const { data } = useQuery({
     queryKey: ['search-widget', sessionId, toolCallId],
-    queryFn: () =>
-      getSearchWidget({
-        data: { sessionId: sessionId!, toolCallId: toolCallId! },
-      }),
-    enabled: hasResponse && !!sessionId && !!toolCallId,
+    queryFn: () => getSearchWidget({ data: { sessionId, toolCallId } }),
+    enabled: hasResponse,
     staleTime: Infinity,
     gcTime: Infinity,
     refetchOnWindowFocus: false,
