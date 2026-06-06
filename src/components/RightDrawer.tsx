@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useParams } from '@tanstack/react-router'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
@@ -11,29 +12,23 @@ interface RightDrawerProps {
   isOpen: boolean
   onClose: () => void
   invocation: ToolInvocation | null
-  sessionId?: string
 }
 
-export function RightDrawer({
-  isOpen,
-  onClose,
-  invocation,
-  sessionId,
-}: RightDrawerProps) {
+export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
   return (
     <>
       {/* Desktop drawer */}
       {isOpen && (
         <aside className="hidden md:flex flex-1 min-w-0 bg-white border-l border-border-subtle flex-col shadow-lg z-10 overflow-hidden [view-transition-name:right-drawer]">
           <DrawerHeader invocation={invocation} onClose={onClose} />
-          <DrawerContent invocation={invocation} sessionId={sessionId} />
+          <DrawerContent invocation={invocation} />
         </aside>
       )}
 
       {/* Mobile bottom sheet */}
       <MobileBottomSheet isOpen={isOpen} onClose={onClose}>
         <DrawerHeader invocation={invocation} onClose={onClose} />
-        <DrawerContent invocation={invocation} sessionId={sessionId} />
+        <DrawerContent invocation={invocation} />
       </MobileBottomSheet>
     </>
   )
@@ -106,13 +101,7 @@ function DrawerHeader({
 
 // ── Content router ───────────────────────────────────────────────
 
-function DrawerContent({
-  invocation,
-  sessionId,
-}: {
-  invocation: ToolInvocation | null
-  sessionId?: string
-}) {
+function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
   if (!invocation) return null
 
   switch (invocation.name) {
@@ -121,7 +110,6 @@ function DrawerContent({
         <InvestigatorContent
           args={invocation.args}
           response={invocation.resp}
-          sessionId={sessionId}
           toolCallId={invocation.id}
         />
       )
@@ -231,14 +219,13 @@ function InvestigatorSearchWidget({
 function InvestigatorContent({
   args,
   response,
-  sessionId,
   toolCallId,
 }: {
   args: AllTools['investigator']['args']
   response: AllTools['investigator']['resp'] | null
-  sessionId?: string
   toolCallId: string
 }) {
+  const { sessionId } = useParams({ strict: false })
   const content = response
     ? 'content' in response
       ? response.content

@@ -27,11 +27,6 @@ function ToolDrawer() {
   const invocation = toolInvocations[toolCallId] ?? null
 
   return (
-    <RightDrawer
-      isOpen={true}
-      onClose={handleClose}
-      invocation={invocation}
-      sessionId={sessionId}
-    />
+    <RightDrawer isOpen={true} onClose={handleClose} invocation={invocation} />
   )
 }
