@@ -26,7 +26,7 @@ import { logout as logoutServerFn } from '@/server/auth.functions'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 import { LoginModal } from '@/components/LoginModal'
 import { AUTH_EXPIRED_EVENT } from './authExpired'
-import { CHAT_CACHE_KEY_PREFIX } from './chatCache'
+import { chatCacheKey } from './chatCache'
 
 export type { CofactsUser }
 
@@ -39,7 +39,7 @@ const ME_QUERY_KEY = ['me'] as const
 export function clearUserScopedCache(queryClient: QueryClient) {
   queryClient.setQueryData(ME_QUERY_KEY, null)
   queryClient.removeQueries({ queryKey: ['sessions'] })
-  queryClient.removeQueries({ queryKey: CHAT_CACHE_KEY_PREFIX })
+  queryClient.removeQueries({ queryKey: chatCacheKey() })
   queryClient.removeQueries({ queryKey: ['feedback'] })
 }
 

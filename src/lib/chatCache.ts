@@ -23,8 +23,11 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   lastReplyDraftId: null,
 }
 
-export const chatCacheKey = (sessionId: string) => ['chat', sessionId] as const
-export const CHAT_CACHE_KEY_PREFIX = ['chat'] as const
+export function chatCacheKey(): readonly ['chat']
+export function chatCacheKey(sessionId: string): readonly ['chat', string]
+export function chatCacheKey(sessionId?: string) {
+  return sessionId ? (['chat', sessionId] as const) : (['chat'] as const)
+}
 
 // Global registry of abort controllers per session to prevent duplicate streams
 export const abortControllers = new Map<string, AbortController>()
