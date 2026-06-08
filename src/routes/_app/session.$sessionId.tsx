@@ -1,4 +1,9 @@
-import { Outlet, createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
+import {
+  Outlet,
+  createFileRoute,
+  useNavigate,
+  useParams,
+} from '@tanstack/react-router'
 import { useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
@@ -12,11 +17,17 @@ export const Route = createFileRoute('/_app/session/$sessionId')({
 
 function SessionPage() {
   const { sessionId } = useParams({ from: '/_app/session/$sessionId' })
-  const { toolCallId } = useParams({ strict: false }) as { toolCallId?: string }
+  const { toolCallId } = useParams({ strict: false })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { messages, isStreaming, error, sendMessage, stopGeneration, lastReplyDraftId } =
-    useChat({ sessionId })
+  const {
+    messages,
+    isStreaming,
+    error,
+    sendMessage,
+    stopGeneration,
+    lastReplyDraftId,
+  } = useChat({ sessionId })
 
   const openedCallIds = useRef<Set<string>>(new Set())
 

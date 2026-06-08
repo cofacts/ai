@@ -1,11 +1,6 @@
-import type { QueryClient } from '@tanstack/react-query'
 import { handleAuthExpired } from './authExpired'
-import type {
-  AdkEvent,
-  AdkSession,
-  ChatMessage,
-  ToolInvocation,
-} from './adk'
+import type { QueryClient } from '@tanstack/react-query'
+import type { AdkEvent, AdkSession, ChatMessage, ToolInvocation } from './adk'
 
 export interface ChatSessionState {
   messages: Array<ChatMessage>
@@ -239,22 +234,39 @@ export function applyEventToState(
       }
     }
     if (part.functionResponse) {
-      const key = part.functionResponse.id ?? part.functionResponse.name
+      let key = part.functionResponse.id
+
+      // Under some circumstances, functionResponse.id might be missing during SSE.
+      // If we only have a name, we attempt to find the last invocation with that name
+      // which does not have a response yet.
+      if (!key && part.functionResponse.name) {
+        const matchingIds = Object.keys(toolInvocations).filter(
+          (id) =>
+            toolInvocations[id].name === part.functionResponse!.name &&
+            !toolInvocations[id].resp,
+        )
+        if (matchingIds.length > 0) {
+          // Pick the last one (most recent)
+          key = matchingIds[matchingIds.length - 1]
+        }
+      }
       if (key && toolInvocations[key]) {
         toolInvocations[key] = {
           ...toolInvocations[key],
-          resp: (part.functionResponse.response ?? null) as ToolInvocation['resp'],
+          resp: (part.functionResponse.response ??
+            null) as ToolInvocation['resp'],
         } as ToolInvocation
       }
     }
   }
 
   // Exclude function response parts from chat messages
-  const eventParts = event.content.parts.filter(p => !p.functionResponse)
+  const eventParts = event.content.parts.filter((p) => !p.functionResponse)
 
   if (event.content.role === 'user') {
     // Don't insert user message if it's just function responses
-    if (eventParts.length === 0) return { ...prev, toolInvocations, lastReplyDraftId }
+    if (eventParts.length === 0)
+      return { ...prev, toolInvocations, lastReplyDraftId }
 
     // event is user message, just append message
     return {
@@ -279,7 +291,8 @@ export function applyEventToState(
   // Agent parts (text & tool calls)
   if (event.content.role === 'model') {
     const last = messages[messages.length - 1]
-    const isLastStillStreaming = last?.role === 'model' &&
+    const isLastStillStreaming =
+      last?.role === 'model' &&
       last?.isStreaming &&
       (last?.author || 'writer') === (event.author || 'writer')
 
@@ -293,7 +306,9 @@ export function applyEventToState(
           parts: [...eventParts],
           isStreaming: event.partial !== false,
           timestamp: new Date(),
-          langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as string | undefined,
+          langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as
+            | string
+            | undefined,
         },
       ]
     } else if (!event.partial) {
@@ -376,8 +391,11 @@ function processEventIntoCache(
   sessionId: string,
   event: AdkEvent,
 ) {
-  queryClient.setQueryData<ChatSessionState>(chatCacheKey(sessionId), (prev) => {
-    if (!prev) return INITIAL_CHAT_STATE
-    return applyEventToState(prev, event)
-  })
+  queryClient.setQueryData<ChatSessionState>(
+    chatCacheKey(sessionId),
+    (prev) => {
+      if (!prev) return INITIAL_CHAT_STATE
+      return applyEventToState(prev, event)
+    },
+  )
 }

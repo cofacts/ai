@@ -12,11 +12,11 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getCookie } from '@tanstack/react-start/server'
 
-import { cofactsExec } from '@/lib/cofactsExec'
 import { graphql } from './gql'
-import type { GetCurrentUserQuery } from './gql/graphql'
 import { verifySessionToken } from './jwt'
 import { SESSION_COOKIE_NAME } from './sessionCookie'
+import type { GetCurrentUserQuery } from './gql/graphql'
+import { cofactsExec } from '@/lib/cofactsExec'
 
 export type CofactsUser = NonNullable<GetCurrentUserQuery['GetUser']>
 

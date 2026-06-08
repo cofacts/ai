@@ -81,7 +81,10 @@ export function AgentMessage({
                   <span>{name}</span>
                 </button>
                 {isInvestigator && id && (
-                  <SearchSuggestions toolCallId={id} className="flex-1 min-w-0 overflow-x-auto" />
+                  <SearchSuggestions
+                    toolCallId={id}
+                    className="flex-1 min-w-0 overflow-x-auto"
+                  />
                 )}
               </div>
             )

@@ -291,14 +291,22 @@
   animation: slide-in-from-bottom 0.3s ease both;
 }
 @keyframes slide-out-to-right {
-  to { transform: translateX(100%); }
+  to {
+    transform: translateX(100%);
+  }
 }
 @keyframes slide-in-from-right {
-  from { transform: translateX(100%); }
+  from {
+    transform: translateX(100%);
+  }
 }
 @keyframes slide-out-to-bottom {
-  to { transform: translateY(100%); }
+  to {
+    transform: translateY(100%);
+  }
 }
 @keyframes slide-in-from-bottom {
-  from { transform: translateY(100%); }
+  from {
+    transform: translateY(100%);
+  }
 }

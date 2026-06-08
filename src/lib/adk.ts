@@ -74,7 +74,10 @@ export type AllTools = {
   proofreader_kmt: { args: { request?: string }; resp: { result: string } }
   proofreader_dpp: { args: { request?: string }; resp: { result: string } }
   proofreader_tpp: { args: { request?: string }; resp: { result: string } }
-  proofreader_minor_parties: { args: { request?: string }; resp: { result: string } }
+  proofreader_minor_parties: {
+    args: { request?: string }
+    resp: { result: string }
+  }
   draft_factcheck_response: {
     args: {
       classification?: string
@@ -180,4 +183,3 @@ export type ToolInvocation = {
     resp: AllTools[K]['resp'] | null
   }
 }[keyof AllTools]
-

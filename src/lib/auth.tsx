@@ -20,13 +20,13 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import { AUTH_EXPIRED_EVENT } from './authExpired'
+import { CHAT_CACHE_KEY_PREFIX } from './chatCache'
 import type { QueryClient } from '@tanstack/react-query'
 import type { CofactsUser } from '@/server/me.functions'
 import { logout as logoutServerFn } from '@/server/auth.functions'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 import { LoginModal } from '@/components/LoginModal'
-import { AUTH_EXPIRED_EVENT } from './authExpired'
-import { CHAT_CACHE_KEY_PREFIX } from './chatCache'
 
 export type { CofactsUser }
 

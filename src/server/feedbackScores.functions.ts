@@ -32,9 +32,7 @@ export function normalizeValue(raw: number | undefined): 1 | -1 | null {
   return null
 }
 
-export function pickLatest(
-  scores: Array<LangfuseScore>,
-): LangfuseScore | null {
+export function pickLatest(scores: Array<LangfuseScore>): LangfuseScore | null {
   return scores.reduce<LangfuseScore | null>((acc, score) => {
     if (!acc) return score
     const accTime = acc.updatedAt ?? acc.createdAt ?? ''

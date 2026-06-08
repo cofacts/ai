@@ -6,7 +6,6 @@ Each Article may have multiple ArticleReplies (fact-check responses from collabo
 and ReplyRequests (additional context provided by reporters or collaborators).
 """
 
-import asyncio
 import json
 import os
 from typing import Any, Dict, List, Optional
@@ -300,7 +299,7 @@ async def search_cofacts_database(
 
         list_articles = result["data"]["ListArticles"]
         for edge in list_articles.get("edges") or []:
-            article = (edge.get("node") or {})
+            article = edge.get("node") or {}
             url = article.get("attachmentUrl")
             if url:
                 article["attachmentUrl"] = signed_url_to_gs(url) or url
@@ -356,7 +355,7 @@ async def get_single_cofacts_article(
         article = result["data"]["GetArticle"]
         if not article:
             return {
-                "error": f"Article not found",
+                "error": "Article not found",
                 "article_id": article_id,
             }
 
@@ -367,7 +366,9 @@ async def get_single_cofacts_article(
         # (e.g. already gs://), in which case we keep the original unchanged.
         attachment_url = article.get("attachmentUrl")
         if attachment_url:
-            article["attachmentUrl"] = signed_url_to_gs(attachment_url) or attachment_url
+            article["attachmentUrl"] = (
+                signed_url_to_gs(attachment_url) or attachment_url
+            )
 
         return {
             "article_id": article_id,
@@ -402,20 +403,6 @@ async def submit_cofacts_reply(
     try:
         # Note: This requires authentication with Cofacts API
         # You'll need to implement proper OAuth or API key authentication
-
-        graphql_mutation = """
-        mutation CreateReply($text: String!, $type: ReplyTypeEnum!, $reference: String!) {
-          CreateReply(text: $text, type: $type, reference: $reference) {
-            id
-            text
-            type
-            reference
-            createdAt
-          }
-        }
-        """
-
-        variables = {"text": text, "type": reply_type, "reference": reference}
 
         # This is a placeholder - you'll need to implement proper authentication
         return {
@@ -570,7 +557,8 @@ def draft_factcheck_response(
                 "text": (
                     "These source_url values are not present in references. Add each source "
                     "(URL + one-line summary) to references so the citation is visible, then "
-                    "call draft_factcheck_response again: " + "; ".join(not_in_references)
+                    "call draft_factcheck_response again: "
+                    + "; ".join(not_in_references)
                 ),
             }
 

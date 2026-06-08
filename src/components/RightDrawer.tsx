@@ -80,7 +80,9 @@ function DrawerHeader({
             className="text-gray-400 hover:text-gray-600 transition-colors"
             aria-label="在 Cofacts 查看"
           >
-            <span className="material-symbols-outlined text-xl">open_in_new</span>
+            <span className="material-symbols-outlined text-xl">
+              open_in_new
+            </span>
           </a>
         )}
         <button
@@ -110,12 +112,16 @@ function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
         />
       )
     case 'verifier':
-      return <VerifierContent args={invocation.args} response={invocation.resp} />
+      return (
+        <VerifierContent args={invocation.args} response={invocation.resp} />
+      )
     case 'proofreader_kmt':
     case 'proofreader_dpp':
     case 'proofreader_tpp':
     case 'proofreader_minor_parties':
-      return <ProofreaderContent args={invocation.args} response={invocation.resp} />
+      return (
+        <ProofreaderContent args={invocation.args} response={invocation.resp} />
+      )
     case 'draft_factcheck_response':
       return <DraftFactcheckContent args={invocation.args} />
     case 'get_single_cofacts_article':
@@ -150,7 +156,6 @@ function MarkdownSection({ content }: { content: string }) {
     </div>
   )
 }
-
 
 function SourceCard({ source, index }: { source: ToolSource; index: number }) {
   const domain = source.url
@@ -196,7 +201,11 @@ function InvestigatorContent({
   response: AllTools['investigator']['resp'] | null
   toolCallId: string
 }) {
-  const content = response ? ('content' in response ? response.content : response.result) : ''
+  const content = response
+    ? 'content' in response
+      ? response.content
+      : response.result
+    : ''
   const sources = response && 'content' in response ? response.sources : []
 
   return (
@@ -244,7 +253,11 @@ function VerifierContent({
   args: AllTools['verifier']['args']
   response: AllTools['verifier']['resp'] | null
 }) {
-  const content = response ? ('content' in response ? response.content : response.result) : ''
+  const content = response
+    ? 'content' in response
+      ? response.content
+      : response.result
+    : ''
   const sources = response && 'content' in response ? response.sources : []
 
   return (
@@ -543,13 +556,17 @@ function CofactsArticleContent({
 }) {
   if (!response) {
     return (
-      <p className="text-sm text-gray-400 text-center pt-8 p-4">等待資料載入…</p>
+      <p className="text-sm text-gray-400 text-center pt-8 p-4">
+        等待資料載入…
+      </p>
     )
   }
 
   if (response.error) {
     return (
-      <p className="text-sm text-red-400 text-center pt-8 p-4">{response.error}</p>
+      <p className="text-sm text-red-400 text-center pt-8 p-4">
+        {response.error}
+      </p>
     )
   }
 
@@ -565,11 +582,14 @@ function CofactsArticleContent({
     (sum, s) => sum + s.lineVisit + s.webVisit + s.downstreamBotVisits,
     0,
   )
-  const formattedDate = new Date(article.createdAt).toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
+  const formattedDate = new Date(article.createdAt).toLocaleDateString(
+    'zh-TW',
+    {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    },
+  )
   const relatedEdges = article.relatedArticles.edges
 
   return (
@@ -600,12 +620,16 @@ function CofactsArticleContent({
         <SectionLabel>統計</SectionLabel>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-600">
           <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-sm">calendar_today</span>
+            <span className="material-symbols-outlined text-sm">
+              calendar_today
+            </span>
             初次回報：{formattedDate}
           </span>
           {totalVisits > 0 && (
             <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">trending_up</span>
+              <span className="material-symbols-outlined text-sm">
+                trending_up
+              </span>
               近 90 天 {totalVisits.toLocaleString()} 次造訪
             </span>
           )}
@@ -649,11 +673,15 @@ function CofactsArticleContent({
                   <div className="flex items-center gap-2 text-xs text-gray-400">
                     <span>{ar.reply.user.name}</span>
                     <span className="flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-xs">thumb_up</span>
+                      <span className="material-symbols-outlined text-xs">
+                        thumb_up
+                      </span>
                       {ar.helpfulCount}
                     </span>
                     <span className="flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-xs">thumb_down</span>
+                      <span className="material-symbols-outlined text-xs">
+                        thumb_down
+                      </span>
                       {ar.unhelpfulCount}
                     </span>
                   </div>

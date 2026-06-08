@@ -38,9 +38,8 @@ class RootSessionSpanProcessor(SpanProcessor):
         parent_attrs = getattr(parent, "attributes", None) or {}
 
         # Prefer langfuse.session.id (already corrected) over session.id (may be wrong)
-        session = (
-            parent_attrs.get(_LANGFUSE_SESSION_ID_ATTR)
-            or parent_attrs.get(_SESSION_ID_ATTR)
+        session = parent_attrs.get(_LANGFUSE_SESSION_ID_ATTR) or parent_attrs.get(
+            _SESSION_ID_ATTR
         )
 
         if session is None:

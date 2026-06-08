@@ -14,7 +14,7 @@ import logging
 import re
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
@@ -37,7 +37,6 @@ from .tools import (
     get_single_cofacts_article,
     resolve_vertex_redirect,
     search_cofacts_database,
-    submit_cofacts_reply,
 )
 
 load_dotenv()
@@ -129,10 +128,7 @@ async def append_grounding_sources(
     # and strip it before the LLM sees the tool result. Using the response (not
     # state) avoids any DB writes: temp: state is stripped by AgentTool before
     # forwarding, and non-temp: state would pollute the session the list loads.
-    if (
-        metadata.search_entry_point
-        and metadata.search_entry_point.rendered_content
-    ):
+    if metadata.search_entry_point and metadata.search_entry_point.rendered_content:
         response_dict["_search_widget_html"] = (
             metadata.search_entry_point.rendered_content
         )

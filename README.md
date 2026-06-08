@@ -19,7 +19,7 @@ This is the web application for [Cofacts.ai](https://cofacts.ai), a chat-based A
 pnpm install
 ```
 
-> **Note:** This will *not* install Python dependencies. You must run the next step manually.
+> **Note:** This will _not_ install Python dependencies. You must run the next step manually.
 
 2. Install Python dependencies for the ADK agent:
 
@@ -44,15 +44,19 @@ gcloud auth application-default login
 4. Set up environment variables:
 
 For the ADK backend agent:
+
 ```bash
 cp adk/cofacts_ai/.env.example adk/cofacts_ai/.env
 ```
+
 Edit `adk/cofacts_ai/.env` and fill in the required values.
 
 For the frontend UI (Vite / TanStack Start):
+
 ```bash
 cp .env.example .env
 ```
+
 Edit `.env` to configure your browser-safe variables (e.g. Langfuse keys).
 
 5. Start the development server:
@@ -117,6 +121,7 @@ docker compose up --build
 ```
 
 This will:
+
 - Build the **frontend** image from the root `Dockerfile`
 - Build the **backend** image from `adk/Dockerfile`
 - Start both containers, with the frontend waiting for the backend to be healthy
@@ -130,11 +135,13 @@ docker compose down
 ```
 
 ### Staging Environment
+
 - **Trigger**: Every push or merge to the `master` branch.
 - **URL**: cofacts-ai-236494820908.asia-east1.run.app .
 - **Traffic**: The `master` version always receives 100% of the traffic.
 
 ### PR Previews
+
 - **Trigger**: Every Pull Request (opened or updated).
 - **Behavior**: A dedicated revision is created for each PR with a unique tag.
 - **URL**: You can find the preview URL in the GitHub PR comments or the "Deployments" section of the PR sidebar.

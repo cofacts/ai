@@ -10,9 +10,9 @@
 // Server-only: depends on h3's getCookie via @tanstack/react-start/server. Do
 // not import from client code.
 
-import type { TypedDocumentNode } from '@graphql-typed-document-node/core'
 import { getCookie } from '@tanstack/react-start/server'
 import { print } from 'graphql'
+import type { TypedDocumentNode } from '@graphql-typed-document-node/core'
 
 import { getApiBase } from '@/server/api-base'
 import { SESSION_COOKIE_NAME } from '@/server/sessionCookie'

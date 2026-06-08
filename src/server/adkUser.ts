@@ -9,9 +9,9 @@
 
 import { getCookie } from '@tanstack/react-start/server'
 
-import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
 import { SESSION_COOKIE_NAME } from './sessionCookie'
 import { verifySessionToken } from './jwt'
+import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
 
 export async function resolveAdkUserIdOrThrow(): Promise<string> {
   const token = getCookie(SESSION_COOKIE_NAME)
