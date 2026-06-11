@@ -293,7 +293,7 @@ export function applyEventToState(
           id: genId(),
           role: 'model',
           author: event.author || 'writer',
-          parts: [...eventParts],
+          parts: eventParts.filter(p => !p.functionCall),
           isStreaming: event.partial !== false,
           timestamp: new Date(),
           langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as string | undefined,
