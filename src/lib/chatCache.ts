@@ -226,6 +226,10 @@ export function applyEventToState(
   let lastReplyDraftId = prev.lastReplyDraftId
 
   for (const part of event.content.parts) {
+    // Skip partial events: ADK assigns a fresh adk-<uuid> to every event via
+    // populate_client_function_call_id(), so partial and complete events get
+    // different IDs for the same call. Only the complete event's ID matches the
+    // session history and the incoming functionResponse.
     if (part.functionCall?.id && event.partial !== true) {
       const { id, name, args } = part.functionCall
       if (id && name) {
@@ -293,6 +297,9 @@ export function applyEventToState(
           id: genId(),
           role: 'model',
           author: event.author || 'writer',
+          // Exclude functionCall parts: they carry ephemeral adk-<uuid> IDs that
+          // differ from the canonical ID on the complete (partial: false) event.
+          // Badges are added once on the complete event so only canonical IDs appear.
           parts: eventParts.filter(p => !p.functionCall),
           isStreaming: event.partial !== false,
           timestamp: new Date(),
@@ -322,7 +329,7 @@ export function applyEventToState(
 
       for (const part of eventParts) {
         if (!part.text) {
-          if (part.functionCall) continue // skip — wait for canonical ID on complete event
+          if (part.functionCall) continue // ephemeral ID; canonical version added on complete event
           updatedParts.push({ ...part })
           continue
         }
