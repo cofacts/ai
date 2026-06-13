@@ -50,12 +50,16 @@ export function ChatInput({
 
   const handleFilesPicked = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const picked = e.target.files
-      if (picked && picked.length > 0) {
-        setFiles((prev) => [...prev, ...Array.from(picked)])
-      }
+      // Materialize into a plain array synchronously: e.target.files is a live
+      // FileList that e.target.value = '' empties, and the setFiles updater runs
+      // later (during render), so reading it inside the updater would lose the
+      // selection.
+      const picked = e.target.files ? Array.from(e.target.files) : []
       // Reset so picking the same file again re-fires onChange.
       e.target.value = ''
+      if (picked.length > 0) {
+        setFiles((prev) => [...prev, ...picked])
+      }
     },
     [],
   )
