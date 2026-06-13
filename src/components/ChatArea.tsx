@@ -8,7 +8,7 @@ import type { ChatMessage } from '@/lib/adk'
 interface ChatAreaProps {
   messages: Array<ChatMessage>
   isStreaming: boolean
-  onSendMessage: (text: string) => void
+  onSendMessage: (text: string, files: Array<File>) => void
   onStop?: () => void
   sessionId?: string
   focusedToolCallId?: string | null

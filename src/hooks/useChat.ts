@@ -49,8 +49,8 @@ export function useChat({ sessionId }: UseChatOptions) {
    * This immediately updates the global cache.
    */
   const sendMessage = useCallback(
-    (text: string) => {
-      sendChatMessage(queryClient, sessionId, text)
+    (text: string, files: Array<File> = []) => {
+      sendChatMessage(queryClient, sessionId, text, files)
     },
     [queryClient, sessionId],
   )

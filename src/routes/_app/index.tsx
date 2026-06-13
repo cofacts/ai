@@ -15,15 +15,17 @@ function LandingPage() {
   const queryClient = useQueryClient()
 
   const sendMutation = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async ({ text, files }: { text: string; files: Array<File> }) => {
       const sessionId = crypto.randomUUID()
-      const title = text.length > 40 ? text.slice(0, 40) + '...' : text
+      const titleSource = text || files[0]?.name || '附件'
+      const title =
+        titleSource.length > 40 ? titleSource.slice(0, 40) + '...' : titleSource
       await createSession({ data: { sessionId, name: title } })
-      return { sessionId, text }
+      return { sessionId, text, files }
     },
-    onSuccess: ({ sessionId, text }) => {
+    onSuccess: ({ sessionId, text, files }) => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      sendChatMessage(queryClient, sessionId, text)
+      sendChatMessage(queryClient, sessionId, text, files)
       navigate({ to: '/session/$sessionId', params: { sessionId } })
     },
   })
@@ -40,7 +42,7 @@ function LandingPage() {
   return (
     <WelcomeHero>
       <ChatInput
-        onSend={(text) => sendMutation.mutate(text)}
+        onSend={(text, files) => sendMutation.mutate({ text, files })}
         disabled={sendMutation.isPending}
         placeholder="貼上想查核的訊息，或輸入 Cofacts 文章連結 (https://cofacts.tw/article/...)..."
       />

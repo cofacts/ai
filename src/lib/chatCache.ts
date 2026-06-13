@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { handleAuthExpired } from './authExpired'
 import type {
   AdkEvent,
+  AdkPart,
   AdkSession,
   ChatMessage,
   ToolInvocation,
@@ -39,8 +40,31 @@ export interface StartStreamOptions {
   queryClient: QueryClient
   sessionId: string
   payload?: {
-    newMessage?: { role: string; parts: Array<{ text: string }> }
+    newMessage?: { role: string; parts: Array<AdkPart> }
     invocationId?: string
+  }
+}
+
+/**
+ * Reads a browser File into an ADK inline-data part (base64).
+ *
+ * Conversion happens here — as late as possible, right before the message is
+ * sent — so the composer only ever holds native File objects, not large base64
+ * strings. The backend's SaveFilesAsArtifactsPlugin turns this inline data into
+ * a gs:// fileData reference in the artifact store.
+ */
+export async function fileToInlineDataPart(file: File): Promise<AdkPart> {
+  const buffer = await file.arrayBuffer()
+  let binary = ''
+  for (const byte of new Uint8Array(buffer)) {
+    binary += String.fromCharCode(byte)
+  }
+  return {
+    inlineData: {
+      data: btoa(binary),
+      mimeType: file.type || 'application/octet-stream',
+      displayName: file.name,
+    },
   }
 }
 
@@ -166,13 +190,25 @@ export async function startChatStream({
 /**
  * Sends a message from the user, updating the cache immediately
  * and triggering the background SSE stream.
+ *
+ * Attachments are passed as native File objects and converted to base64
+ * inline-data parts here, just before sending.
  */
-export function sendChatMessage(
+export async function sendChatMessage(
   queryClient: QueryClient,
   sessionId: string,
   text: string,
+  files: Array<File> = [],
 ) {
   const queryKey = chatCacheKey(sessionId)
+
+  // Build the message parts: text first (when present), then one inline-data
+  // part per attachment.
+  const parts: Array<AdkPart> = []
+  if (text) parts.push({ text })
+  if (files.length > 0) {
+    parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
+  }
 
   if (!queryClient.getQueryData(queryKey)) {
     queryClient.setQueryData(queryKey, INITIAL_CHAT_STATE)
@@ -189,7 +225,7 @@ export function sendChatMessage(
           id: genId(),
           role: 'user',
           author: 'user',
-          parts: [{ text }],
+          parts,
           timestamp: new Date(),
         },
       ],
@@ -203,7 +239,7 @@ export function sendChatMessage(
     payload: {
       newMessage: {
         role: 'user',
-        parts: [{ text }],
+        parts,
       },
     },
   })

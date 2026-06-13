@@ -22,6 +22,9 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.apps import App
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
+from google.adk.plugins.save_files_as_artifacts_plugin import (
+    SaveFilesAsArtifactsPlugin,
+)
 from google.adk.tools import google_search, url_context
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.base_tool import BaseTool
@@ -799,5 +802,5 @@ ai_writer = LlmAgent(
 app = App(
     name="cofacts_ai",
     root_agent=ai_writer,
-    plugins=[LangfuseTracingPlugin()],
+    plugins=[LangfuseTracingPlugin(), SaveFilesAsArtifactsPlugin()],
 )
