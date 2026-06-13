@@ -53,19 +53,26 @@ export interface StartStreamOptions {
  * strings. The backend's SaveFilesAsArtifactsPlugin turns this inline data into
  * a gs:// fileData reference in the artifact store.
  */
-export async function fileToInlineDataPart(file: File): Promise<AdkPart> {
-  const buffer = await file.arrayBuffer()
-  let binary = ''
-  for (const byte of new Uint8Array(buffer)) {
-    binary += String.fromCharCode(byte)
-  }
-  return {
-    inlineData: {
-      data: btoa(binary),
-      mimeType: file.type || 'application/octet-stream',
-      displayName: file.name,
-    },
-  }
+export function fileToInlineDataPart(file: File): Promise<AdkPart> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      // readAsDataURL yields "data:<mime>;base64,<data>" — strip the prefix to
+      // keep just the base64 payload. The browser does the encoding natively
+      // and asynchronously, avoiding a UI-blocking byte-by-byte loop on large
+      // files.
+      const result = reader.result as string
+      resolve({
+        inlineData: {
+          data: result.slice(result.indexOf(',') + 1),
+          mimeType: file.type || 'application/octet-stream',
+          displayName: file.name,
+        },
+      })
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
 }
 
 /**
