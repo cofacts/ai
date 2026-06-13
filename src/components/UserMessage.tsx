@@ -6,6 +6,12 @@ interface UserMessageProps {
   message: ChatMessage
 }
 
+/**
+ * SaveFilesAsArtifactsPlugin inserts a standalone text part whose entire
+ * content is this placeholder — the file is already shown via AttachmentPart.
+ */
+const ARTIFACT_PLACEHOLDER = /^\[Uploaded Artifact: ".*"\]$/
+
 /** A non-image attachment shown as a labelled file chip. */
 function FileChip({ name, mimeType }: { name: string; mimeType?: string | null }) {
   return (
@@ -58,6 +64,7 @@ export function UserMessage({ message }: UserMessageProps) {
       <div className="bg-bubble-user p-4 rounded-2xl rounded-tr-none max-w-[85%] md:max-w-[70%] text-text-main border border-gray-100 shadow-sm flex flex-col gap-2">
         {message.parts?.map((part, i) => {
           if (part.text) {
+            if (ARTIFACT_PLACEHOLDER.test(part.text.trim())) return null
             return (
               <div key={i} className="prose prose-sm max-w-none prose-p:my-0">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
