@@ -18,7 +18,7 @@ export interface ChatSessionState {
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
   messages: [],
-  isStreaming: false,
+  isStreaming: true,
   error: null,
   toolInvocations: {},
   lastReplyDraftId: null,
@@ -209,16 +209,21 @@ export async function sendChatMessage(
 ) {
   const queryKey = chatCacheKey(sessionId)
 
+  // Set isStreaming:true before any async work so that components mounting
+  // during file reading (e.g. after navigate()) don't see isStreaming:false
+  // and trigger other state changes like markSessionOpened.
+  queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => ({
+    ...(prev ?? INITIAL_CHAT_STATE),
+    isStreaming: true,
+    error: null,
+  }))
+
   // Build the message parts: text first (when present), then one inline-data
   // part per attachment.
   const parts: Array<AdkPart> = []
   if (text) parts.push({ text })
   if (files.length > 0) {
     parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
-  }
-
-  if (!queryClient.getQueryData(queryKey)) {
-    queryClient.setQueryData(queryKey, INITIAL_CHAT_STATE)
   }
 
   // Add user message to state
@@ -293,18 +298,20 @@ export function applyEventToState(
       if (key && toolInvocations[key]) {
         toolInvocations[key] = {
           ...toolInvocations[key],
-          resp: (part.functionResponse.response ?? null) as ToolInvocation['resp'],
+          resp: (part.functionResponse.response ??
+            null) as ToolInvocation['resp'],
         } as ToolInvocation
       }
     }
   }
 
   // Exclude function response parts from chat messages
-  const eventParts = event.content.parts.filter(p => !p.functionResponse)
+  const eventParts = event.content.parts.filter((p) => !p.functionResponse)
 
   if (event.content.role === 'user') {
     // Don't insert user message if it's just function responses
-    if (eventParts.length === 0) return { ...prev, toolInvocations, lastReplyDraftId }
+    if (eventParts.length === 0)
+      return { ...prev, toolInvocations, lastReplyDraftId }
 
     // event is user message, just append message
     return {
@@ -329,7 +336,8 @@ export function applyEventToState(
   // Agent parts (text & tool calls)
   if (event.content.role === 'model') {
     const last = messages[messages.length - 1]
-    const isLastStillStreaming = last?.role === 'model' &&
+    const isLastStillStreaming =
+      last?.role === 'model' &&
       last?.isStreaming &&
       (last?.author || 'writer') === (event.author || 'writer')
 
@@ -343,12 +351,15 @@ export function applyEventToState(
           // Partial events carry ephemeral adk-<uuid> IDs; exclude functionCall parts and
           // wait for the canonical IDs from the complete event (handled in else-if branch).
           // Complete events (including history replay) already have canonical IDs — include all.
-          parts: event.partial === true
-            ? eventParts.filter(p => !p.functionCall)
-            : eventParts,
+          parts:
+            event.partial === true
+              ? eventParts.filter((p) => !p.functionCall)
+              : eventParts,
           isStreaming: event.partial === true,
           timestamp: new Date(),
-          langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as string | undefined,
+          langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as
+            | string
+            | undefined,
         },
       ]
     } else if (!event.partial) {
@@ -357,7 +368,7 @@ export function applyEventToState(
       // The streaming content was appended to the last message in previous iterations.
       // We also append any functionCall parts now: we skipped them during partial events
       // so that only the canonical adk-<uuid> IDs (from this complete event) are used.
-      const canonicalFCParts = eventParts.filter(p => p.functionCall)
+      const canonicalFCParts = eventParts.filter((p) => p.functionCall)
       const updatedParts = [...(last.parts ?? []), ...canonicalFCParts]
 
       messages = [
@@ -435,8 +446,11 @@ function processEventIntoCache(
   sessionId: string,
   event: AdkEvent,
 ) {
-  queryClient.setQueryData<ChatSessionState>(chatCacheKey(sessionId), (prev) => {
-    if (!prev) return INITIAL_CHAT_STATE
-    return applyEventToState(prev, event)
-  })
+  queryClient.setQueryData<ChatSessionState>(
+    chatCacheKey(sessionId),
+    (prev) => {
+      if (!prev) return INITIAL_CHAT_STATE
+      return applyEventToState(prev, event)
+    },
+  )
 }
