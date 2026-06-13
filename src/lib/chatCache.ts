@@ -18,7 +18,7 @@ export interface ChatSessionState {
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
   messages: [],
-  isStreaming: true,
+  isStreaming: false,
   error: null,
   toolInvocations: {},
   lastReplyDraftId: null,
