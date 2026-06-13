@@ -297,11 +297,13 @@ export function applyEventToState(
           id: genId(),
           role: 'model',
           author: event.author || 'writer',
-          // Exclude functionCall parts: they carry ephemeral adk-<uuid> IDs that
-          // differ from the canonical ID on the complete (partial: false) event.
-          // Badges are added once on the complete event so only canonical IDs appear.
-          parts: eventParts.filter(p => !p.functionCall),
-          isStreaming: event.partial !== false,
+          // Partial events carry ephemeral adk-<uuid> IDs; exclude functionCall parts and
+          // wait for the canonical IDs from the complete event (handled in else-if branch).
+          // Complete events (including history replay) already have canonical IDs — include all.
+          parts: event.partial === true
+            ? eventParts.filter(p => !p.functionCall)
+            : eventParts,
+          isStreaming: event.partial === true,
           timestamp: new Date(),
           langfuseTraceId: event.customMetadata?.['langfuse_trace_id'] as string | undefined,
         },
