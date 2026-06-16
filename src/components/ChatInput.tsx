@@ -30,6 +30,7 @@ export function ChatInput({
   const [files, setFiles] = useState<Array<File>>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const pasteCounter = useRef(0)
 
   // Auto-resize textarea
   useEffect(() => {
@@ -64,6 +65,24 @@ export function ChatInput({
     [],
   )
 
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const imageFiles = Array.from(e.clipboardData.items)
+        .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+        .map((item) => {
+          const file = item.getAsFile()!
+          pasteCounter.current += 1
+          return new File([file], `Pasted image ${pasteCounter.current}`, {
+            type: file.type,
+          })
+        })
+      if (imageFiles.length > 0) {
+        setFiles((prev) => [...prev, ...imageFiles])
+      }
+    },
+    [],
+  )
+
   const removeFile = useCallback((index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }, [])
@@ -92,6 +111,7 @@ export function ChatInput({
           ref={textareaRef}
           value={value}
           onChange={(e) => handleChange(e.target.value)}
+          onPaste={handlePaste}
           onKeyDown={(e) => {
             if (
               e.key === 'Enter' &&
