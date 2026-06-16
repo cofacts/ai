@@ -67,17 +67,26 @@ export function ChatInput({
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-      const imageFiles = Array.from(e.clipboardData.items)
-        .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
-        .map((item) => {
-          const file = item.getAsFile()!
-          pasteCounter.current += 1
-          return new File([file], `Pasted image ${pasteCounter.current}`, {
-            type: file.type,
-          })
-        })
+      const imageFiles: File[] = []
+      for (const item of Array.from(e.clipboardData.items)) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) {
+            pasteCounter.current += 1
+            const ext = file.type.split('/')[1] || 'png'
+            imageFiles.push(
+              new File(
+                [file],
+                `Pasted image ${pasteCounter.current}.${ext}`,
+                { type: file.type },
+              ),
+            )
+          }
+        }
+      }
       if (imageFiles.length > 0) {
         setFiles((prev) => [...prev, ...imageFiles])
+        e.preventDefault()
       }
     },
     [],
