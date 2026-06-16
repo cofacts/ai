@@ -28,6 +28,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const [value, setValue] = useState(() => drafts.get(sessionId) ?? '')
   const [files, setFiles] = useState<Array<File>>([])
+  const [isDragging, setIsDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -68,6 +69,35 @@ export function ChatInput({
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }, [])
 
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (disabled || isStreaming) return
+      if (!e.dataTransfer.types.includes('Files')) return
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragging(true)
+    },
+    [disabled, isStreaming],
+  )
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (!(e.currentTarget as Element).contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragging(false)
+      if (disabled || isStreaming) return
+      const dropped = Array.from(e.dataTransfer.files)
+      if (dropped.length > 0) setFiles((prev) => [...prev, ...dropped])
+    },
+    [disabled, isStreaming],
+  )
+
   useBlocker({
     shouldBlockFn: () => false,
     enableBeforeUnload: () =>
@@ -86,7 +116,21 @@ export function ChatInput({
 
   return (
     <div className="px-3 md:px-4 pb-3 md:pb-4 pt-2 bg-white shrink-0 z-10">
-      <div className="rounded-xl shadow-sm border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-primary focus-within:border-primary transition-all">
+      <div
+        className={`relative rounded-xl shadow-sm border bg-white focus-within:ring-2 focus-within:ring-primary focus-within:border-primary transition-all ${isDragging ? 'border-primary ring-2 ring-primary' : 'border-gray-300'}`}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDragging && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl bg-white/90 pointer-events-none">
+            <span className="material-symbols-outlined text-3xl text-primary">
+              upload_file
+            </span>
+            <span className="text-sm text-primary font-medium">放開以附加檔案</span>
+          </div>
+        )}
         {/* Row 1: text input */}
         <textarea
           ref={textareaRef}
