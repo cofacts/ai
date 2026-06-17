@@ -21,3 +21,6 @@ cofacts.ai_ui_mockup
 .claude
 .gemini/
 gha-creds-*.json
+
+# E2E test auth state (contains OAuth cookies — never commit)
+tests/e2e/auth/*.json

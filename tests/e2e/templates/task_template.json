@@ -1,0 +1,25 @@
+{
+  "_comment": "Webwright task template for cofacts/ai. Copy & fill in per-feature fields.",
+  "start_url": "http://localhost:3000/",
+  "auth_state": "tests/e2e/auth/auth_state.json",
+  "output_dir": "tests/e2e/generated_scripts/",
+  "context_hints": {
+    "routing": "TanStack Start file-based routing. URLs are /chat, /profile, /settings, etc.",
+    "api": "Backend is FastAPI (ADK) at http://localhost:8000. Frontend uses streaming SSE for chat responses.",
+    "streaming_signal": "ADK response is finished when the element with data-testid='assistant-message' no longer contains a spinner or loading class.",
+    "auth": "Google OAuth via NextAuth-compatible session cookie. Storage state is pre-loaded from auth_state_path."
+  },
+  "task_template": "載入 {auth_state} 的登入狀態。進入首頁後，{user_action}，靈活等待直到後端 ADK Agent 的 Vertex AI 結構化回應渲染完成（最多 {timeout_seconds} 秒），確認畫面沒有崩潰或錯誤訊息。",
+  "example_tasks": [
+    {
+      "task_id": "test_chat_stream",
+      "user_action": "輸入謠言「喝冰水會中風」並點擊發送",
+      "timeout_seconds": 30
+    },
+    {
+      "task_id": "test_empty_input",
+      "user_action": "不輸入任何文字直接點擊發送，確認發送按鈕被 disabled 或有適當的錯誤提示",
+      "timeout_seconds": 5
+    }
+  ]
+}
