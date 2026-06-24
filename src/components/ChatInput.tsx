@@ -31,6 +31,7 @@ export function ChatInput({
   const [isDragging, setIsDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const pasteCounter = useRef(0)
 
   // Auto-resize textarea
   useEffect(() => {
@@ -60,6 +61,33 @@ export function ChatInput({
       e.target.value = ''
       if (picked.length > 0) {
         setFiles((prev) => [...prev, ...picked])
+      }
+    },
+    [],
+  )
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const imageFiles: File[] = []
+      for (const item of Array.from(e.clipboardData.items)) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) {
+            pasteCounter.current += 1
+            const ext = file.type.split('/')[1] || 'png'
+            imageFiles.push(
+              new File(
+                [file],
+                `Pasted image ${pasteCounter.current}.${ext}`,
+                { type: file.type },
+              ),
+            )
+          }
+        }
+      }
+      if (imageFiles.length > 0) {
+        setFiles((prev) => [...prev, ...imageFiles])
+        e.preventDefault()
       }
     },
     [],
@@ -139,6 +167,7 @@ export function ChatInput({
           ref={textareaRef}
           value={value}
           onChange={(e) => handleChange(e.target.value)}
+          onPaste={handlePaste}
           onKeyDown={(e) => {
             if (
               e.key === 'Enter' &&
