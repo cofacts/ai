@@ -594,6 +594,11 @@ async def after_tool(
 
     if not isinstance(tool_response, str):
         return None
+    if tool_response == "":
+        return {
+            "error": "timeout",
+            "message": "[SYSTEM] Verifier returned empty. Possibly timeout. Retry with fewer URLs or claims.",
+        }
     try:
         return json.loads(tool_response)
     except json.JSONDecodeError:
