@@ -8,6 +8,7 @@ permissions:
   contents: read
   id-token: write
   deployments: write
+  administration: write
 
 jobs:
   cleanup:
