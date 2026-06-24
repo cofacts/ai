@@ -585,6 +585,11 @@ async def after_tool(
                         ),
                     )
                 return parsed
+        if tool_response == "":
+            return {
+                "error": "timeout",
+                "message": "[SYSTEM] Investigator returned empty. Possibly timeout. Retry with simpler/fewer queries.",
+            }
         return tool_response
 
     if not isinstance(tool_response, str):
