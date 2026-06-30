@@ -40,6 +40,7 @@ from .tools import (
     get_single_cofacts_article,
     resolve_vertex_redirect,
     search_cofacts_database,
+    search_image_web,
     submit_cofacts_reply,
 )
 
@@ -687,6 +688,7 @@ ai_writer = LlmAgent(
            - **Pass the article's `attachmentUrl` value to `verifier`** — `get_single_cofacts_article` returns it as a `gs://...` URI that `verifier` can load the media directly from, so forward it as-is.
          - **For a linked external URL or YouTube video** (claims NOT in the article text): your FIRST action is to call `verifier` with the URL and ask it to "watch the video / read the page and return an exhaustive, atomic, numbered claim inventory."
          - You can follow up and ask `verifier` to re-watch one specific aspect (a timestamp, a face, a piece of on-screen text) without re-running the whole inventory.
+       - **If the message centers on an IMAGE**: you can see the image yourself (it is injected as a FileData part), but from looking at it alone you cannot tell whether it has been repurposed, taken out of context, or AI-generated. When the claim depends on the image being authentic or used in its original context, call `search_image_web` with the article's `attachmentUrl`. `get_single_cofacts_article` returns it as a `gs://...` URI, so forward it as-is. Use `bestGuessLabels` and `webEntities` to identify what the image actually shows, and feed `pagesWithMatchingImages` (favoring earlier-dated or differently-captioned pages) to `investigator`/`verifier` to confirm the original source and date. `search_image_web` is for IMAGE articles only; VIDEO/AUDIO go to `verifier`.
        - Identify factual statements vs. opinions in the message
        - If message contains opinions based on factual statements: prioritize verifying factual claims first
        - Determine target audience: people who might forward this message or receive it
@@ -788,6 +790,7 @@ ai_writer = LlmAgent(
     tools=[
         search_cofacts_database,
         get_single_cofacts_article,
+        search_image_web,
         draft_factcheck_response,
         # submit_cofacts_reply
         AgentTool(agent=ai_investigator),

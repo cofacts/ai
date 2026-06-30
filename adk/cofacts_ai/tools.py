@@ -11,9 +11,13 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
+import google.auth
+import google.auth.transport.requests
 import httpx
 from .auth_context import cofacts_token_var
 from .media_filedata import signed_url_to_gs
+
+VISION_ANNOTATE_URL = "https://vision.googleapis.com/v1/images:annotate"
 
 # GraphQL fragment for common Article fields
 COMMON_ARTICLE_FIELDS = """
@@ -608,3 +612,82 @@ async def resolve_vertex_redirect(url: str) -> str:
         # If resolution fails, fall back to the original URL
         print(f"Failed to resolve redirect for {url}: {e}")
         return url
+
+
+_vision_credentials = None
+
+
+def _vision_access_token() -> str:
+    """ADC bearer token for the Vision REST call.
+
+    google.auth refresh is blocking, so the async tool calls this via
+    asyncio.to_thread to avoid stalling the event loop. Reuses the same
+    Application Default Credentials the agent already uses for Vertex, so this
+    adds no new dependency. The credentials are cached at module scope and only
+    refreshed when the cached token is missing or expired, so a steady stream of
+    image searches does not pay an auth round-trip every call.
+    """
+    global _vision_credentials
+    if _vision_credentials is None:
+        _vision_credentials, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+    if not _vision_credentials.valid:
+        _vision_credentials.refresh(google.auth.transport.requests.Request())
+    return _vision_credentials.token
+
+
+async def search_image_web(image_url: str) -> Dict[str, Any]:
+    """
+    Reverse image search via Google Vision API WEB_DETECTION.
+
+    Surfaces where an image already appears on the web so a fact-check can spot a
+    repurposed, out-of-context, or AI-generated photo.
+
+    Args:
+        image_url: gs:// URI of the image. search_cofacts_database and
+            get_single_cofacts_article already return article attachmentUrl as a
+            gs:// URI, so forward that value as-is.
+
+    Returns:
+        Structured WEB_DETECTION results, or {"error": ...} on any failure.
+    """
+    try:
+        token = await asyncio.to_thread(_vision_access_token)
+        payload = {
+            "requests": [
+                {
+                    "image": {"source": {"gcsImageUri": image_url}},
+                    "features": [{"type": "WEB_DETECTION", "maxResults": 10}],
+                }
+            ]
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                VISION_ANNOTATE_URL,
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            response.raise_for_status()
+            result = response.json()
+
+        annotation = (result.get("responses") or [{}])[0]
+        if "error" in annotation:
+            message = annotation["error"].get("message", annotation["error"])
+            return {"error": f"Vision API error: {message}", "image_url": image_url}
+
+        web = annotation.get("webDetection", {}) or {}
+        return {
+            "bestGuessLabels": web.get("bestGuessLabels", []),
+            "webEntities": web.get("webEntities", []),
+            "fullMatchingImages": web.get("fullMatchingImages", []),
+            "partialMatchingImages": web.get("partialMatchingImages", []),
+            "pagesWithMatchingImages": web.get("pagesWithMatchingImages", []),
+            "visuallySimilarImages": web.get("visuallySimilarImages", []),
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to search image web: {str(e)}",
+            "image_url": image_url,
+        }
