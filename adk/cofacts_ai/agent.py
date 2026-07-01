@@ -218,10 +218,7 @@ def inject_youtube_filedata(
 # AI Web Searcher - Google Search snippet reporter
 ai_investigator = LlmAgent(
     name="investigator",
-    # Reference: Gemini CLI is also using gemini-3-flash-preview for web-search
-    # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
-    #
-    model="gemini-3-flash-preview",
+    model="gemini-3.1-flash-lite",
     description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources} — sources lists reliable {title, url} pairs.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
@@ -265,10 +262,7 @@ ai_investigator = LlmAgent(
 # AI Verifier - Faithful passage reporter from URLs
 ai_verifier = LlmAgent(
     name="verifier",
-    # Reference: Gemini CLI is also using gemini-3-flash-preview for web-fetch
-    # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L193-L200
-    #
-    model="gemini-3-flash-preview",
+    model="gemini-3.1-flash-lite",
     description="A fact-checking verifier. Give it URLs to read and claims to check — it reads all pages and returns a per-claim report showing which sources support or refute each claim, with verbatim quotes. Returns {content, sources} — content is the verification report; sources lists {title, url} pairs for all pages read.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
