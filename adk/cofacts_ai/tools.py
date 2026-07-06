@@ -6,12 +6,12 @@ Each Article may have multiple ArticleReplies (fact-check responses from collabo
 and ReplyRequests (additional context provided by reporters or collaborators).
 """
 
-import asyncio
 import json
 import os
 from typing import Any, Dict, List, Optional
 
 import httpx
+from google.cloud import vision
 from .auth_context import cofacts_token_var
 from .media_filedata import signed_url_to_gs
 
@@ -608,3 +608,85 @@ async def resolve_vertex_redirect(url: str) -> str:
         # If resolution fails, fall back to the original URL
         print(f"Failed to resolve redirect for {url}: {e}")
         return url
+
+
+_vision_client: Optional[vision.ImageAnnotatorAsyncClient] = None
+
+
+def _get_vision_client() -> vision.ImageAnnotatorAsyncClient:
+    """Reused Vision client, authenticated via Application Default Credentials.
+
+    ADC is the same auth the rest of the codebase uses for Google APIs: a service
+    account in the deployed environment, and `gcloud auth application-default login`
+    for local development. No separate API key is minted. The client is created once
+    and reused so a steady stream of image searches shares one authenticated channel.
+    """
+    global _vision_client
+    if _vision_client is None:
+        _vision_client = vision.ImageAnnotatorAsyncClient()
+    return _vision_client
+
+
+async def search_image_web(image_url: str) -> Dict[str, Any]:
+    """
+    Reverse image search via Google Vision API WEB_DETECTION.
+
+    Surfaces what an image shows and where it already appears on the web so a
+    fact-check can spot a repurposed, out-of-context, or AI-generated photo.
+
+    Args:
+        image_url: gs:// URI of the image. search_cofacts_database and
+            get_single_cofacts_article already return article attachmentUrl as a
+            gs:// URI, so forward that value as-is.
+
+    Returns:
+        Compact, structured WEB_DETECTION results for the writer:
+        - bestGuessLabels: what the image most likely shows;
+        - webEntities: named entities detected in the image, with confidence;
+        - pagesWithMatchingImages: web pages where the image appears (the strongest
+          out-of-context / miscaption signal, and a handoff for investigator/verifier).
+        The raw match-image URL lists (full/partial/visually-similar) are omitted on
+        purpose: the writer already sees the original image, so they add cost and
+        noise without adding provenance. Returns {"error": ...} on any failure.
+    """
+    try:
+        client = _get_vision_client()
+        request = vision.AnnotateImageRequest(
+            image=vision.Image(source=vision.ImageSource(image_uri=image_url)),
+            features=[
+                vision.Feature(type_=vision.Feature.Type.WEB_DETECTION, max_results=10)
+            ],
+        )
+        response = await client.batch_annotate_images(requests=[request])
+
+        if not response.responses:
+            return {"error": "Vision API returned no response", "image_url": image_url}
+
+        annotation = response.responses[0]
+        if annotation.error.message:
+            return {
+                "error": f"Vision API error: {annotation.error.message}",
+                "image_url": image_url,
+            }
+
+        web = annotation.web_detection
+        return {
+            "bestGuessLabels": [
+                label.label for label in web.best_guess_labels if label.label
+            ],
+            "webEntities": [
+                {"description": entity.description, "score": round(entity.score, 3)}
+                for entity in web.web_entities
+                if entity.description
+            ][:10],
+            "pagesWithMatchingImages": [
+                {"url": page.url, "pageTitle": page.page_title}
+                for page in web.pages_with_matching_images
+            ][:10],
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to search image web: {str(e)}",
+            "image_url": image_url,
+        }
