@@ -183,17 +183,14 @@ class TestAfterToolVerifier:
         )
         assert result == VERIFIER_TIMEOUT_ERROR
 
-    async def test_none_returns_none(self):
-        # Unlike investigator, verifier's `None` hits the top
-        # `if not isinstance(tool_response, str): return None` guard, not the
-        # timeout dict.
+    async def test_none_returns_timeout_error(self):
         result = await after_tool(
             tool=make_tool("verifier"),
             args={},
             tool_context=make_tool_context(),
             tool_response=None,
         )
-        assert result is None
+        assert result == VERIFIER_TIMEOUT_ERROR
 
     async def test_valid_json_returns_parsed_dict(self):
         payload = json.dumps({"content": "c", "sources": [{"title": "t", "url": "u"}]})
