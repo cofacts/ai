@@ -11,3 +11,6 @@ __pycache__
 
 # env files (injected at runtime)
 cofacts_ai/.env
+
+# tests (not needed at runtime)
+cofacts_ai/tests

@@ -17,3 +17,14 @@ dependencies = [
     "asyncpg>=0.31.0",
     "uvicorn>=0.41.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["cofacts_ai/tests"]
+pythonpath = ["."]
