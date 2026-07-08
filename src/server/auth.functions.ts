@@ -22,23 +22,27 @@
 // `/_serverFn/...` endpoint, so the page origin must be recovered from
 // the `Origin` / `Referer` headers (request.url is useless here).
 
-import { redirect } from '@tanstack/react-router';
-import { createServerFn } from '@tanstack/react-start';
-import { deleteCookie, getRequest, setCookie } from '@tanstack/react-start/server';
+import { redirect } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import {
+  deleteCookie,
+  getRequest,
+  setCookie,
+} from '@tanstack/react-start/server'
 
-import { getApiBase } from './api-base';
+import { getApiBase } from './api-base'
 import {
   OAUTH_STATE_COOKIE_NAME,
   SESSION_COOKIE_NAME,
   buildClearSessionCookieAttrs,
   buildOAuthStateCookieAttrs,
-} from './sessionCookie';
+} from './sessionCookie'
 
-export const ALLOWED_PROVIDERS = ['github', 'facebook', 'google'] as const;
-export type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number];
+export const ALLOWED_PROVIDERS = ['github', 'facebook', 'google'] as const
+export type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number]
 
 export function isAllowedProvider(value: string): value is AllowedProvider {
-  return (ALLOWED_PROVIDERS as ReadonlyArray<string>).includes(value);
+  return (ALLOWED_PROVIDERS as ReadonlyArray<string>).includes(value)
 }
 
 export function sanitizeRedirectPath(
@@ -48,42 +52,42 @@ export function sanitizeRedirectPath(
   // WHATWG URL parsing folds backslashes into forward slashes, so e.g.
   // `/\\evil.com/x` resolves to `https://evil.com/x`. Reject the input
   // outright instead of trusting startsWith('/').
-  if (redirectTo.includes('\\')) return '/';
-  if (redirectTo.startsWith('//')) return '/';
-  if (redirectTo.startsWith('/')) return redirectTo;
+  if (redirectTo.includes('\\')) return '/'
+  if (redirectTo.startsWith('//')) return '/'
+  if (redirectTo.startsWith('/')) return redirectTo
   try {
-    const url = new URL(redirectTo, origin);
+    const url = new URL(redirectTo, origin)
     if (url.origin === origin) {
-      return url.pathname + url.search + url.hash;
+      return url.pathname + url.search + url.hash
     }
   } catch {
     // Falls through to the safe default below.
   }
-  return '/';
+  return '/'
 }
 
 export interface Nonce {
-  n: string;
-  r: string;
+  n: string
+  r: string
 }
 
 export function encodeState(nonce: string, redirectPath: string): string {
-  const payload: Nonce = { n: nonce, r: redirectPath };
-  return Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const payload: Nonce = { n: nonce, r: redirectPath }
+  return Buffer.from(JSON.stringify(payload)).toString('base64url')
 }
 
 export function resolveOriginFromHeaders(request: Request): string {
-  const originHeader = request.headers.get('origin');
-  if (originHeader) return originHeader;
-  const referer = request.headers.get('referer');
+  const originHeader = request.headers.get('origin')
+  if (originHeader) return originHeader
+  const referer = request.headers.get('referer')
   if (referer) {
     try {
-      return new URL(referer).origin;
+      return new URL(referer).origin
     } catch {
       // Falls through to request.url below.
     }
   }
-  return new URL(request.url).origin;
+  return new URL(request.url).origin
 }
 
 export function buildLoginUpstreamUrl(
@@ -92,51 +96,51 @@ export function buildLoginUpstreamUrl(
   origin: string,
   nonce: string,
 ): string {
-  const safePath = sanitizeRedirectPath(redirectTo, origin);
-  const state = encodeState(nonce, safePath);
-  const callbackUrl = `${origin}/api/auth/callback`;
+  const safePath = sanitizeRedirectPath(redirectTo, origin)
+  const state = encodeState(nonce, safePath)
+  const callbackUrl = `${origin}/api/auth/callback`
 
-  const upstream = new URL(`${getApiBase()}/login/${provider}`);
-  upstream.searchParams.set('redirect_to', callbackUrl);
-  upstream.searchParams.set('state', state);
+  const upstream = new URL(`${getApiBase()}/login/${provider}`)
+  upstream.searchParams.set('redirect_to', callbackUrl)
+  upstream.searchParams.set('state', state)
 
-  return upstream.toString();
+  return upstream.toString()
 }
 
 export interface LoginInput {
-  provider: string;
-  redirectTo?: string;
+  provider: string
+  redirectTo?: string
 }
 
 export const login = createServerFn({ method: 'POST' })
   .inputValidator((input: LoginInput) => {
     if (!isAllowedProvider(input.provider)) {
-      throw new Error('Invalid provider');
+      throw new Error('Invalid provider')
     }
-    const provider: AllowedProvider = input.provider;
-    return { provider, redirectTo: input.redirectTo ?? '/' };
+    const provider: AllowedProvider = input.provider
+    return { provider, redirectTo: input.redirectTo ?? '/' }
   })
   .handler(async ({ data }) => {
-    const { randomBytes } = await import('node:crypto');
-    const request = getRequest();
-    const origin = resolveOriginFromHeaders(request);
-    const nonce = randomBytes(32).toString('base64url');
+    const { randomBytes } = await import('node:crypto')
+    const request = getRequest()
+    const origin = resolveOriginFromHeaders(request)
+    const nonce = randomBytes(32).toString('base64url')
     const upstreamUrl = buildLoginUpstreamUrl(
       data.provider,
       data.redirectTo,
       origin,
       nonce,
-    );
+    )
 
-    setCookie(OAUTH_STATE_COOKIE_NAME, nonce, buildOAuthStateCookieAttrs());
+    setCookie(OAUTH_STATE_COOKIE_NAME, nonce, buildOAuthStateCookieAttrs())
 
-    throw redirect({ href: upstreamUrl });
-  });
+    throw redirect({ href: upstreamUrl })
+  })
 
 // BFF logout. Clears the cofacts_session HttpOnly cookie by issuing
 // Set-Cookie with Max-Age=0 and the same attributes used at set time, so
 // browsers reliably remove it. Returns null so the client can resolve.
 export const logout = createServerFn({ method: 'POST' }).handler(async () => {
-  deleteCookie(SESSION_COOKIE_NAME, buildClearSessionCookieAttrs());
-  return null;
-});
+  deleteCookie(SESSION_COOKIE_NAME, buildClearSessionCookieAttrs())
+  return null
+})

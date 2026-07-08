@@ -22,8 +22,7 @@ export function SearchSuggestions({
 }) {
   const { sessionId } = useParams({ strict: false })
   const { toolInvocations } = useChat({ sessionId: sessionId ?? '' })
-  const hasResponse =
-    toolCallId in toolInvocations && toolInvocations[toolCallId].resp != null
+  const hasResponse = toolInvocations[toolCallId]?.resp != null
   const { data: html } = useQuery({
     queryKey: ['search-widget', sessionId, toolCallId],
     queryFn: () =>

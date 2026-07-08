@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
+import { getCookie } from '@tanstack/react-start/server'
+import { verifySessionToken } from '../jwt'
+import { resolveAdkUserIdOrThrow } from '../adkUser'
+import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
+
 vi.mock('@tanstack/react-start/server', () => ({
   getCookie: vi.fn(),
 }))
@@ -7,11 +12,6 @@ vi.mock('@tanstack/react-start/server', () => ({
 vi.mock('../jwt', () => ({
   verifySessionToken: vi.fn(),
 }))
-
-import { getCookie } from '@tanstack/react-start/server'
-import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
-import { verifySessionToken } from '../jwt'
-import { resolveAdkUserIdOrThrow } from '../adkUser'
 
 const mockedGetCookie = vi.mocked(getCookie)
 const mockedVerify = vi.mocked(verifySessionToken)

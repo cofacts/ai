@@ -1,10 +1,6 @@
 import { useServerFn } from '@tanstack/react-start'
 
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
   FacebookIcon,
   GithubIcon,

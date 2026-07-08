@@ -8,14 +8,22 @@ interface UserMessageProps {
 }
 
 /** A non-image attachment shown as a labelled file chip. */
-function FileChip({ name, mimeType }: { name: string; mimeType?: string | null }) {
+function FileChip({
+  name,
+  mimeType,
+}: {
+  name: string
+  mimeType?: string | null
+}) {
   return (
     <span
       title={name}
       className="inline-flex items-center gap-1.5 max-w-full rounded-lg bg-white/60 border border-gray-200 px-2 py-1 text-xs text-text-main"
     >
       <span className="material-symbols-outlined text-base leading-none text-text-muted">
-        {mimeType?.startsWith('application/pdf') ? 'picture_as_pdf' : 'description'}
+        {mimeType?.startsWith('application/pdf')
+          ? 'picture_as_pdf'
+          : 'description'}
       </span>
       <span className="truncate">{name}</span>
     </span>
@@ -26,7 +34,9 @@ function FileChip({ name, mimeType }: { name: string; mimeType?: string | null }
 function AttachmentPart({ part }: { part: AdkPart }) {
   const inline = part.inlineData
   if (inline?.data) {
-    const name = inline.displayName ? stripUploadPrefix(inline.displayName) : '附件'
+    const name = inline.displayName
+      ? stripUploadPrefix(inline.displayName)
+      : '附件'
     if (inline.mimeType?.startsWith('image/')) {
       return (
         <img

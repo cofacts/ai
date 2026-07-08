@@ -10,9 +10,9 @@
 // Server-only: depends on h3's getCookie via @tanstack/react-start/server. Do
 // not import from client code.
 
-import type { TypedDocumentNode } from '@graphql-typed-document-node/core'
 import { getCookie } from '@tanstack/react-start/server'
 import { print } from 'graphql'
+import type { TypedDocumentNode } from '@graphql-typed-document-node/core'
 
 import { getApiBase } from '@/server/api-base'
 import { SESSION_COOKIE_NAME } from '@/server/sessionCookie'
@@ -47,7 +47,7 @@ export async function cofactsExec<TResult, TVariables>(
 
   const body = (await res.json()) as GraphQLResponse<TResult>
   if (body.errors && body.errors.length > 0) {
-    throw new Error(body.errors[0].message)
+    throw new Error(body.errors[0]?.message ?? 'cofacts-api returned an error')
   }
   if (body.data == null) {
     throw new Error('cofacts-api returned no data')
