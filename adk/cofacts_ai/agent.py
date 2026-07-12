@@ -262,14 +262,11 @@ def inject_youtube_filedata(
 # AI Web Searcher - Google Search snippet reporter
 ai_investigator = LlmAgent(
     name="investigator",
-    # Reference: Gemini CLI is also using gemini-3-flash-preview for web-search
-    # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
-    #
-    model="gemini-3-flash-preview",
+    model="gemini-3.5-flash",
     description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources} — sources lists reliable {title, url} pairs.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
-            thinking_level=genai_types.ThinkingLevel.MEDIUM
+            thinking_level=genai_types.ThinkingLevel.HIGH
         )
     ),
     before_model_callback=inject_youtube_filedata,
@@ -682,7 +679,7 @@ def handle_writer_tool_error(
 # This architecture respects ADK constraints while maintaining full functionality.
 ai_writer = LlmAgent(
     name="writer",
-    model="gemini-3-flash-preview",
+    model="gemini-3.5-flash",
     description="AI agent that orchestrates fact-checking process and composes final fact-check replies for Cofacts.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
