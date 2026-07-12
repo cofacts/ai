@@ -125,7 +125,11 @@ async def append_grounding_sources(
     ]
 
     # ── B: Build content from all text parts ─────────────────────────────────
-    content = "".join(p.text or "" for p in llm_response.content.parts)
+    # Skip thought-summary parts (include_thoughts=True) so the writer's tool
+    # result contains only the report, while thoughts remain in Langfuse traces.
+    content = "".join(
+        p.text or "" for p in llm_response.content.parts if not p.thought
+    )
 
     # ── Write back as JSON so writer's after_tool_callback gets structured output
     response_dict: dict = {"content": content, "sources": sources_list}
@@ -266,7 +270,7 @@ ai_investigator = LlmAgent(
     description="A research assistant you can delegate fact-checking tasks to. Describe what you want to know or investigate; it will search the web, read results, and report back with detailed findings. Returns {content, sources} — sources lists reliable {title, url} pairs.",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
-            thinking_level=genai_types.ThinkingLevel.HIGH
+            include_thoughts=True, thinking_level=genai_types.ThinkingLevel.HIGH
         )
     ),
     before_model_callback=inject_youtube_filedata,

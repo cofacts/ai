@@ -264,3 +264,50 @@ class TestHandleWriterToolError:
                 "Please note this failure and continue with available information."
             ),
         }
+
+
+class TestAppendGroundingSources:
+    """append_grounding_sources builds {content, sources} from the raw
+    investigator response. `content` must exclude thought-summary parts
+    (include_thoughts=True) so the writer's tool result contains only the
+    report, while thoughts remain visible in Langfuse traces."""
+
+    async def test_thought_parts_excluded_from_content(self, monkeypatch):
+        from cofacts_ai import agent as agent_module
+        from google.adk.models.llm_response import LlmResponse
+        from google.genai import types as genai_types
+
+        async def fake_resolve(url):
+            return url
+
+        monkeypatch.setattr(agent_module, "resolve_vertex_redirect", fake_resolve)
+
+        llm_response = LlmResponse(
+            content=genai_types.Content(
+                role="model",
+                parts=[
+                    genai_types.Part(text="**Planning the search** ...", thought=True),
+                    genai_types.Part(text="實際調查報告內容"),
+                ],
+            ),
+            grounding_metadata=genai_types.GroundingMetadata(
+                grounding_chunks=[
+                    genai_types.GroundingChunk(
+                        web=genai_types.GroundingChunkWeb(
+                            uri="https://example.com/a", title="Example"
+                        )
+                    )
+                ],
+            ),
+        )
+
+        result = await agent_module.append_grounding_sources(
+            callback_context=cast(CallbackContext, AsyncMock()),
+            llm_response=llm_response,
+        )
+
+        payload = json.loads(result.content.parts[0].text)
+        assert payload["content"] == "實際調查報告內容"
+        assert payload["sources"] == [
+            {"title": "Example", "url": "https://example.com/a"}
+        ]
