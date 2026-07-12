@@ -191,9 +191,16 @@ def inject_youtube_filedata(
 
     Vertex AI supports only one YouTube video URL per request, so this
     appends a single FileData part for the first YouTube URL of the latest
-    user message that has one (the most recent message is the current task).
+    user message that has one. Latest wins because the most recent message
+    is the current task: if this callback ever runs on an agent with real
+    multi-turn history, picking the earliest URL would pin every request to
+    the first video ever mentioned, even after the user moves on to another.
+    (Today each AgentTool call starts a fresh single-message session, so
+    latest vs. earliest makes no difference yet.)
     When other URLs are present, a [SYSTEM] text part lists them so the model
     knows they are not loaded and can examine them in separate requests.
+    All contents are still scanned even though only one video is injected —
+    the notice must enumerate every URL that was NOT loaded.
     The original URLs are kept intact so url_context still fetches their
     title/description metadata.
 
