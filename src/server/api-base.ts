@@ -9,11 +9,11 @@
 // (e.g. `${getApiBase()}/graphql`) without producing `//graphql`.
 
 export function getApiBase(): string {
-  const raw = process.env.COFACTS_API_URL;
+  const raw = process.env.COFACTS_API_URL
   if (!raw) {
     throw new Error(
       'COFACTS_API_URL env var is required (rumors-api base URL).',
-    );
+    )
   }
-  return raw.replace(/\/+$/, '');
+  return raw.replace(/\/+$/, '')
 }

@@ -150,9 +150,7 @@ describe('fetchFeedbackForTrace', () => {
   test('throws an Error with langfuse upstream message on failure', async () => {
     mockFetchOnce({ ok: false, status: 503, statusText: 'Service Unavailable' })
 
-    await expect(
-      fetchFeedbackForTrace('trace-1', 'user-1'),
-    ).rejects.toSatisfy(
+    await expect(fetchFeedbackForTrace('trace-1', 'user-1')).rejects.toSatisfy(
       (err: unknown) =>
         err instanceof Error &&
         err.message === 'Langfuse upstream failed: 503 Service Unavailable',

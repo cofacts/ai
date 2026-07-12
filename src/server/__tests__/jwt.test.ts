@@ -32,7 +32,7 @@ describe('verifySessionToken', () => {
     })
     expect(jwtVerify).toHaveBeenCalledWith(
       'tok',
-      vi.mocked(getJWKS).mock.results[0].value,
+      vi.mocked(getJWKS).mock.results[0]!.value,
       { algorithms: ['RS256'] },
     )
   })

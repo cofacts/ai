@@ -68,7 +68,7 @@ export function ChatInput({
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-      const imageFiles: File[] = []
+      const imageFiles: Array<File> = []
       for (const item of Array.from(e.clipboardData.items)) {
         if (item.kind === 'file' && item.type.startsWith('image/')) {
           const file = item.getAsFile()
@@ -76,11 +76,9 @@ export function ChatInput({
             pasteCounter.current += 1
             const ext = file.type.split('/')[1] || 'png'
             imageFiles.push(
-              new File(
-                [file],
-                `Pasted image ${pasteCounter.current}.${ext}`,
-                { type: file.type },
-              ),
+              new File([file], `Pasted image ${pasteCounter.current}.${ext}`, {
+                type: file.type,
+              }),
             )
           }
         }
@@ -100,7 +98,7 @@ export function ChatInput({
   const handleDragOver = useCallback(
     (e: React.DragEvent) => {
       if (disabled || isStreaming) return
-      if (!e.dataTransfer?.types?.includes('Files')) return
+      if (!e.dataTransfer.types.includes('Files')) return
       e.preventDefault()
       e.stopPropagation()
       setIsDragging(true)
@@ -110,7 +108,10 @@ export function ChatInput({
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     const related = e.relatedTarget
-    if (!(related instanceof Node) || !(e.currentTarget as Element).contains(related)) {
+    if (
+      !(related instanceof Node) ||
+      !(e.currentTarget as Element).contains(related)
+    ) {
       setIsDragging(false)
     }
   }, [])
@@ -121,9 +122,7 @@ export function ChatInput({
       e.stopPropagation()
       setIsDragging(false)
       if (disabled || isStreaming) return
-      const dtFiles = e.dataTransfer?.files
-      if (!dtFiles) return
-      const dropped = Array.from(dtFiles)
+      const dropped = Array.from(e.dataTransfer.files)
       if (dropped.length > 0) setFiles((prev) => [...prev, ...dropped])
     },
     [disabled, isStreaming],
@@ -131,8 +130,7 @@ export function ChatInput({
 
   useBlocker({
     shouldBlockFn: () => false,
-    enableBeforeUnload: () =>
-      isStreaming || !!value.trim() || files.length > 0,
+    enableBeforeUnload: () => isStreaming || !!value.trim() || files.length > 0,
   })
 
   const canSend = !!value.trim() || files.length > 0
@@ -159,7 +157,9 @@ export function ChatInput({
             <span className="material-symbols-outlined text-3xl text-primary">
               upload_file
             </span>
-            <span className="text-sm text-primary font-medium">放開以附加檔案</span>
+            <span className="text-sm text-primary font-medium">
+              放開以附加檔案
+            </span>
           </div>
         )}
         {/* Row 1: text input */}

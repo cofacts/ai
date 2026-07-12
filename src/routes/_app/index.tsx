@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useQueryClient, useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import { ChatInput } from '@/components/ChatInput'
@@ -15,7 +15,13 @@ function LandingPage() {
   const queryClient = useQueryClient()
 
   const sendMutation = useMutation({
-    mutationFn: async ({ text, files }: { text: string; files: Array<File> }) => {
+    mutationFn: async ({
+      text,
+      files,
+    }: {
+      text: string
+      files: Array<File>
+    }) => {
       const sessionId = crypto.randomUUID()
       const titleSource = text || files[0]?.name || '附件'
       const title =

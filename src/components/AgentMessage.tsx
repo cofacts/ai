@@ -52,6 +52,7 @@ export function AgentMessage({
 
           if (part.functionCall) {
             const { id, name } = part.functionCall
+            const lowerName = name?.toLowerCase() ?? ''
             const isFocused = !!id && id === focusedToolCallId
             const isInvestigator = name === 'investigator'
             return (
@@ -69,19 +70,22 @@ export function AgentMessage({
                   onClick={() => onToolBadgeClick?.(id ?? '')}
                 >
                   <span className="material-symbols-outlined text-[14px] text-gray-500">
-                    {name?.toLowerCase()?.includes('search')
+                    {lowerName.includes('search')
                       ? 'search'
-                      : name?.toLowerCase()?.includes('verify') ||
-                          name?.toLowerCase()?.includes('check')
+                      : lowerName.includes('verify') ||
+                          lowerName.includes('check')
                         ? 'shield'
-                        : name?.toLowerCase()?.includes('cofacts')
+                        : lowerName.includes('cofacts')
                           ? 'fact_check'
                           : 'build'}
                   </span>
                   <span>{name}</span>
                 </button>
                 {isInvestigator && id && (
-                  <SearchSuggestions toolCallId={id} className="flex-1 min-w-0 overflow-x-auto" />
+                  <SearchSuggestions
+                    toolCallId={id}
+                    className="flex-1 min-w-0 overflow-x-auto"
+                  />
                 )}
               </div>
             )

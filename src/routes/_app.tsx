@@ -27,7 +27,10 @@ function AppLayout() {
         ) : (
           <>
             {/* Sidebar - Desktop: always visible, Mobile: overlay */}
-            <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            <Sidebar
+              isOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+            />
             <Outlet />
           </>
         )}

@@ -5,7 +5,7 @@
  * only be imported within server functions or other .server.ts files.
  */
 
-const IS_DEV = process.env.NODE_ENV === 'development';
+const IS_DEV = process.env.NODE_ENV === 'development'
 
 /**
  * Shared error handling for ADK API responses.
@@ -16,20 +16,20 @@ const IS_DEV = process.env.NODE_ENV === 'development';
 export function handleAdkError(error: unknown): never {
   if (IS_DEV) {
     // Attempt to extract detail from FastAPI validation errors
-    const detail = (error as any)?.detail?.[0]?.msg;
+    const detail = (error as any)?.detail?.[0]?.msg
     if (detail) {
-      throw new Error(`ADK Error: ${detail}`);
+      throw new Error(`ADK Error: ${detail}`)
     }
 
     // Fallback to stringified error in dev
-    throw new Error(`ADK Error: ${JSON.stringify(error)}`);
+    throw new Error(`ADK Error: ${JSON.stringify(error)}`)
   }
 
   // Production: Log the full error to the server console
-  console.error('[ADK Error]', error);
+  console.error('[ADK Error]', error)
 
   // Throw a generic error to the client
-  throw new Error('An error occurred while communicating with the ADK service.');
+  throw new Error('An error occurred while communicating with the ADK service.')
 }
 
 /**
@@ -37,7 +37,7 @@ export function handleAdkError(error: unknown): never {
  */
 export function handleAdkResponseError(response: Response): never {
   if (IS_DEV) {
-    throw new Error(`ADK returned ${response.status}: ${response.statusText}`);
+    throw new Error(`ADK returned ${response.status}: ${response.statusText}`)
   }
 
   // Production: Log the full response details
@@ -45,8 +45,7 @@ export function handleAdkResponseError(response: Response): never {
     status: response.status,
     statusText: response.statusText,
     url: response.url,
-  });
+  })
 
-  throw new Error('An error occurred while communicating with the ADK service.');
+  throw new Error('An error occurred while communicating with the ADK service.')
 }
-

@@ -67,8 +67,7 @@ function sanitize(raw: string | null): OpenPeepsAvatarData | null {
         ? data.hair
         : undefined,
     facialHair:
-      typeof data.facialHair === 'string' &&
-      facialHairKeys.has(data.facialHair)
+      typeof data.facialHair === 'string' && facialHairKeys.has(data.facialHair)
         ? data.facialHair
         : undefined,
     backgroundColorIndex:

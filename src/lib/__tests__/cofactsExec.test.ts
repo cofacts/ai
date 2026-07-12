@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { getApiBase } from '@/server/api-base'
+import { getCookie } from '@tanstack/react-start/server'
 import { cofactsExec } from '../cofactsExec'
+import { getApiBase } from '@/server/api-base'
 import { graphql } from '@/server/gql'
 
 vi.mock('@tanstack/react-start/server', () => ({
   getCookie: vi.fn(),
 }))
-
-import { getCookie } from '@tanstack/react-start/server'
 
 const mockedGetCookie = vi.mocked(getCookie)
 
@@ -32,7 +31,11 @@ const VALID_USER = {
   avatarData: null,
 }
 
-function mockFetchOnce(response: { ok?: boolean; status?: number; jsonValue?: unknown }) {
+function mockFetchOnce(response: {
+  ok?: boolean
+  status?: number
+  jsonValue?: unknown
+}) {
   const fn = vi.fn().mockResolvedValueOnce({
     ok: response.ok ?? true,
     status: response.status ?? 200,
