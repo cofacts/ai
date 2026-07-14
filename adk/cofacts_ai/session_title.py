@@ -111,10 +111,31 @@ def _truncate_prompt_text(text: str) -> str:
     return text[:PROMPT_TEXT_LIMIT].rstrip()
 
 
+# Quote characters the model sometimes wraps the whole title in. Stripped only as a
+# matched pair, so a title that legitimately contains a quote (\u4ed6\u8aaa\u300c\u9019\u662f\u5047\u7684\u300d) keeps it.
+_QUOTE_PAIRS = {
+    '"': '"',
+    "'": "'",
+    "`": "`",
+    "\u201c": "\u201d",
+    "\u2018": "\u2019",
+    "\u300c": "\u300d",
+    "\u300e": "\u300f",
+}
+
+
+def _strip_wrapping_quotes(title: str) -> str:
+    while len(title) >= 2:
+        closing = _QUOTE_PAIRS.get(title[0])
+        if closing is None or not title.endswith(closing):
+            break
+        title = title[1:-1].strip()
+    return title
+
+
 def _normalize_title(title: str) -> str:
     title = " ".join(title.split()).strip()
-    title = title.strip("\"'`\u201c\u201d\u2018\u2019\u300c\u300d\u300e\u300f")
-    title = title.strip()
+    title = _strip_wrapping_quotes(title)
     if len(title) > MAX_TITLE_LENGTH:
         title = title[:MAX_TITLE_LENGTH].rstrip()
     return title
