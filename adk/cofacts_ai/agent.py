@@ -190,15 +190,31 @@ def inject_youtube_filedata(
 ) -> None:
     """Before-model callback for ai_investigator and ai_verifier.
 
-    For each user message that contains YouTube URLs, appends FileData parts
-    into the same parts array so Gemini can watch the videos inline.
+    Vertex AI supports only one YouTube video URL per request, so this
+    appends a single FileData part for the first YouTube URL of the latest
+    user message that has one. Latest wins because the most recent message
+    is the current task: if this callback ever runs on an agent with real
+    multi-turn history, picking the earliest URL would pin every request to
+    the first video ever mentioned, even after the user moves on to another.
+    (Today each AgentTool call starts a fresh single-message session, so
+    latest vs. earliest makes no difference yet.)
+    When other URLs are present, a [SYSTEM] text part lists them so the model
+    knows they are not loaded and can examine them in separate requests.
+    All contents are still scanned even though only one video is injected —
+    the notice must enumerate every URL that was NOT loaded.
     The original URLs are kept intact so url_context still fetches their
     title/description metadata.
 
-    Ref: https://ai.google.dev/gemini-api/docs/video-understanding#youtube
+    Refs:
+    - https://ai.google.dev/gemini-api/docs/video-understanding#youtube
+    - https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/video-understanding
+      (Vertex AI requires mimeType alongside fileUri, and supports only one
+      YouTube URL per request.)
     """
     try:
-        seen = set()
+        seen = {}  # dict as ordered set, so the notice lists URLs in order
+        chosen_content = None
+        chosen_url = None
         for content in llm_request.contents:
             if content.role != "user" or not content.parts:
                 continue
@@ -206,12 +222,38 @@ def inject_youtube_filedata(
             for part in content.parts:
                 if part.text:
                     youtube_urls.extend(_YOUTUBE_URL_RE.findall(part.text))
+            if not youtube_urls:
+                continue
+            # First URL of the latest user message with a YouTube URL wins.
+            chosen_content = content
+            chosen_url = youtube_urls[0]
             for url in youtube_urls:
-                if url not in seen:
-                    seen.add(url)
-                    content.parts.append(
-                        genai_types.Part(file_data=genai_types.FileData(file_uri=url))
+                seen[url] = True
+        if chosen_content is None:
+            return None
+        chosen_content.parts.append(
+            genai_types.Part(
+                file_data=genai_types.FileData(
+                    # Vertex AI rejects fileData with an empty mimeType.
+                    # video/webm follows the official notebook:
+                    # https://github.com/GoogleCloudPlatform/generative-ai/blob/main/gemini/use-cases/video-analysis/youtube_video_analysis.ipynb
+                    file_uri=chosen_url,
+                    mime_type="video/webm",
+                )
+            )
+        )
+        skipped = [url for url in seen if url != chosen_url]
+        if skipped:
+            chosen_content.parts.append(
+                genai_types.Part(
+                    text=(
+                        "[SYSTEM] Gemini can watch only one YouTube video per "
+                        f"request. Watching now: {chosen_url}. NOT loaded: "
+                        f"{', '.join(skipped)}. To examine another video, make "
+                        "a separate request containing only that URL."
                     )
+                )
+            )
     except Exception:
         logger.exception("inject_youtube_filedata failed; skipping YouTube injection")
     return None
@@ -697,7 +739,7 @@ ai_writer = LlmAgent(
        - **If the message centers on a video/audio or a linked URL**: you cannot watch a video, listen to audio, or read a page yourself — only `verifier` can (it watches/listens via FileData and reads page metadata such as upload date). Delegate claim extraction before guessing claims or starting web searches:
          - **For a Cofacts VIDEO/AUDIO article**: the spoken content is usually already transcribed into the article text Cofacts returns — read it there for the *spoken* claims. Even when that transcript looks complete, a VIDEO/AUDIO article still needs **at least one** `verifier` pass that actually watches/listens to the media, because the transcript only covers the audio: use it to (a) enumerate the *visual* layer (on-screen text, logos, who/where) that the transcript misses, and (b) confirm the transcript matches what is actually said. Ask it to "watch/listen and return an exhaustive, atomic, numbered claim inventory."
            - **Pass the article's `attachmentUrl` value to `verifier`** — `get_single_cofacts_article` returns it as a `gs://...` URI that `verifier` can load the media directly from, so forward it as-is.
-         - **For a linked external URL or YouTube video** (claims NOT in the article text): your FIRST action is to call `verifier` with the URL and ask it to "watch the video / read the page and return an exhaustive, atomic, numbered claim inventory."
+         - **For a linked external URL or YouTube video** (claims NOT in the article text): your FIRST action is to call `verifier` with the URL and ask it to "watch the video / read the page and return an exhaustive, atomic, numbered claim inventory." Include only ONE YouTube link per `verifier`/`investigator` call — it can only watch one video per request, so for multiple videos make a separate call for each.
          - You can follow up and ask `verifier` to re-watch one specific aspect (a timestamp, a face, a piece of on-screen text) without re-running the whole inventory.
        - **If the message centers on an IMAGE**: you can see the image yourself (it is injected as a FileData part), but from looking at it alone you cannot tell whether it has been repurposed, taken out of context, or AI-generated. When the claim depends on the image being authentic or used in its original context, call `search_image_web` with the article's `attachmentUrl`. `get_single_cofacts_article` returns it as a `gs://...` URI, so forward it as-is. Use `bestGuessLabels` and `webEntities` to identify what the image actually shows, and feed `pagesWithMatchingImages` (favoring earlier-dated or differently-captioned pages) to `investigator`/`verifier` to confirm the original source and date. `search_image_web` results can be noisy or incomplete, so treat them as a weak lead, never as ground truth: do not cite a matching page directly, and always confirm any lead through `investigator`/`verifier` before relying on it. `search_image_web` is for IMAGE articles only; VIDEO/AUDIO go to `verifier`.
        - Identify factual statements vs. opinions in the message
