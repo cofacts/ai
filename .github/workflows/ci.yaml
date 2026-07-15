@@ -31,6 +31,37 @@ jobs:
       - name: Run pytest
         run: uv run pytest -v
 
+  lint-adk:
+    name: Lint adk (ruff, ty)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Check formatting (ruff format)
+        run: uv run ruff format --check .
+
+      - name: Lint (ruff check)
+        if: ${{ !cancelled() }}
+        run: uv run ruff check .
+
+      - name: Typecheck (ty)
+        if: ${{ !cancelled() }}
+        run: uv run ty check .
+
   test-frontend:
     name: Test frontend (lint, format, typecheck)
     runs-on: ubuntu-latest
