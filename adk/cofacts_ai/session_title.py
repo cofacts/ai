@@ -98,10 +98,7 @@ def _build_prompt(user_text: str, result_text: str) -> str:
         f"User's first message:\n{_truncate_prompt_text(user_text)}"
     )
     if result_text:
-        prompt += (
-            "\n\nWriter's first result:\n"
-            f"{_truncate_prompt_text(result_text)}"
-        )
+        prompt += f"\n\nWriter's first result:\n{_truncate_prompt_text(result_text)}"
     return prompt
 
 

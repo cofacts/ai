@@ -89,7 +89,7 @@ class TestAfterToolInvestigator:
         )
 
         assert result == {"content": "x", "sources": []}
-        tool_context.save_artifact.assert_not_awaited()
+        cast(AsyncMock, tool_context.save_artifact).assert_not_awaited()
 
     async def test_valid_json_with_widget_html_saves_artifact_and_strips_it(self):
         tool_context = make_tool_context(function_call_id="fc-42")
@@ -109,13 +109,16 @@ class TestAfterToolInvestigator:
         )
 
         assert result == {"content": "x", "sources": []}
-        tool_context.save_artifact.assert_awaited_once()
-        _, kwargs = tool_context.save_artifact.call_args
+        save_artifact = cast(AsyncMock, tool_context.save_artifact)
+        save_artifact.assert_awaited_once()
+        _, kwargs = save_artifact.call_args
         assert kwargs["filename"] == "search-widget-fc-42.html"
         assert kwargs["artifact"].inline_data.mime_type == "text/html"
         assert kwargs["artifact"].inline_data.data == b"<div>widget</div>"
 
-    async def test_widget_html_present_but_no_function_call_id_skips_artifact_save(self):
+    async def test_widget_html_present_but_no_function_call_id_skips_artifact_save(
+        self,
+    ):
         tool_context = make_tool_context(function_call_id=None)
         payload = json.dumps(
             {
@@ -133,7 +136,7 @@ class TestAfterToolInvestigator:
         )
 
         assert result == {"content": "x", "sources": []}
-        tool_context.save_artifact.assert_not_awaited()
+        cast(AsyncMock, tool_context.save_artifact).assert_not_awaited()
 
     async def test_json_parse_failure_nonempty_garbage_passthrough(self):
         result = await after_tool(
@@ -231,7 +234,7 @@ class TestAfterToolDispatch:
             tool_response=json.dumps({"content": "x"}),
         )
         assert result is None
-        tool_context.save_artifact.assert_not_awaited()
+        cast(AsyncMock, tool_context.save_artifact).assert_not_awaited()
 
 
 class TestHandleWriterToolError:

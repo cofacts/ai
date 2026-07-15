@@ -14,7 +14,7 @@ import logging
 import re
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
@@ -42,7 +42,6 @@ from .tools import (
     resolve_vertex_redirect,
     search_cofacts_database,
     search_image_web,
-    submit_cofacts_reply,
 )
 
 load_dotenv()
@@ -134,10 +133,7 @@ async def append_grounding_sources(
     # and strip it before the LLM sees the tool result. Using the response (not
     # state) avoids any DB writes: temp: state is stripped by AgentTool before
     # forwarding, and non-temp: state would pollute the session the list loads.
-    if (
-        metadata.search_entry_point
-        and metadata.search_entry_point.rendered_content
-    ):
+    if metadata.search_entry_point and metadata.search_entry_point.rendered_content:
         response_dict["_search_widget_html"] = (
             metadata.search_entry_point.rendered_content
         )
@@ -231,7 +227,10 @@ def inject_youtube_filedata(
                 seen[url] = True
         if chosen_content is None:
             return None
-        chosen_content.parts.append(
+        # chosen_content is only set for contents with truthy .parts
+        parts = chosen_content.parts
+        assert parts is not None
+        parts.append(
             genai_types.Part(
                 file_data=genai_types.FileData(
                     # Vertex AI rejects fileData with an empty mimeType.
@@ -244,7 +243,7 @@ def inject_youtube_filedata(
         )
         skipped = [url for url in seen if url != chosen_url]
         if skipped:
-            chosen_content.parts.append(
+            parts.append(
                 genai_types.Part(
                     text=(
                         "[SYSTEM] Gemini can watch only one YouTube video per "
@@ -629,14 +628,18 @@ async def after_tool(
                         ),
                     )
                 return parsed
-        if tool_response is None or (isinstance(tool_response, str) and not tool_response.strip()):
+        if tool_response is None or (
+            isinstance(tool_response, str) and not tool_response.strip()
+        ):
             return {
                 "error": "timeout",
                 "message": "[SYSTEM] Investigator returned empty. Possibly timeout. Retry with simpler/fewer queries.",
             }
         return tool_response
 
-    if tool_response is None or (isinstance(tool_response, str) and not tool_response.strip()):
+    if tool_response is None or (
+        isinstance(tool_response, str) and not tool_response.strip()
+    ):
         return {
             "error": "timeout",
             "message": "[SYSTEM] Verifier returned empty. Possibly timeout. Retry with fewer URLs or claims.",

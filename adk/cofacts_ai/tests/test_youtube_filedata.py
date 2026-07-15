@@ -115,4 +115,6 @@ class TestInjectYoutubeFiledata:
         inject_youtube_filedata(cast(CallbackContext, None), request)
 
         assert file_data_parts(request.contents[0]) == []
-        assert len(request.contents[0].parts) == 1
+        parts = request.contents[0].parts
+        assert parts is not None
+        assert len(parts) == 1
