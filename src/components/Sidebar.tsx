@@ -1,7 +1,9 @@
 import { Link, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ChatSessionState } from '@/lib/chatCache'
 import type { SessionListItem } from '@/lib/chatSessions.functions'
+import { chatCacheKey } from '@/lib/chatCache'
 import { useSessions } from '@/hooks/useSessions'
 import { updateSessionTitle } from '@/lib/chatSessions.functions'
 import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
@@ -23,6 +25,17 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const [editTitle, setEditTitle] = useState('')
   const { title, lastEventTime, lastOpenedAt, lastUpdateTime } = session
 
+  // The session title is written to ADK state after the first turn finishes. A rename
+  // issued while that write is still in flight would be lost to the last-write-wins
+  // state merge, so the rename affordance stays hidden until the stream ends.
+  // Read-only subscription: `enabled: false` means the sidebar never fetches, it only
+  // observes the chat cache that useChat maintains.
+  const { data: chatState } = useQuery<ChatSessionState>({
+    queryKey: chatCacheKey(session.id),
+    enabled: false,
+  })
+  const isStreaming = chatState?.isStreaming ?? false
+
   const hasNew =
     !isActive &&
     lastEventTime !== undefined &&
@@ -39,6 +52,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   const handleStartEdit = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    if (isStreaming) return
     setIsEditing(true)
     setEditTitle(title)
   }
@@ -126,7 +140,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
         </Link>
       )}
 
-      {!isEditing && (
+      {!isEditing && !isStreaming && (
         <button
           onClick={handleStartEdit}
           className="absolute right-2 top-3 p-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-primary transition-opacity"

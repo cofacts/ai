@@ -35,6 +35,7 @@ from .media_filedata import (
     inject_cofacts_media_filedata,
 )
 from .instrumentation import LangfuseTracingPlugin, setup_instrumentation
+from .session_title import generate_session_title
 from .tools import (
     draft_factcheck_response,
     get_single_cofacts_article,
@@ -649,7 +650,7 @@ ai_writer = LlmAgent(
     before_model_callback=inject_article_attachment,
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,
-    after_agent_callback=update_last_event_time,
+    after_agent_callback=[update_last_event_time, generate_session_title],
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
 
