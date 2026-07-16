@@ -54,6 +54,8 @@ jobs:
       - name: Check formatting (ruff format)
         run: uv run ruff format --check .
 
+      # !cancelled(): run every check even when an earlier one fails,
+      # so a single CI run reports all format/lint/type errors at once.
       - name: Lint (ruff check)
         if: ${{ !cancelled() }}
         run: uv run ruff check .
@@ -62,8 +64,8 @@ jobs:
         if: ${{ !cancelled() }}
         run: uv run ty check .
 
-  test-frontend:
-    name: Test frontend (lint, format, typecheck)
+  lint-frontend:
+    name: Lint frontend (ESLint, Prettier, tsc)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,8 +87,12 @@ jobs:
       - name: Lint (ESLint)
         run: pnpm run lint
 
+      # !cancelled(): run every check even when an earlier one fails,
+      # so a single CI run reports all format/lint/type errors at once.
       - name: Format check (Prettier)
+        if: ${{ !cancelled() }}
         run: pnpm exec prettier --check .
 
       - name: Type check (TypeScript)
+        if: ${{ !cancelled() }}
         run: pnpm exec tsc --noEmit
