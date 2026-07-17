@@ -16,6 +16,7 @@ spec:
         autoscaling.knative.dev/maxScale: "3"
     spec:
       serviceAccountName: ${SERVICE_ACCOUNT_EMAIL}
+      timeoutSeconds: 900
       containers:
       - name: ingress
         image: ${FRONTEND_IMAGE}
