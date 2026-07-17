@@ -149,19 +149,22 @@ def _move_processor_first(provider: SDKTracerProvider, processor: SpanProcessor)
     public ordering API; on any surprise we leave the order unchanged, which
     degrades to that occasional race, not to an error.
     """
-    multi = getattr(provider, "_active_span_processor", None)
-    processors = getattr(multi, "_span_processors", None)
-    if (
-        multi is None
-        or not isinstance(processors, tuple)
-        or processor not in processors
-    ):
-        logger.warning("Could not reorder span processors; rewrite runs last.")
-        return
-    multi._span_processors = (
-        processor,
-        *(p for p in processors if p is not processor),
-    )
+    try:
+        multi = getattr(provider, "_active_span_processor", None)
+        processors = getattr(multi, "_span_processors", None)
+        if (
+            multi is None
+            or not isinstance(processors, tuple)
+            or processor not in processors
+        ):
+            logger.warning("Could not reorder span processors; rewrite runs last.")
+            return
+        multi._span_processors = (
+            processor,
+            *(p for p in processors if p is not processor),
+        )
+    except Exception:
+        logger.exception("Could not reorder span processors; rewrite runs last.")
 
 
 def setup_instrumentation():

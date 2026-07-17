@@ -1,10 +1,14 @@
-"""Unit tests for `TextExtractionSpanProcessor` and `_parts_text`.
+"""Unit tests for `TextExtractionSpanProcessor`, `_move_processor_first`, and
+`_parts_text`.
 
 The processor rewrites input.value/output.value from serialized JSON to plain
-text at span end (#14). Every test drives a real SDK TracerProvider with an
-InMemorySpanExporter and asserts on the EXPORTED span: on_end only receives a
-ReadableSpan snapshot, so proving the rewrite survives to export is the whole
-point -- a set_attribute-based implementation raises AttributeError there.
+text at span end (#14). The processor tests drive a real SDK TracerProvider in
+the production registration order (exporting processor first, rewrite second,
+then _move_processor_first) and assert on attributes snapshotted at export()
+time, the way OTLP serialization reads them -- on_end only receives a
+ReadableSpan snapshot, so a set_attribute-based implementation raises
+AttributeError, and a reference-holding exporter would hide ordering bugs.
+`_parts_text` and the fallback paths are exercised directly without a provider.
 """
 
 import json
@@ -145,10 +149,25 @@ class TestMoveProcessorFirst:
         assert attrs["input.value"] == "請查證這則訊息"
 
     def test_unexpected_provider_internals_do_not_raise(self):
-        # If the SDK renames its private fields, the reorder logs and degrades
-        # to the unreordered behavior instead of failing setup.
-        fake_provider = cast(TracerProvider, SimpleNamespace())
-        _move_processor_first(fake_provider, TextExtractionSpanProcessor())
+        # If the SDK renames its private fields or makes them read-only, the
+        # reorder logs and degrades to the unreordered behavior instead of
+        # failing setup. Covers both the missing-field and the frozen-setter
+        # paths.
+        processor = TextExtractionSpanProcessor()
+
+        missing_fields = cast(TracerProvider, SimpleNamespace())
+        _move_processor_first(missing_fields, processor)
+
+        class FrozenMulti:
+            @property
+            def _span_processors(self):
+                return (processor,)
+
+        frozen = cast(
+            TracerProvider, SimpleNamespace(_active_span_processor=FrozenMulti())
+        )
+        _move_processor_first(frozen, processor)
+        assert frozen._active_span_processor._span_processors == (processor,)
 
 
 class TestPartsText:
