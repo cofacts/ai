@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from cofacts_ai.agent_names import AI_WRITER_NAME
 from cofacts_ai.session_title import _normalize_title, generate_session_title
 
 
@@ -14,7 +15,7 @@ class GenerateSessionTitleTest(unittest.IsolatedAsyncioTestCase):
         context = _context(
             [
                 _event("user", "請查證台電停電傳言"),
-                _event("writer", "這則訊息需要比對台電公告。"),
+                _event(AI_WRITER_NAME, "這則訊息需要比對台電公告。"),
             ],
             user_text="請查證台電停電傳言",
             title="請查證台電停電傳言",
@@ -30,7 +31,7 @@ class GenerateSessionTitleTest(unittest.IsolatedAsyncioTestCase):
         context = _context(
             [
                 _event("user", "第一則訊息"),
-                _event("writer", "第一回覆"),
+                _event(AI_WRITER_NAME, "第一回覆"),
                 _event("user", "第二則訊息"),
             ],
             user_text="第二則訊息",
@@ -49,7 +50,7 @@ class GenerateSessionTitleTest(unittest.IsolatedAsyncioTestCase):
         context = _context(
             [
                 _event("user", "請查證"),
-                _event("writer", "查證結果"),
+                _event(AI_WRITER_NAME, "查證結果"),
             ],
             user_text="請查證",
             title="請查證",
@@ -70,7 +71,7 @@ class GenerateSessionTitleTest(unittest.IsolatedAsyncioTestCase):
         context = _context(
             [
                 _event("user", "請查證"),
-                _event("writer", "查證結果"),
+                _event(AI_WRITER_NAME, "查證結果"),
             ],
             user_text="請查證",
             title="請查證",

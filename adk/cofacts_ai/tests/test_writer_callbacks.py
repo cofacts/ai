@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.tools.base_tool import BaseTool
 
+from cofacts_ai.agent_names import AI_INVESTIGATOR_NAME, AI_VERIFIER_NAME
 from cofacts_ai.agent import after_tool, handle_writer_tool_error
 
 
@@ -40,19 +41,19 @@ def make_tool_context(function_call_id: Optional[str] = "fc-1") -> CallbackConte
 
 INVESTIGATOR_TIMEOUT_ERROR = {
     "error": "timeout",
-    "message": "[SYSTEM] Investigator returned empty. Possibly timeout. Retry with simpler/fewer queries.",
+    "message": f"[SYSTEM] {AI_INVESTIGATOR_NAME.capitalize()} returned empty. Possibly timeout. Retry with simpler/fewer queries.",
 }
 
 VERIFIER_TIMEOUT_ERROR = {
     "error": "timeout",
-    "message": "[SYSTEM] Verifier returned empty. Possibly timeout. Retry with fewer URLs or claims.",
+    "message": f"[SYSTEM] {AI_VERIFIER_NAME.capitalize()} returned empty. Possibly timeout. Retry with fewer URLs or claims.",
 }
 
 
 class TestAfterToolInvestigator:
     async def test_empty_string_returns_timeout_error(self):
         result = await after_tool(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response="",
@@ -61,7 +62,7 @@ class TestAfterToolInvestigator:
 
     async def test_whitespace_only_returns_timeout_error(self):
         result = await after_tool(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response="   \n\t",
@@ -70,7 +71,7 @@ class TestAfterToolInvestigator:
 
     async def test_none_returns_timeout_error(self):
         result = await after_tool(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response=None,
@@ -82,7 +83,7 @@ class TestAfterToolInvestigator:
         payload = json.dumps({"content": "x", "sources": []})
 
         result = await after_tool(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=tool_context,
             tool_response=payload,
@@ -102,7 +103,7 @@ class TestAfterToolInvestigator:
         )
 
         result = await after_tool(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=tool_context,
             tool_response=payload,
@@ -129,7 +130,7 @@ class TestAfterToolInvestigator:
         )
 
         result = await after_tool(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=tool_context,
             tool_response=payload,
@@ -140,7 +141,7 @@ class TestAfterToolInvestigator:
 
     async def test_json_parse_failure_nonempty_garbage_passthrough(self):
         result = await after_tool(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response="not json {{",
@@ -149,7 +150,7 @@ class TestAfterToolInvestigator:
 
     async def test_valid_json_but_not_a_dict_passthrough(self):
         result = await after_tool(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response="[1, 2, 3]",
@@ -159,7 +160,7 @@ class TestAfterToolInvestigator:
     async def test_non_string_non_none_response_passthrough(self):
         already_a_dict = {"already": "a dict"}
         result = await after_tool(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response=already_a_dict,
@@ -170,7 +171,7 @@ class TestAfterToolInvestigator:
 class TestAfterToolVerifier:
     async def test_empty_string_returns_timeout_error(self):
         result = await after_tool(
-            tool=make_tool("verifier"),
+            tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response="",
@@ -179,7 +180,7 @@ class TestAfterToolVerifier:
 
     async def test_whitespace_only_returns_timeout_error(self):
         result = await after_tool(
-            tool=make_tool("verifier"),
+            tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response="  \n",
@@ -188,7 +189,7 @@ class TestAfterToolVerifier:
 
     async def test_none_returns_timeout_error(self):
         result = await after_tool(
-            tool=make_tool("verifier"),
+            tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response=None,
@@ -198,7 +199,7 @@ class TestAfterToolVerifier:
     async def test_valid_json_returns_parsed_dict(self):
         payload = json.dumps({"content": "c", "sources": [{"title": "t", "url": "u"}]})
         result = await after_tool(
-            tool=make_tool("verifier"),
+            tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response=payload,
@@ -207,7 +208,7 @@ class TestAfterToolVerifier:
 
     async def test_invalid_json_returns_none(self):
         result = await after_tool(
-            tool=make_tool("verifier"),
+            tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response="{not valid json",
@@ -216,7 +217,7 @@ class TestAfterToolVerifier:
 
     async def test_non_string_response_returns_none(self):
         result = await after_tool(
-            tool=make_tool("verifier"),
+            tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response=[1, 2, 3],
@@ -240,7 +241,7 @@ class TestAfterToolDispatch:
 class TestHandleWriterToolError:
     def test_formats_generic_exception(self):
         result = handle_writer_tool_error(
-            tool=make_tool("investigator"),
+            tool=make_tool(AI_INVESTIGATOR_NAME),
             args={},
             tool_context=None,
             error=ValueError("boom"),
@@ -248,14 +249,14 @@ class TestHandleWriterToolError:
         assert result == {
             "error": "ValueError",
             "message": (
-                "[SYSTEM] Tool 'investigator' failed with ValueError: boom. "
+                f"[SYSTEM] Tool '{AI_INVESTIGATOR_NAME}' failed with ValueError: boom. "
                 "Please note this failure and continue with available information."
             ),
         }
 
     def test_uses_actual_exception_type_name(self):
         result = handle_writer_tool_error(
-            tool=make_tool("verifier"),
+            tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=None,
             error=RuntimeError("oops"),
@@ -263,7 +264,7 @@ class TestHandleWriterToolError:
         assert result == {
             "error": "RuntimeError",
             "message": (
-                "[SYSTEM] Tool 'verifier' failed with RuntimeError: oops. "
+                f"[SYSTEM] Tool '{AI_VERIFIER_NAME}' failed with RuntimeError: oops. "
                 "Please note this failure and continue with available information."
             ),
         }

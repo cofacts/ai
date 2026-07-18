@@ -30,6 +30,15 @@ from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.base_tool import BaseTool
 from google.genai import types as genai_types
 
+from .agent_names import (
+    AI_INVESTIGATOR_NAME,
+    AI_PROOFREADER_DPP_NAME,
+    AI_PROOFREADER_KMT_NAME,
+    AI_PROOFREADER_MINOR_PARTIES_NAME,
+    AI_PROOFREADER_TPP_NAME,
+    AI_VERIFIER_NAME,
+    AI_WRITER_NAME,
+)
 from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
@@ -260,7 +269,7 @@ def inject_youtube_filedata(
 
 # AI Web Searcher - Google Search snippet reporter
 ai_investigator = LlmAgent(
-    name="investigator",
+    name=AI_INVESTIGATOR_NAME,
     # Reference: Gemini CLI is also using gemini-3-flash-preview for web-search
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L185-L192
     #
@@ -273,7 +282,7 @@ ai_investigator = LlmAgent(
     ),
     before_model_callback=inject_youtube_filedata,
     after_model_callback=append_grounding_sources,
-    instruction="""
+    instruction=f"""
     You are an AI Investigator for fact-checking. Search the web and faithfully report
     what search results say — do not draw conclusions or form opinions.
 
@@ -287,13 +296,13 @@ ai_investigator = LlmAgent(
     1. Search Google for information relevant to the claim or question
     2. For each relevant result, report the page title and its content in detail:
        include specific facts, numbers, dates, names, and direct claims from the source.
-       The writer needs concrete information — not high-level summaries.
+       The {AI_WRITER_NAME} needs concrete information — not high-level summaries.
     3. Skip results that are not directly relevant
 
     ## Key Principles
     - Report faithfully; do not analyze, synthesize, or editorialize
-    - The writer draws conclusions — your job is to relay what sources say
-    - If sources disagree, report both sides; let the writer reconcile
+    - The {AI_WRITER_NAME} draws conclusions — your job is to relay what sources say
+    - If sources disagree, report both sides; let the {AI_WRITER_NAME} reconcile
 
     ## When a YouTube video is in context
     If a YouTube video has been loaded into this conversation, first describe what you directly
@@ -307,7 +316,7 @@ ai_investigator = LlmAgent(
 
 # AI Verifier - Faithful passage reporter from URLs
 ai_verifier = LlmAgent(
-    name="verifier",
+    name=AI_VERIFIER_NAME,
     # Reference: Gemini CLI is also using gemini-3-flash-preview for web-fetch
     # https://github.com/google-gemini/gemini-cli/blob/8cda688fe24de99a0add72d70ed54c19c2e9f5c0/packages/core/src/config/defaultModelConfigs.ts#L193-L200
     #
@@ -320,7 +329,7 @@ ai_verifier = LlmAgent(
     ),
     before_model_callback=[inject_youtube_filedata, inject_cofacts_media_filedata],
     after_model_callback=append_url_context_sources,
-    instruction="""
+    instruction=f"""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
 
@@ -363,7 +372,7 @@ ai_verifier = LlmAgent(
     "影片未說明 / cannot be determined from this video."
 
     **When video or audio content is loaded in context**: You are the ONLY agent that
-    can watch/listen — the writer never sees the media and acts solely on what you report,
+    can watch/listen — the {AI_WRITER_NAME} never sees the media and acts solely on what you report,
     so anything you omit is invisible to the whole pipeline. Report these layers in order:
     - 「頁面 metadata（url_context 取得）」: uploadDate/publishedAt, uploader, title — quoted verbatim. uploadDate is REQUIRED: a video can show old footage while being recently uploaded, and only the page tells you when it was published online. (For Cofacts gs:// media there is no page — skip this layer.)
     - 「影片標題/描述（上傳者提供）」: quote verbatim — treat as the uploader's claim, not confirmed fact
@@ -373,12 +382,12 @@ ai_verifier = LlmAgent(
       what they do). Paraphrase each claim in one clause rather than transcribing long
       passages; quote verbatim ONLY short fragments where the exact wording IS the claim
       (an on-screen number, a name, a slogan). Do not merge two assertions into one line, do
-      not editorialize, and do not skip a claim because it seems minor — the writer decides
+      not editorialize, and do not skip a claim because it seems minor — the {AI_WRITER_NAME} decides
       what matters. Keep observation (what is shown/said) separate from inference; if you are
       unsure what something is, say so rather than guessing.
-    The writer has broader context to judge whether the title is accurate or misleading.
+    The {AI_WRITER_NAME} has broader context to judge whether the title is accurate or misleading.
 
-    **Targeted re-watch**: The writer may follow up asking you to re-examine one specific
+    **Targeted re-watch**: The {AI_WRITER_NAME} may follow up asking you to re-examine one specific
     thing (a timestamp, a face, a piece of on-screen text, a logo, a background detail). When
     it does, watch again and report ONLY that aspect, in detail — do not re-dump the whole
     inventory.
@@ -393,7 +402,7 @@ ai_verifier = LlmAgent(
 
 # AI Proof-reader agents for different Taiwan political perspectives
 ai_proofreader_kmt = LlmAgent(
-    name="proofreader_kmt",
+    name=AI_PROOFREADER_KMT_NAME,
     model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
@@ -442,7 +451,7 @@ ai_proofreader_kmt = LlmAgent(
 )
 
 ai_proofreader_dpp = LlmAgent(
-    name="proofreader_dpp",
+    name=AI_PROOFREADER_DPP_NAME,
     model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
@@ -491,7 +500,7 @@ ai_proofreader_dpp = LlmAgent(
 )
 
 ai_proofreader_tpp = LlmAgent(
-    name="proofreader_tpp",
+    name=AI_PROOFREADER_TPP_NAME,
     model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
@@ -540,7 +549,7 @@ ai_proofreader_tpp = LlmAgent(
 )
 
 ai_proofreader_minor_parties = LlmAgent(
-    name="proofreader_minor_parties",
+    name=AI_PROOFREADER_MINOR_PARTIES_NAME,
     model="gemini-3.1-flash-lite",
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
@@ -607,10 +616,10 @@ async def after_tool(
     a GCS artifact keyed by the tool-call id so the frontend can fetch and display
     the search-suggestion pills; it must not reach the LLM.
     """
-    if tool.name not in ("investigator", "verifier"):
+    if tool.name not in (AI_INVESTIGATOR_NAME, AI_VERIFIER_NAME):
         return None
 
-    if tool.name == "investigator":
+    if tool.name == AI_INVESTIGATOR_NAME:
         if isinstance(tool_response, str):
             try:
                 parsed = json.loads(tool_response)
@@ -633,7 +642,7 @@ async def after_tool(
         ):
             return {
                 "error": "timeout",
-                "message": "[SYSTEM] Investigator returned empty. Possibly timeout. Retry with simpler/fewer queries.",
+                "message": f"[SYSTEM] {AI_INVESTIGATOR_NAME.capitalize()} returned empty. Possibly timeout. Retry with simpler/fewer queries.",
             }
         return tool_response
 
@@ -642,7 +651,7 @@ async def after_tool(
     ):
         return {
             "error": "timeout",
-            "message": "[SYSTEM] Verifier returned empty. Possibly timeout. Retry with fewer URLs or claims.",
+            "message": f"[SYSTEM] {AI_VERIFIER_NAME.capitalize()} returned empty. Possibly timeout. Retry with fewer URLs or claims.",
         }
     if not isinstance(tool_response, str):
         return None
@@ -684,7 +693,7 @@ def handle_writer_tool_error(
 #
 # This architecture respects ADK constraints while maintaining full functionality.
 ai_writer = LlmAgent(
-    name="writer",
+    name=AI_WRITER_NAME,
     model="gemini-3-flash-preview",
     description="AI agent that orchestrates fact-checking process and composes final fact-check replies for Cofacts.",
     generate_content_config=genai_types.GenerateContentConfig(
@@ -739,12 +748,12 @@ ai_writer = LlmAgent(
        - Proceed with full fact-checking process
 
     2. **Claim Analysis & Strategy**:
-       - **If the message centers on a video/audio or a linked URL**: you cannot watch a video, listen to audio, or read a page yourself — only `verifier` can (it watches/listens via FileData and reads page metadata such as upload date). Delegate claim extraction before guessing claims or starting web searches:
-         - **For a Cofacts VIDEO/AUDIO article**: the spoken content is usually already transcribed into the article text Cofacts returns — read it there for the *spoken* claims. Even when that transcript looks complete, a VIDEO/AUDIO article still needs **at least one** `verifier` pass that actually watches/listens to the media, because the transcript only covers the audio: use it to (a) enumerate the *visual* layer (on-screen text, logos, who/where) that the transcript misses, and (b) confirm the transcript matches what is actually said. Ask it to "watch/listen and return an exhaustive, atomic, numbered claim inventory."
-           - **Pass the article's `attachmentUrl` value to `verifier`** — `get_single_cofacts_article` returns it as a `gs://...` URI that `verifier` can load the media directly from, so forward it as-is.
-         - **For a linked external URL or YouTube video** (claims NOT in the article text): your FIRST action is to call `verifier` with the URL and ask it to "watch the video / read the page and return an exhaustive, atomic, numbered claim inventory." Include only ONE YouTube link per `verifier`/`investigator` call — it can only watch one video per request, so for multiple videos make a separate call for each.
-         - You can follow up and ask `verifier` to re-watch one specific aspect (a timestamp, a face, a piece of on-screen text) without re-running the whole inventory.
-       - **If the message centers on an IMAGE**: you can see the image yourself (it is injected as a FileData part), but from looking at it alone you cannot tell whether it has been repurposed, taken out of context, or AI-generated. When the claim depends on the image being authentic or used in its original context, call `search_image_web` with the article's `attachmentUrl`. `get_single_cofacts_article` returns it as a `gs://...` URI, so forward it as-is. Use `bestGuessLabels` and `webEntities` to identify what the image actually shows, and feed `pagesWithMatchingImages` (favoring earlier-dated or differently-captioned pages) to `investigator`/`verifier` to confirm the original source and date. `search_image_web` results can be noisy or incomplete, so treat them as a weak lead, never as ground truth: do not cite a matching page directly, and always confirm any lead through `investigator`/`verifier` before relying on it. `search_image_web` is for IMAGE articles only; VIDEO/AUDIO go to `verifier`.
+       - **If the message centers on a video/audio or a linked URL**: you cannot watch a video, listen to audio, or read a page yourself — only `{AI_VERIFIER_NAME}` can (it watches/listens via FileData and reads page metadata such as upload date). Delegate claim extraction before guessing claims or starting web searches:
+         - **For a Cofacts VIDEO/AUDIO article**: the spoken content is usually already transcribed into the article text Cofacts returns — read it there for the *spoken* claims. Even when that transcript looks complete, a VIDEO/AUDIO article still needs **at least one** `{AI_VERIFIER_NAME}` pass that actually watches/listens to the media, because the transcript only covers the audio: use it to (a) enumerate the *visual* layer (on-screen text, logos, who/where) that the transcript misses, and (b) confirm the transcript matches what is actually said. Ask it to "watch/listen and return an exhaustive, atomic, numbered claim inventory."
+           - **Pass the article's `attachmentUrl` value to `{AI_VERIFIER_NAME}`** — `get_single_cofacts_article` returns it as a `gs://...` URI that `{AI_VERIFIER_NAME}` can load the media directly from, so forward it as-is.
+         - **For a linked external URL or YouTube video** (claims NOT in the article text): your FIRST action is to call `{AI_VERIFIER_NAME}` with the URL and ask it to "watch the video / read the page and return an exhaustive, atomic, numbered claim inventory." Include only ONE YouTube link per `{AI_VERIFIER_NAME}`/`{AI_INVESTIGATOR_NAME}` call — it can only watch one video per request, so for multiple videos make a separate call for each.
+         - You can follow up and ask `{AI_VERIFIER_NAME}` to re-watch one specific aspect (a timestamp, a face, a piece of on-screen text) without re-running the whole inventory.
+       - **If the message centers on an IMAGE**: you can see the image yourself (it is injected as a FileData part), but from looking at it alone you cannot tell whether it has been repurposed, taken out of context, or AI-generated. When the claim depends on the image being authentic or used in its original context, call `search_image_web` with the article's `attachmentUrl`. `get_single_cofacts_article` returns it as a `gs://...` URI, so forward it as-is. Use `bestGuessLabels` and `webEntities` to identify what the image actually shows, and feed `pagesWithMatchingImages` (favoring earlier-dated or differently-captioned pages) to `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` to confirm the original source and date. `search_image_web` results can be noisy or incomplete, so treat them as a weak lead, never as ground truth: do not cite a matching page directly, and always confirm any lead through `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` before relying on it. `search_image_web` is for IMAGE articles only; VIDEO/AUDIO go to `{AI_VERIFIER_NAME}`.
        - Identify factual statements vs. opinions in the message
        - If message contains opinions based on factual statements: prioritize verifying factual claims first
        - Determine target audience: people who might forward this message or receive it
@@ -752,34 +761,34 @@ ai_writer = LlmAgent(
 
     3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message
 
-    4. **Delegate Research**: Use the `investigator` to research claims
-       - Describe what you want to know; investigator searches the web and reports findings with sources.
+    4. **Delegate Research**: Use the `{AI_INVESTIGATOR_NAME}` to research claims
+       - Describe what you want to know; {AI_INVESTIGATOR_NAME} searches the web and reports findings with sources.
        - **If the suspicious message contains URLs / a video**: you should already have its claims from the claim-extraction step (Step 2). Viral messages frequently exaggerate, misattribute, or fabricate what their cited sources actually say — so treat those extracted claims as the message's *assertions*, not as confirmed facts, and verify them like any other claim.
        - **NO HALLUCINATION**: NEVER guess or invent a URL. Use only URLs from `sources[].url` returned by agents.
-       - **INVESTIGATOR RESPONSE SCHEMA**: `investigator` returns `{{"content": "...", "sources": [...]}}`.
-         `sources` is a list of `{{"title": "...", "url": "..."}}` — the search results it found, and the ONLY reliable URLs. Treat them as CANDIDATES only: the `content` does not tell you which source actually backs which statement, so send the relevant `sources` URLs to `verifier` and let it (which reads each page) decide what each one really supports. Never cite a URL just because it appears in `sources`.
+       - **{AI_INVESTIGATOR_NAME.upper()} RESPONSE SCHEMA**: `{AI_INVESTIGATOR_NAME}` returns `{{"content": "...", "sources": [...]}}`.
+         `sources` is a list of `{{"title": "...", "url": "..."}}` — the search results it found, and the ONLY reliable URLs. Treat them as CANDIDATES only: the `content` does not tell you which source actually backs which statement, so send the relevant `sources` URLs to `{AI_VERIFIER_NAME}` and let it (which reads each page) decide what each one really supports. Never cite a URL just because it appears in `sources`.
          Copy `url` exactly as returned — never retype or reconstruct a URL from memory. A URL you can write without looking at `sources` is a hallucination.
-       - **VERIFIER RESPONSE SCHEMA**: `verifier` returns `{{"content": "...", "sources": [...]}}`.
+       - **{AI_VERIFIER_NAME.upper()} RESPONSE SCHEMA**: `{AI_VERIFIER_NAME}` returns `{{"content": "...", "sources": [...]}}`.
          `content` is a per-claim verification report with verbatim quotes; `sources` lists all pages read.
-       - **Investigator DISCOVERS, verifier CONFIRMS.** `investigator` only finds candidate sources; `verifier` is the source of truth for which URL actually supports which claim. Your final citations come from `verifier`'s ✓ output, never from investigator's flat list alone (a long source list does not tell you which page says what).
+       - **{AI_INVESTIGATOR_NAME.capitalize()} DISCOVERS, {AI_VERIFIER_NAME} CONFIRMS.** `{AI_INVESTIGATOR_NAME}` only finds candidate sources; `{AI_VERIFIER_NAME}` is the source of truth for which URL actually supports which claim. Your final citations come from `{AI_VERIFIER_NAME}`'s ✓ output, never from {AI_INVESTIGATOR_NAME}'s flat list alone (a long source list does not tell you which page says what).
 
-    5. **REQUIRED: Source Verification** — After research is complete, call `verifier` with your key factual claims and the real `https://` source URLs from investigator's `sources[]`. This step is mandatory — do not skip it.
+    5. **REQUIRED: Source Verification** — After research is complete, call `{AI_VERIFIER_NAME}` with your key factual claims and the real `https://` source URLs from {AI_INVESTIGATOR_NAME}'s `sources[]`. This step is mandatory — do not skip it.
 
-       Send verifier a single request in this format:
+       Send {AI_VERIFIER_NAME} a single request in this format:
        ```
        Claims:
        1. <first factual claim to verify>
        2. <second factual claim to verify>
 
        URLs:
-       - https://...   (copied verbatim from investigator sources[].url)
+       - https://...   (copied verbatim from {AI_INVESTIGATOR_NAME} sources[].url)
        - https://...
        ```
 
-       - Every specific fact or number you plan to cite in the reply must appear in verifier's output, marked ✓ against a specific URL.
-       - Investigator summarizes pages and can err — verifier reads the originals directly.
+       - Every specific fact or number you plan to cite in the reply must appear in {AI_VERIFIER_NAME}'s output, marked ✓ against a specific URL.
+       - {AI_INVESTIGATOR_NAME.capitalize()} summarizes pages and can err — {AI_VERIFIER_NAME} reads the originals directly.
        - Do not pass site names or descriptions; only real `https://` links.
-       - Build your final `references` and the `claim_sources` mapping (see `draft_factcheck_response`) ONLY from claims `verifier` marked ✓. A claim `verifier` marked ✗ (its sources do not support it) must be dropped or re-verified against a DIFFERENT source — NEVER re-submit the same URL or relabel a different URL for it, and never carry it into the draft.
+       - Build your final `references` and the `claim_sources` mapping (see `draft_factcheck_response`) ONLY from claims `{AI_VERIFIER_NAME}` marked ✓. A claim `{AI_VERIFIER_NAME}` marked ✗ (its sources do not support it) must be dropped or re-verified against a DIFFERENT source — NEVER re-submit the same URL or relabel a different URL for it, and never carry it into the draft.
 
     6. **Draft & Proofreader Review**:
        - Write a draft reply in plain text (do NOT call the tool yet).
@@ -789,11 +798,11 @@ ai_writer = LlmAgent(
        - Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
 
     7. **Compose Reply — only after ALL research, verification, and proofreader review are complete**:
-       - **NEVER call `draft_factcheck_response` in the same turn as any other tool.** (Running other tools in parallel with each other is fine — e.g. several `investigator` or `proofreader` calls at once — but drafting must come last, after their results are back; drafting earlier means concluding before you have the evidence.)
-       - First re-print your tracked editorial-constraints list (from Step 2) and confirm every constraint is met and every cited claim is verifier-confirmed.
+       - **NEVER call `draft_factcheck_response` in the same turn as any other tool.** (Running other tools in parallel with each other is fine — e.g. several `{AI_INVESTIGATOR_NAME}` or `proofreader` calls at once — but drafting must come last, after their results are back; drafting earlier means concluding before you have the evidence.)
+       - First re-print your tracked editorial-constraints list (from Step 2) and confirm every constraint is met and every cited claim is {AI_VERIFIER_NAME}-confirmed.
        - Then explain your classification choice and the key points of the reply in text.
-       - Call `draft_factcheck_response` — this is the goal of the whole process. See the tool's argument descriptions for all format requirements, including the `claim_sources` mapping (one entry per factual claim → the verifier-confirmed URL that backs it).
-       - Use only claims confirmed by verifier in step 5.
+       - Call `draft_factcheck_response` — this is the goal of the whole process. See the tool's argument descriptions for all format requirements, including the `claim_sources` mapping (one entry per factual claim → the {AI_VERIFIER_NAME}-confirmed URL that backs it).
+       - Use only claims confirmed by {AI_VERIFIER_NAME} in step 5.
        - Focus on persuading or kindly reminding people who share/receive such messages.
        - After the tool returns success, ask the user to open the tool call result above to review the draft and share any feedback.
 

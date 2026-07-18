@@ -4,6 +4,8 @@ import logging
 from google import genai
 from google.genai import types as genai_types
 
+from .agent_names import AI_WRITER_NAME
+
 logger = logging.getLogger(__name__)
 
 TITLE_STATE_KEY = "title"
@@ -56,7 +58,7 @@ def _count_user_events(events) -> int:
 
 def _last_writer_text(events) -> str:
     for event in reversed(events):
-        if event.author != "writer":
+        if event.author != AI_WRITER_NAME:
             continue
         text = _content_text(event.content)
         if text:
@@ -98,7 +100,10 @@ def _build_prompt(user_text: str, result_text: str) -> str:
         f"User's first message:\n{_truncate_prompt_text(user_text)}"
     )
     if result_text:
-        prompt += f"\n\nWriter's first result:\n{_truncate_prompt_text(result_text)}"
+        prompt += (
+            f"\n\n{AI_WRITER_NAME.capitalize()}'s first result:\n"
+            f"{_truncate_prompt_text(result_text)}"
+        )
     return prompt
 
 

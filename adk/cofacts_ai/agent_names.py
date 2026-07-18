@@ -1,0 +1,7 @@
+AI_WRITER_NAME = "writer"
+AI_INVESTIGATOR_NAME = "investigator"
+AI_VERIFIER_NAME = "verifier"
+AI_PROOFREADER_KMT_NAME = "proofreader_kmt"
+AI_PROOFREADER_DPP_NAME = "proofreader_dpp"
+AI_PROOFREADER_TPP_NAME = "proofreader_tpp"
+AI_PROOFREADER_MINOR_PARTIES_NAME = "proofreader_minor_parties"
