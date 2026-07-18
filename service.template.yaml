@@ -15,6 +15,11 @@ spec:
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "3"
     spec:
+      # Request timeout for the Cloud Run revision. Without this, Cloud Run
+      # applies its 300s default, which cuts long multimodal writer↔verifier↔
+      # investigator loops mid-run with no final answer (see #84). 900s (15 min)
+      # gives ambiguous VIDEO/AUDIO adjudications room to converge.
+      timeoutSeconds: 900
       serviceAccountName: ${SERVICE_ACCOUNT_EMAIL}
       containers:
       - name: ingress
