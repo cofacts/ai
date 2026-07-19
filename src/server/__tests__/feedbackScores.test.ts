@@ -67,6 +67,26 @@ describe('fetchFeedbackForTrace', () => {
     )
   })
 
+  test('filters by environment when LANGFUSE_TRACING_ENVIRONMENT is set', async () => {
+    process.env.LANGFUSE_TRACING_ENVIRONMENT = 'preview'
+    const fetchSpy = mockFetchOnce({ jsonBody: { data: [] } })
+
+    await fetchFeedbackForTrace('trace-abc', 'user-42')
+
+    const [calledUrl] = fetchSpy.mock.calls[0] as [URL, RequestInit]
+    expect(calledUrl.searchParams.get('environment')).toBe('preview')
+  })
+
+  test('omits environment filter when LANGFUSE_TRACING_ENVIRONMENT is unset', async () => {
+    delete process.env.LANGFUSE_TRACING_ENVIRONMENT
+    const fetchSpy = mockFetchOnce({ jsonBody: { data: [] } })
+
+    await fetchFeedbackForTrace('trace-abc', 'user-42')
+
+    const [calledUrl] = fetchSpy.mock.calls[0] as [URL, RequestInit]
+    expect(calledUrl.searchParams.has('environment')).toBe(false)
+  })
+
   test('returns null score when Langfuse has no matching scores', async () => {
     mockFetchOnce({ jsonBody: { data: [] } })
 
@@ -224,6 +244,28 @@ describe('postFeedbackForTrace', () => {
     const body = JSON.parse(init.body as string)
     expect(body.value).toBe(0)
     expect(body.comment).toBe('')
+  })
+
+  test('tags the score with environment when LANGFUSE_TRACING_ENVIRONMENT is set', async () => {
+    process.env.LANGFUSE_TRACING_ENVIRONMENT = 'production'
+    const fetchSpy = mockFetchOnce({ jsonBody: {} })
+
+    await postFeedbackForTrace({ traceId: 'trace-1', value: 1 })
+
+    const [, init] = fetchSpy.mock.calls[0] as [URL, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.environment).toBe('production')
+  })
+
+  test('omits environment field when LANGFUSE_TRACING_ENVIRONMENT is unset', async () => {
+    delete process.env.LANGFUSE_TRACING_ENVIRONMENT
+    const fetchSpy = mockFetchOnce({ jsonBody: {} })
+
+    await postFeedbackForTrace({ traceId: 'trace-1', value: 1 })
+
+    const [, init] = fetchSpy.mock.calls[0] as [URL, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body).not.toHaveProperty('environment')
   })
 
   test('throws an Error with langfuse upstream message on failure', async () => {

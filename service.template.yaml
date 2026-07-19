@@ -41,6 +41,8 @@ spec:
           value: "${LANGFUSE_SECRET_KEY}"
         - name: LANGFUSE_BASE_URL
           value: "https://langfuse.cofacts.tw"
+        - name: LANGFUSE_TRACING_ENVIRONMENT
+          value: "${LANGFUSE_TRACING_ENVIRONMENT}"
       - name: backend
         image: ${BACKEND_IMAGE}
         resources:
@@ -62,6 +64,8 @@ spec:
           value: "${LANGFUSE_SECRET_KEY}"
         - name: LANGFUSE_BASE_URL
           value: "https://langfuse.cofacts.tw"
+        - name: LANGFUSE_TRACING_ENVIRONMENT
+          value: "${LANGFUSE_TRACING_ENVIRONMENT}"
         - name: DATABASE_URL
           value: "${DATABASE_URL}"
         # Persist artifacts (e.g. Google Search suggestion widgets) to GCS so

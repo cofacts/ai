@@ -60,6 +60,8 @@ export async function fetchFeedbackForTrace(
   url.searchParams.set('userId', userId)
   url.searchParams.set('fields', 'score,trace')
   url.searchParams.set('limit', '50')
+  const environment = process.env.LANGFUSE_TRACING_ENVIRONMENT
+  if (environment) url.searchParams.set('environment', environment)
 
   const auth = Buffer.from(`${publicKey}:${secretKey}`).toString('base64')
   const response = await fetch(url, {
@@ -112,6 +114,8 @@ export async function postFeedbackForTrace(
     dataType: 'NUMERIC',
   }
   if (input.comment !== undefined) body.comment = input.comment
+  const environment = process.env.LANGFUSE_TRACING_ENVIRONMENT
+  if (environment) body.environment = environment
 
   const response = await fetch(url, {
     method: 'POST',

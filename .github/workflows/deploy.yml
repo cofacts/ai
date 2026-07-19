@@ -126,6 +126,14 @@ jobs:
 
           echo "TRAFFIC_BLOCK=traffic: $TRAFFIC_JSON" >> $GITHUB_ENV
 
+      - name: Determine Langfuse Environment
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "LANGFUSE_TRACING_ENVIRONMENT=preview" >> $GITHUB_ENV
+          else
+            echo "LANGFUSE_TRACING_ENVIRONMENT=production" >> $GITHUB_ENV
+          fi
+
       - name: Generate Service YAML
         env:
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
@@ -141,7 +149,7 @@ jobs:
           GC_PROJECT_ID: ${{ secrets.GC_PROJECT_ID }}
           COFACTS_API_URL: ${{ secrets.COFACTS_API_URL }}
         run: |
-          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${DATABASE_URL} ${GCS_ARTIFACT_BUCKET} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL}' < service.template.yaml > service.yaml
+          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${LANGFUSE_TRACING_ENVIRONMENT} ${DATABASE_URL} ${GCS_ARTIFACT_BUCKET} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL}' < service.template.yaml > service.yaml
           cat service.yaml
 
       - name: Deploy to Cloud Run
