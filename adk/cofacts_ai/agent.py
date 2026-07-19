@@ -278,7 +278,9 @@ ai_investigator = LlmAgent(
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.MEDIUM
-        )
+        ),
+        # Long YouTube videos can otherwise hang with no client-side deadline.
+        http_options=genai_types.HttpOptions(timeout=240_000),
     ),
     before_model_callback=inject_youtube_filedata,
     after_model_callback=append_grounding_sources,
@@ -325,7 +327,9 @@ ai_verifier = LlmAgent(
     generate_content_config=genai_types.GenerateContentConfig(
         thinking_config=genai_types.ThinkingConfig(
             thinking_level=genai_types.ThinkingLevel.HIGH
-        )
+        ),
+        # Long YouTube videos can otherwise hang with no client-side deadline.
+        http_options=genai_types.HttpOptions(timeout=240_000),
     ),
     before_model_callback=[inject_youtube_filedata, inject_cofacts_media_filedata],
     after_model_callback=append_url_context_sources,
