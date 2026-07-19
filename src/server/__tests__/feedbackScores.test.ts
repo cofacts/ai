@@ -67,26 +67,6 @@ describe('fetchFeedbackForTrace', () => {
     )
   })
 
-  test('filters by environment when LANGFUSE_TRACING_ENVIRONMENT is set', async () => {
-    process.env.LANGFUSE_TRACING_ENVIRONMENT = 'preview'
-    const fetchSpy = mockFetchOnce({ jsonBody: { data: [] } })
-
-    await fetchFeedbackForTrace('trace-abc', 'user-42')
-
-    const [calledUrl] = fetchSpy.mock.calls[0] as [URL, RequestInit]
-    expect(calledUrl.searchParams.get('environment')).toBe('preview')
-  })
-
-  test('omits environment filter when LANGFUSE_TRACING_ENVIRONMENT is unset', async () => {
-    delete process.env.LANGFUSE_TRACING_ENVIRONMENT
-    const fetchSpy = mockFetchOnce({ jsonBody: { data: [] } })
-
-    await fetchFeedbackForTrace('trace-abc', 'user-42')
-
-    const [calledUrl] = fetchSpy.mock.calls[0] as [URL, RequestInit]
-    expect(calledUrl.searchParams.has('environment')).toBe(false)
-  })
-
   test('returns null score when Langfuse has no matching scores', async () => {
     mockFetchOnce({ jsonBody: { data: [] } })
 

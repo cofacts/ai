@@ -60,8 +60,6 @@ export async function fetchFeedbackForTrace(
   url.searchParams.set('userId', userId)
   url.searchParams.set('fields', 'score,trace')
   url.searchParams.set('limit', '50')
-  const environment = process.env.LANGFUSE_TRACING_ENVIRONMENT
-  if (environment) url.searchParams.set('environment', environment)
 
   const auth = Buffer.from(`${publicKey}:${secretKey}`).toString('base64')
   const response = await fetch(url, {
