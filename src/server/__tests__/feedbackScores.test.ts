@@ -12,6 +12,7 @@ beforeEach(() => {
   process.env.LANGFUSE_BASE_URL = 'https://langfuse.example.test'
   process.env.LANGFUSE_PUBLIC_KEY = 'pk-test'
   process.env.LANGFUSE_SECRET_KEY = 'sk-test'
+  delete process.env.LANGFUSE_TRACING_ENVIRONMENT
 })
 
 afterEach(() => {
