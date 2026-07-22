@@ -29,6 +29,7 @@ from google.adk.tools import google_search, url_context
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.base_tool import BaseTool
 from google.genai import types as genai_types
+from instrumentation import LangfuseTracingPlugin
 
 from .agent_names import (
     AI_INVESTIGATOR_NAME,
@@ -43,7 +44,6 @@ from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
-from .instrumentation import LangfuseTracingPlugin
 from .session_title import generate_session_title
 from .tools import (
     draft_factcheck_response,
