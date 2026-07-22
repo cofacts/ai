@@ -12,6 +12,7 @@ beforeEach(() => {
   process.env.LANGFUSE_BASE_URL = 'https://langfuse.example.test'
   process.env.LANGFUSE_PUBLIC_KEY = 'pk-test'
   process.env.LANGFUSE_SECRET_KEY = 'sk-test'
+  delete process.env.LANGFUSE_TRACING_ENVIRONMENT
 })
 
 afterEach(() => {
@@ -224,6 +225,28 @@ describe('postFeedbackForTrace', () => {
     const body = JSON.parse(init.body as string)
     expect(body.value).toBe(0)
     expect(body.comment).toBe('')
+  })
+
+  test('tags the score with environment when LANGFUSE_TRACING_ENVIRONMENT is set', async () => {
+    process.env.LANGFUSE_TRACING_ENVIRONMENT = 'production'
+    const fetchSpy = mockFetchOnce({ jsonBody: {} })
+
+    await postFeedbackForTrace({ traceId: 'trace-1', value: 1 })
+
+    const [, init] = fetchSpy.mock.calls[0] as [URL, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.environment).toBe('production')
+  })
+
+  test('omits environment field when LANGFUSE_TRACING_ENVIRONMENT is unset', async () => {
+    delete process.env.LANGFUSE_TRACING_ENVIRONMENT
+    const fetchSpy = mockFetchOnce({ jsonBody: {} })
+
+    await postFeedbackForTrace({ traceId: 'trace-1', value: 1 })
+
+    const [, init] = fetchSpy.mock.calls[0] as [URL, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body).not.toHaveProperty('environment')
   })
 
   test('throws an Error with langfuse upstream message on failure', async () => {

@@ -23,6 +23,7 @@ services:
     environment:
       - PORT=8000
       - LANGFUSE_BASE_URL=https://langfuse.cofacts.tw
+      - LANGFUSE_TRACING_ENVIRONMENT=local
     healthcheck:
       test:
         [

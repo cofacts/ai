@@ -112,6 +112,8 @@ export async function postFeedbackForTrace(
     dataType: 'NUMERIC',
   }
   if (input.comment !== undefined) body.comment = input.comment
+  const environment = process.env.LANGFUSE_TRACING_ENVIRONMENT
+  if (environment) body.environment = environment
 
   const response = await fetch(url, {
     method: 'POST',
