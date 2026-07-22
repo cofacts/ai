@@ -13,6 +13,7 @@ interface ChatAreaProps {
   sessionId?: string
   focusedToolCallId?: string | null
   onToolBadgeClick?: (id: string) => void
+  draftVersionsById?: Record<string, number>
 }
 
 export function ChatArea({
@@ -23,6 +24,7 @@ export function ChatArea({
   sessionId,
   focusedToolCallId,
   onToolBadgeClick,
+  draftVersionsById,
 }: ChatAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -54,6 +56,7 @@ export function ChatArea({
                   showAvatar={msg.author !== prevMsg?.author}
                   focusedToolCallId={focusedToolCallId}
                   onToolBadgeClick={onToolBadgeClick}
+                  draftVersionsById={draftVersionsById}
                 />
               )}
               {

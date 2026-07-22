@@ -36,6 +36,7 @@ from .agent_names import (
     AI_PROOFREADER_DPP_NAME,
     AI_PROOFREADER_KMT_NAME,
     AI_PROOFREADER_MINOR_PARTIES_NAME,
+    AI_PROOFREADER_NAMES,
     AI_PROOFREADER_TPP_NAME,
     AI_VERIFIER_NAME,
     AI_WRITER_NAME,
@@ -137,8 +138,11 @@ async def append_grounding_sources(
 
     # Embed the search-widget HTML so after_tool can persist it as an artifact
     # and strip it before the LLM sees the tool result. Using the response (not
-    # state) avoids any DB writes: temp: state is stripped by AgentTool before
-    # forwarding, and non-temp: state would pollute the session the list loads.
+    # state) avoids any DB writes or list_sessions cost: non-temp: state is
+    # returned by list_sessions and read by the frontend sidebar, and there is
+    # no AgentTool child here that would need this value forwarded via temp:
+    # state anyway (unlike expand_writer_symbols below, which reads the
+    # writer's own event history instead of state for exactly that reason).
     if metadata.search_entry_point and metadata.search_entry_point.rendered_content:
         response_dict["_search_widget_html"] = (
             metadata.search_entry_point.rendered_content
@@ -442,9 +446,12 @@ ai_proofreader_kmt = LlmAgent(
     - Opportunities for more balanced presentation
     - Suggestions for addressing legitimate conservative concerns
 
-    ## Control Flow:
-    If the user wants to continue discussing this message from a KMT perspective, engage with them.
-    Otherwise, transfer back to the main AI Writer.
+    ## Statelessness -- Read This First:
+    Every time you are called, it is a brand-new conversation. You do not see any prior turns, other
+    proofreaders' calls, or anything the AI Writer discussed earlier -- only the text in this single
+    request. If the request refers to something you cannot see (e.g. "the draft above", "same as
+    before", "this reply" without the actual text included), do NOT guess or answer based on
+    fragments. Instead reply exactly with: "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
 
     Provide respectful, measured analysis that helps ensure fact-checking is credible across political divides.
     """,
@@ -491,9 +498,12 @@ ai_proofreader_dpp = LlmAgent(
     - Opportunities for highlighting Taiwan identity
     - Suggestions for addressing progressive concerns
 
-    ## Control Flow:
-    If the user wants to continue discussing this message from a DPP perspective, engage with them.
-    Otherwise, transfer back to the main AI Writer.
+    ## Statelessness -- Read This First:
+    Every time you are called, it is a brand-new conversation. You do not see any prior turns, other
+    proofreaders' calls, or anything the AI Writer discussed earlier -- only the text in this single
+    request. If the request refers to something you cannot see (e.g. "the draft above", "same as
+    before", "this reply" without the actual text included), do NOT guess or answer based on
+    fragments. Instead reply exactly with: "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
 
     Provide engaged, democratic analysis that helps ensure fact-checking resonates with progressive audiences.
     """,
@@ -540,9 +550,12 @@ ai_proofreader_tpp = LlmAgent(
     - Suggestions for emphasizing rational, data-driven analysis
     - Ways to appeal to centrist, pragmatic audiences
 
-    ## Control Flow:
-    If the user wants to continue discussing this message from a TPP perspective, engage with them.
-    Otherwise, transfer back to the main AI Writer.
+    ## Statelessness -- Read This First:
+    Every time you are called, it is a brand-new conversation. You do not see any prior turns, other
+    proofreaders' calls, or anything the AI Writer discussed earlier -- only the text in this single
+    request. If the request refers to something you cannot see (e.g. "the draft above", "same as
+    before", "this reply" without the actual text included), do NOT guess or answer based on
+    fragments. Instead reply exactly with: "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
 
     Provide rational, balanced analysis that helps ensure fact-checking appeals to moderate voters seeking practical solutions.
     """,
@@ -589,9 +602,12 @@ ai_proofreader_minor_parties = LlmAgent(
     - Opportunities for more inclusive representation
     - Suggestions for highlighting often-overlooked viewpoints
 
-    ## Control Flow:
-    If the user wants to continue discussing this message from a minor parties perspective, engage with them.
-    Otherwise, transfer back to the main AI Writer.
+    ## Statelessness -- Read This First:
+    Every time you are called, it is a brand-new conversation. You do not see any prior turns, other
+    proofreaders' calls, or anything the AI Writer discussed earlier -- only the text in this single
+    request. If the request refers to something you cannot see (e.g. "the draft above", "same as
+    before", "this reply" without the actual text included), do NOT guess or answer based on
+    fragments. Instead reply exactly with: "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
 
     Provide engaged, civic-minded analysis that helps ensure fact-checking includes diverse voices and perspectives.
     """,
@@ -609,14 +625,26 @@ async def after_tool(
 
     investigator/verifier return their {content, sources} payload as a JSON
     string; deserialize it into a dict so the writer LLM receives structured
-    output. This must happen in a callback because investigator/verifier are
-    AgentTools whose return value we cannot otherwise post-process.
+    output. Proofreaders return plain text, not JSON -- for those we only
+    check for empty/None and otherwise pass the string through unchanged.
+    This must happen in a callback because these are all AgentTools whose
+    return value we cannot otherwise post-process.
 
     For investigator calls, also extracts and strips the `_search_widget_html`
     field that append_grounding_sources embeds in the JSON. The HTML is saved as
     a GCS artifact keyed by the tool-call id so the frontend can fetch and display
     the search-suggestion pills; it must not reach the LLM.
     """
+    if tool.name in AI_PROOFREADER_NAMES:
+        if tool_response is None or (
+            isinstance(tool_response, str) and not tool_response.strip()
+        ):
+            return {
+                "error": "timeout",
+                "message": f"[SYSTEM] {tool.name} returned empty. Possibly a dropped call or timeout. Retry this proofreader.",
+            }
+        return None
+
     if tool.name not in (AI_INVESTIGATOR_NAME, AI_VERIFIER_NAME):
         return None
 
@@ -682,6 +710,132 @@ def handle_writer_tool_error(
     }
 
 
+_DRAFT_TOOL_NAME = draft_factcheck_response.__name__
+_ARTICLE_TOOL_NAME = get_single_cofacts_article.__name__
+
+# Sub-agents whose `request` argument gets [[draft]]/[[message]] symbols
+# expanded before dispatch (see expand_writer_symbols below). All are
+# AgentTools: every call starts a fresh, stateless single-message session
+# that sees nothing but this one `request` string (agent.py:204).
+_SYMBOL_EXPANSION_TOOL_NAMES = (
+    AI_INVESTIGATOR_NAME,
+    AI_VERIFIER_NAME,
+    *AI_PROOFREADER_NAMES,
+)
+
+# Square brackets, not curly braces: ADK's own instruction templating
+# (inject_session_state) treats ANY run of `{`/`}` as a state-variable
+# reference and raises KeyError for an unknown one. These symbols are
+# explained in ai_writer's own instruction text below, so a curly-brace
+# syntax would make ADK try to resolve "draft"/"message" as session state
+# while rendering that very instruction and crash before the writer ever runs.
+_DRAFT_SYMBOL_RE = re.compile(r"\[\[draft(?::v(\d+))?\]\]")
+_MESSAGE_SYMBOL_RE = re.compile(r"\[\[message\]\]")
+
+
+def _writer_draft_texts(tool_context: CallbackContext) -> list:
+    """Every `text` argument the writer has proposed via draft_factcheck_response
+    so far this invocation, in submission order (index 0 = first proposal).
+
+    Reads the `text` straight from each call's function-call args, so a
+    proposal the tool rejected (failed the claim_sources/verification gate)
+    still resolves -- proofreaders can review pre-verification prose too.
+    """
+    drafts = []
+    for event in tool_context.session.events:
+        content = event.content
+        if not content or not content.parts:
+            continue
+        for part in content.parts:
+            fc = part.function_call
+            if fc and fc.name == _DRAFT_TOOL_NAME:
+                text = (fc.args or {}).get("text")
+                if text:
+                    drafts.append(text)
+    return drafts
+
+
+def _writer_suspicious_message(tool_context: CallbackContext) -> Optional[str]:
+    """The suspicious message's text, from the writer's own
+    get_single_cofacts_article call this invocation (first match wins)."""
+    for event in tool_context.session.events:
+        content = event.content
+        if not content or not content.parts:
+            continue
+        for part in content.parts:
+            fr = part.function_response
+            if fr and fr.name == _ARTICLE_TOOL_NAME:
+                article = (fr.response or {}).get("article") or {}
+                text = article.get("text")
+                if text:
+                    return text
+    return None
+
+
+def expand_writer_symbols(
+    tool: BaseTool, args: dict, tool_context: CallbackContext
+) -> Optional[dict]:
+    """before_tool_callback for ai_writer.
+
+    Lets the writer reference its own drafts and the suspicious message by
+    symbol -- `[[message]]`, `[[draft]]`, `[[draft:vN]]` -- in a sub-agent's
+    `request` instead of retyping or paraphrasing them ("(same as above)").
+    investigator/verifier/proofreaders are each an AgentTool: every call is a
+    fresh, stateless single-message session that sees nothing but this one
+    `request` string (agent.py:204), so a back-reference to a sibling call or
+    an earlier turn has no referent there. This left every proofreader but
+    the first with no draft to review whenever the writer fanned out parallel
+    calls and abbreviated the rest (cofacts/ai#117).
+
+    Symbols are expanded here against the writer's OWN event history (a
+    public API, ReadonlyContext.session) rather than session state, so the
+    sub-agent still receives the actual text -- never a symbol -- with zero
+    state writes and zero list_sessions cost.
+
+    An unresolved symbol is replaced with an explicit `[SYSTEM: ...]` marker
+    rather than left as literal text or silently dropped, so a mistake is
+    visible in the forwarded request instead of failing silently; the
+    proofreaders' own report-back protocol is the safety net if this is ever
+    bypassed or the writer forgets a symbol entirely.
+    """
+    if tool.name not in _SYMBOL_EXPANSION_TOOL_NAMES:
+        return None
+    request = args.get("request")
+    if not isinstance(request, str) or "[[" not in request:
+        return None
+
+    drafts = None
+
+    def _replace_draft(match):
+        nonlocal drafts
+        if drafts is None:
+            drafts = _writer_draft_texts(tool_context)
+        if not drafts:
+            return f"[SYSTEM: no draft_factcheck_response proposal exists yet to resolve {match.group()}]"
+        version = match.group(1)
+        if version is None:
+            return drafts[-1]
+        index = int(version) - 1
+        if not (0 <= index < len(drafts)):
+            return (
+                f"[SYSTEM: only {len(drafts)} draft_factcheck_response proposal(s) "
+                f"exist so far; cannot resolve {match.group()}]"
+            )
+        return drafts[index]
+
+    def _replace_message(match):
+        message = _writer_suspicious_message(tool_context)
+        if message is None:
+            return "[SYSTEM: no get_single_cofacts_article result found to resolve [[message]]]"
+        return message
+
+    new_request = _DRAFT_SYMBOL_RE.sub(_replace_draft, request)
+    new_request = _MESSAGE_SYMBOL_RE.sub(_replace_message, new_request)
+    if new_request != request:
+        args["request"] = new_request
+    return None
+
+
 # Main AI Writer - Orchestrator agent
 #
 # Note: Due to ADK limitations, we cannot mix built-in tools (google_search, url_context)
@@ -690,7 +844,7 @@ def handle_writer_tool_error(
 # - ai_investigator: specialized for Google Search only
 # - ai_verifier: specialized for URL Context only
 # - ai_writer: uses function calling tools + AgentTools for delegation
-# - proofreader agents: pure analysis agents as sub_agents (no tools needed)
+# - proofreader agents: pure analysis agents mounted as AgentTools (no tools needed)
 #
 # This architecture respects ADK constraints while maintaining full functionality.
 ai_writer = LlmAgent(
@@ -703,6 +857,7 @@ ai_writer = LlmAgent(
         )
     ),
     before_model_callback=inject_article_attachment,
+    before_tool_callback=expand_writer_symbols,
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,
     after_agent_callback=[update_last_event_time, generate_session_title],
@@ -733,6 +888,21 @@ ai_writer = LlmAgent(
     - Explain that you need the URL to access message details, popularity data, and existing responses
     - Guide them to browse https://cofacts.tw/ to find messages that need fact-checking
 
+    ## Referencing Content Instead of Retyping It:
+
+    `{AI_INVESTIGATOR_NAME}`, `{AI_VERIFIER_NAME}`, and the proofreader agents are each called as a
+    fresh, stateless, single-message session — they see nothing beyond the `request` text of that one
+    call, not your conversation, not each other's calls, not a previous call to the same agent. When
+    you need one of them to see the suspicious message or your latest draft reply, write the symbol
+    `[[message]]` or `[[draft]]` in your `request` instead of retyping or paraphrasing it — it is
+    replaced with the exact original text before the call is sent. Use `[[draft:v2]]` to reference a
+    specific earlier proposal (1-indexed, in submission order) instead of the latest one. Never write
+    "same as above" / "as discussed" / "（同上）" — none of these agents can see anything outside their
+    own single request, so there is nothing for that to refer to, and it leaves them with no draft to
+    review. If a symbol can't be resolved you'll see an explicit `[SYSTEM: ...]` note in its place —
+    that means the thing you referenced (e.g. a draft) doesn't exist yet at this point in the
+    conversation.
+
     ## Orchestration Process (Adapt Based on User Needs):
 
     1. **Initial Analysis & Triage**:
@@ -760,7 +930,7 @@ ai_writer = LlmAgent(
        - Determine target audience: people who might forward this message or receive it
        - **Track editorial constraints**: whenever the user gives a direction about HOW the reply should be written — a wording to avoid (e.g. "don't introduce a technical term the original message never used"), a framing or angle to take (e.g. "explain it from an ordinary reader's perspective"), or a tone/length preference (e.g. "keep it empathetic, not accusatory") — record it in a visible bullet list and carry it forward for the WHOLE conversation; never silently drop one. You will re-print and re-check this list before drafting (Step 7).
 
-    3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message
+    3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message (include `[[message]]` in your request — see "Referencing Content Instead of Retyping It" above)
 
     4. **Delegate Research**: Use the `{AI_INVESTIGATOR_NAME}` to research claims
        - Describe what you want to know; {AI_INVESTIGATOR_NAME} searches the web and reports findings with sources.
@@ -791,21 +961,19 @@ ai_writer = LlmAgent(
        - Do not pass site names or descriptions; only real `https://` links.
        - Build your final `references` and the `claim_sources` mapping (see `draft_factcheck_response`) ONLY from claims `{AI_VERIFIER_NAME}` marked ✓. A claim `{AI_VERIFIER_NAME}` marked ✗ (its sources do not support it) must be dropped or re-verified against a DIFFERENT source — NEVER re-submit the same URL or relabel a different URL for it, and never carry it into the draft.
 
-    6. **Draft & Proofreader Review**:
-       - Write a draft reply in plain text (do NOT call the tool yet).
-       - Send the draft along with the cited sources to the political perspective agents and ask:
-         "Does this reply address your concerns? Is the tone neutral? Are the sources credible from your perspective?"
-       - Based on their feedback, revise the draft and re-send as needed.
-       - Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
-
-    7. **Compose Reply — only after ALL research, verification, and proofreader review are complete**:
-       - **NEVER call `draft_factcheck_response` in the same turn as any other tool.** (Running other tools in parallel with each other is fine — e.g. several `{AI_INVESTIGATOR_NAME}` or `proofreader` calls at once — but drafting must come last, after their results are back; drafting earlier means concluding before you have the evidence.)
+    6. **Propose a Draft — only after ALL research and verification are complete**:
+       - **Always call `draft_factcheck_response` alone, never in the same turn as any other tool.** (Running other tools in parallel with each other is fine — e.g. several `{AI_INVESTIGATOR_NAME}` or `proofreader` calls at once — but a draft proposal must be its own turn, both because it must come last after their results are back, and so Step 7 can reliably reference it via `[[draft]]`.)
        - First re-print your tracked editorial-constraints list (from Step 2) and confirm every constraint is met and every cited claim is {AI_VERIFIER_NAME}-confirmed.
        - Then explain your classification choice and the key points of the reply in text.
-       - Call `draft_factcheck_response` — this is the goal of the whole process. See the tool's argument descriptions for all format requirements, including the `claim_sources` mapping (one entry per factual claim → the {AI_VERIFIER_NAME}-confirmed URL that backs it).
-       - Use only claims confirmed by {AI_VERIFIER_NAME} in step 5.
+       - Call `draft_factcheck_response` to submit it as a proposal. See the tool's argument descriptions for all format requirements, including the `claim_sources` mapping (one entry per factual claim → the {AI_VERIFIER_NAME}-confirmed URL that backs it). Use only claims confirmed by {AI_VERIFIER_NAME} in step 5.
+       - **`draft_factcheck_response` is re-callable, not a one-shot final action.** Submit a proposal, get feedback — from the tool's own validation (e.g. an unconfirmed claim or a missing source), or from proofreader review below — revise, and submit again. Repeat as many times as needed; each call is a numbered proposal you can later refer back to.
+
+    7. **Proofreader Review**:
+       - Reference your latest proposal by writing `[[draft]]` in each proofreader's `request` — it is automatically replaced with the exact text of your most recent `draft_factcheck_response` call. Do NOT retype or paraphrase the draft. Use `[[draft:v2]]` to point at a specific earlier proposal if you need to ask about an older version, and `[[message]]` for the original suspicious message — see "Referencing Content Instead of Retyping It" above.
+       - Ask each proofreader: "Does this reply address your concerns? Is the tone neutral? Are the sources credible from your perspective?"
+       - Based on their feedback, go back to Step 6 and submit a revised proposal, then review again. Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
        - Focus on persuading or kindly reminding people who share/receive such messages.
-       - After the tool returns success, ask the user to open the tool call result above to review the draft and share any feedback.
+       - Once a proposal both passes validation and has addressed proofreader feedback, tell the user the draft is ready and ask them to open the tool call result above (your LAST proposal) to review and share feedback.
 
     **Flexible Support:**
     - Listen to what the user wants to focus on, and follow their lead on sequencing
@@ -815,6 +983,13 @@ ai_writer = LlmAgent(
 
     ## How to Use Political Perspective Agents:
 
+    **Every proofreader call is a fresh, stateless, single-message session — it sees nothing except
+    the `request` text you send it this one time: not your conversation, not other proofreaders'
+    calls, not anything from a previous call to the SAME proofreader.** Never write "same as above" or
+    "as discussed" — there is nothing for that to refer to. Use the `[[message]]` and `[[draft]]`
+    symbols (see "Referencing Content Instead of Retyping It" above) so referenced content is always
+    actually included, without you having to retype it.
+
     Your proofreader agents can provide valuable insights. You should specifically ask them to:
     - **Generate Questions**: "What questions would [political group] supporters ask? What confuses them or makes them angry?"
     - **Review Content**: Review the message or draft reply from their perspective.
@@ -822,14 +997,16 @@ ai_writer = LlmAgent(
     **Two Modes of Interaction**:
 
     1. **Analyzing the Message** (Start):
-       - Provide the suspicious message.
+       - Include `[[message]]` in your request.
        - Ask: "What questions/feelings does this evoke? What makes you angry or confused?"
 
     2. **Reviewing the Reply** (Before Drafting):
-       - Provide the suspicious message AND your draft reply.
+       - Include both `[[message]]` and `[[draft]]` in your request.
        - Ask: "Does this reply answer your questions? Which doubts remain unresolved?"
 
-    **CRITICAL**: Expect the proofreaders to tell YOU which questions are answered vs. unanswered. Use their feedback to refine the reply.
+    **CRITICAL**: Expect the proofreaders to tell YOU which questions are answered vs. unanswered. Use
+    their feedback to refine the reply. If a proofreader replies that it did not receive the full
+    content, you likely forgot a `[[message]]`/`[[draft]]` symbol — add it and call again.
 
     Use them strategically to help humans:
     - Understand how different groups might interpret the original message

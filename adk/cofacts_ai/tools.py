@@ -429,12 +429,18 @@ def draft_factcheck_response(
     claim_sources: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
-    Draft a Cofacts fact-check response for human editor review.
+    Submit a fact-check response proposal for human editor review.
 
-    Call this tool once you have completed all research and review steps and are
-    ready to propose a reply. Before calling, share your analysis and reasoning
-    in text — explain your classification choice and the key points of the reply.
-    Then call this tool as the concluding action.
+    This tool is re-callable: submit a proposal, read the validation feedback below
+    (or feedback from proofreader review), revise, and call it again — as many times
+    as needed. Always call it alone, never in the same turn as any other tool, so
+    each proposal is reliably in place before you reference it (e.g. via `[[draft]]`
+    when asking a proofreader to review it).
+
+    Before calling, share your analysis and reasoning in text — explain your
+    classification choice and the key points of the reply. Call this tool once you
+    have completed all research and verification steps and are ready to propose a
+    reply; end on a submission that passes validation.
 
     Args:
         classification: One of:
@@ -567,9 +573,11 @@ def draft_factcheck_response(
     return {
         "success": True,
         "text": (
-            "The draft is now displayed to the user as a tool call result in this conversation. "
-            "Guide the user to open the tool call result above to read the draft, "
-            "then ask if they have any feedback or edits before submitting to Cofacts."
+            "Proposal accepted. If proofreader review or your own judgment still calls for changes, "
+            "revise and call this tool again — only your LAST successful call is shown to the user "
+            "once you finish responding. If this is your final proposal, guide the user to open the "
+            "tool call result above to read the draft, then ask if they have any feedback or edits "
+            "before submitting to Cofacts."
         ),
     }
 
