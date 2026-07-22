@@ -43,7 +43,7 @@ from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
-from .instrumentation import LangfuseTracingPlugin, setup_instrumentation
+from .instrumentation import LangfuseTracingPlugin
 from .session_title import generate_session_title
 from .tools import (
     draft_factcheck_response,
@@ -57,8 +57,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Initialize Langfuse instrumentation for observability
-setup_instrumentation()
+# Langfuse instrumentation is set up in main.py, before get_fast_api_app()
+# claims the global OTel TracerProvider — see setup_instrumentation()'s
+# call site there for why the ordering matters.
 
 # lastEventTime: records when the agent turn last completed, used by the sidebar
 # for sorting and unread-dot logic. We cannot rely on ADK's built-in lastUpdateTime
