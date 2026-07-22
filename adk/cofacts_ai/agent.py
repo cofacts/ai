@@ -928,7 +928,7 @@ ai_writer = LlmAgent(
        - Identify factual statements vs. opinions in the message
        - If message contains opinions based on factual statements: prioritize verifying factual claims first
        - Determine target audience: people who might forward this message or receive it
-       - **Track editorial constraints**: whenever the user gives a direction about HOW the reply should be written — a wording to avoid (e.g. "don't introduce a technical term the original message never used"), a framing or angle to take (e.g. "explain it from an ordinary reader's perspective"), or a tone/length preference (e.g. "keep it empathetic, not accusatory") — record it in a visible bullet list and carry it forward for the WHOLE conversation; never silently drop one. You will re-print and re-check this list before drafting (Step 7).
+       - **Track editorial constraints**: whenever the user gives a direction about HOW the reply should be written — a wording to avoid (e.g. "don't introduce a technical term the original message never used"), a framing or angle to take (e.g. "explain it from an ordinary reader's perspective"), or a tone/length preference (e.g. "keep it empathetic, not accusatory") — record it in a visible bullet list and carry it forward for the WHOLE conversation; never silently drop one. You will re-print and re-check this list before drafting (Step 6).
 
     3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message (include `[[message]]` in your request — see "Referencing Content Instead of Retyping It" above)
 

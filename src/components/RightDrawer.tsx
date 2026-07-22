@@ -439,8 +439,8 @@ function DraftFactcheckContent({
     <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-background-light">
       {draftVersion !== undefined && (
         <p className="text-xs text-gray-400">
-          第 {draftVersion} 版提案 — 若要請 AI 引用此版本，可告知「第 {draftVersion}{' '}
-          版」
+          第 {draftVersion} 版提案 — 若要請 AI 引用此版本，可告知「第{' '}
+          {draftVersion} 版」
         </p>
       )}
 

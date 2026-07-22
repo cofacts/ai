@@ -145,7 +145,13 @@ describe('getDraftVersionsById', () => {
         id: 'm1',
         role: 'model',
         parts: [
-          { functionCall: { id: 'fc-1', name: 'draft_factcheck_response' } },
+          {
+            functionCall: {
+              id: 'fc-1',
+              name: 'draft_factcheck_response',
+              args: { text: 'draft v1' },
+            },
+          },
         ],
       },
       {
@@ -159,7 +165,13 @@ describe('getDraftVersionsById', () => {
         id: 'm3',
         role: 'model',
         parts: [
-          { functionCall: { id: 'fc-3', name: 'draft_factcheck_response' } },
+          {
+            functionCall: {
+              id: 'fc-3',
+              name: 'draft_factcheck_response',
+              args: { text: 'draft v2' },
+            },
+          },
         ],
       },
     ]
@@ -172,8 +184,20 @@ describe('getDraftVersionsById', () => {
         id: 'm1',
         role: 'model',
         parts: [
-          { functionCall: { id: 'fc-1', name: 'draft_factcheck_response' } },
-          { functionCall: { id: 'fc-2', name: 'draft_factcheck_response' } },
+          {
+            functionCall: {
+              id: 'fc-1',
+              name: 'draft_factcheck_response',
+              args: { text: 'draft v1' },
+            },
+          },
+          {
+            functionCall: {
+              id: 'fc-2',
+              name: 'draft_factcheck_response',
+              args: { text: 'draft v2' },
+            },
+          },
         ],
       },
     ]
@@ -185,7 +209,27 @@ describe('getDraftVersionsById', () => {
       {
         id: 'm1',
         role: 'model',
-        parts: [{ functionCall: { name: 'draft_factcheck_response' } }],
+        parts: [
+          {
+            functionCall: {
+              name: 'draft_factcheck_response',
+              args: { text: 'draft with no id' },
+            },
+          },
+        ],
+      },
+    ]
+    expect(getDraftVersionsById(messages)).toEqual({})
+  })
+
+  test('a function_call with no text arg is skipped (matches backend parity)', () => {
+    const messages: Array<ChatMessage> = [
+      {
+        id: 'm1',
+        role: 'model',
+        parts: [
+          { functionCall: { id: 'fc-1', name: 'draft_factcheck_response' } },
+        ],
       },
     ]
     expect(getDraftVersionsById(messages)).toEqual({})
