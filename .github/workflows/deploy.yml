@@ -131,7 +131,8 @@ jobs:
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             echo "LANGFUSE_TRACING_ENVIRONMENT=preview" >> $GITHUB_ENV
           else
-            echo "LANGFUSE_TRACING_ENVIRONMENT=production" >> $GITHUB_ENV
+             # Merging to master deploys to dev.cofacts.ai (staging)
+             echo "LANGFUSE_TRACING_ENVIRONMENT=staging" >> $GITHUB_ENV
           fi
 
       - name: Generate Service YAML
