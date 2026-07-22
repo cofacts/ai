@@ -10,23 +10,38 @@ interface RightDrawerProps {
   isOpen: boolean
   onClose: () => void
   invocation: ToolInvocation | null
+  /** Submission order (1-indexed) when `invocation` is a `draft_factcheck_response` call. */
+  draftVersion?: number
 }
 
-export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
+export function RightDrawer({
+  isOpen,
+  onClose,
+  invocation,
+  draftVersion,
+}: RightDrawerProps) {
   return (
     <>
       {/* Desktop drawer */}
       {isOpen && (
         <aside className="hidden md:flex flex-1 min-w-0 bg-white border-l border-border-subtle flex-col shadow-lg z-10 overflow-hidden [view-transition-name:right-drawer]">
-          <DrawerHeader invocation={invocation} onClose={onClose} />
-          <DrawerContent invocation={invocation} />
+          <DrawerHeader
+            invocation={invocation}
+            onClose={onClose}
+            draftVersion={draftVersion}
+          />
+          <DrawerContent invocation={invocation} draftVersion={draftVersion} />
         </aside>
       )}
 
       {/* Mobile bottom sheet */}
       <MobileBottomSheet isOpen={isOpen} onClose={onClose}>
-        <DrawerHeader invocation={invocation} onClose={onClose} />
-        <DrawerContent invocation={invocation} />
+        <DrawerHeader
+          invocation={invocation}
+          onClose={onClose}
+          draftVersion={draftVersion}
+        />
+        <DrawerContent invocation={invocation} draftVersion={draftVersion} />
       </MobileBottomSheet>
     </>
   )
@@ -45,21 +60,27 @@ function toolDisplayName(name: string | null | undefined): string {
   return name
 }
 
-function toolTitle(invocation: ToolInvocation | null): string {
+function toolTitle(
+  invocation: ToolInvocation | null,
+  draftVersion?: number,
+): string {
   if (!invocation) return 'Tool'
   if (invocation.name === 'get_single_cofacts_article') {
     const id = invocation.args.article_id ?? invocation.resp?.article_id
     return id ? `Cofacts 訊息 ${id}` : 'Cofacts 訊息'
   }
-  return toolDisplayName(invocation.name)
+  const name = toolDisplayName(invocation.name)
+  return draftVersion !== undefined ? `${name} · 第 ${draftVersion} 版` : name
 }
 
 function DrawerHeader({
   invocation,
   onClose,
+  draftVersion,
 }: {
   invocation: ToolInvocation | null
   onClose: () => void
+  draftVersion?: number
 }) {
   const cofactsArticleId =
     invocation?.name === 'get_single_cofacts_article'
@@ -69,7 +90,7 @@ function DrawerHeader({
   return (
     <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle bg-white shrink-0">
       <h2 className="text-sm font-semibold text-gray-800 truncate flex-1 min-w-0">
-        {toolTitle(invocation)}
+        {toolTitle(invocation, draftVersion)}
       </h2>
       <div className="flex items-center gap-1 shrink-0">
         {cofactsArticleId && (
@@ -99,7 +120,13 @@ function DrawerHeader({
 
 // ── Content router ───────────────────────────────────────────────
 
-function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
+function DrawerContent({
+  invocation,
+  draftVersion,
+}: {
+  invocation: ToolInvocation | null
+  draftVersion?: number
+}) {
   if (!invocation) return null
 
   switch (invocation.name) {
@@ -123,7 +150,12 @@ function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
         <ProofreaderContent args={invocation.args} response={invocation.resp} />
       )
     case 'draft_factcheck_response':
-      return <DraftFactcheckContent args={invocation.args} />
+      return (
+        <DraftFactcheckContent
+          args={invocation.args}
+          draftVersion={draftVersion}
+        />
+      )
     case 'get_single_cofacts_article':
       return <CofactsArticleContent response={invocation.resp} />
     default: {
@@ -394,8 +426,10 @@ const CATEGORIES: Array<{
 
 function DraftFactcheckContent({
   args,
+  draftVersion,
 }: {
   args: AllTools['draft_factcheck_response']['args']
+  draftVersion?: number
 }) {
   const classification = args.classification as ReplyCategory | undefined
   const text = args.text ?? ''
@@ -403,6 +437,13 @@ function DraftFactcheckContent({
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-background-light">
+      {draftVersion !== undefined && (
+        <p className="text-xs text-gray-400">
+          第 {draftVersion} 版提案 — 若要請 AI 引用此版本，可告知「第{' '}
+          {draftVersion} 版」
+        </p>
+      )}
+
       {/* Classification */}
       <div className="flex flex-row gap-1 p-1 bg-gray-100 rounded-lg w-full overflow-x-auto no-scrollbar">
         {CATEGORIES.map((cat) => {

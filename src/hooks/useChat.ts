@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ChatSessionState } from '@/lib/chatCache'
 import {
@@ -6,6 +6,7 @@ import {
   abortControllers,
   chatCacheKey,
   convertAdkSessionToChatState,
+  getDraftVersionsById,
   sendChatMessage,
   startChatStream,
 } from '@/lib/chatCache'
@@ -41,6 +42,11 @@ export function useChat({ sessionId }: UseChatOptions) {
   // Combine query error with state error if needed
   const error =
     data.error || (queryError instanceof Error ? queryError.message : null)
+
+  const draftVersionsById = useMemo(
+    () => getDraftVersionsById(data.messages),
+    [data.messages],
+  )
 
   /**
    * Send a new user message and start the SSE stream.
@@ -80,6 +86,7 @@ export function useChat({ sessionId }: UseChatOptions) {
     error,
     toolInvocations: data.toolInvocations,
     lastReplyDraftId: data.lastReplyDraftId,
+    draftVersionsById,
     sendMessage,
     resumeRun,
     stopGeneration,
