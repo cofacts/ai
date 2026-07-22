@@ -446,6 +446,10 @@ export function applyEventToState(
  * both derive from the same chronological order of draft proposals, so a
  * version number shown on screen means the same thing if a user tells the
  * writer to review an earlier one (cofacts/ai#117).
+ *
+ * A call with no `text` arg is skipped, matching the backend's
+ * `_writer_draft_texts` (which only counts calls with a truthy `text`) --
+ * keeping both sides in sync even in the degenerate case of an empty draft.
  */
 export function getDraftVersionsById(
   messages: Array<ChatMessage>,
@@ -456,7 +460,8 @@ export function getDraftVersionsById(
     for (const part of message.parts ?? []) {
       if (
         part.functionCall?.name === 'draft_factcheck_response' &&
-        part.functionCall.id
+        part.functionCall.id &&
+        part.functionCall.args?.text
       ) {
         count += 1
         versions[part.functionCall.id] = count

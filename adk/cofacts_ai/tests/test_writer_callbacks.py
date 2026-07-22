@@ -78,7 +78,9 @@ def make_symbol_tool_context(events: list) -> CallbackContext:
     """Fake ToolContext exposing only the public `.session.events` path
     expand_writer_symbols reads (ReadonlyContext.session, verified public in
     ADK 1.26.0 -- Context(ReadonlyContext) inherits it)."""
-    return cast(CallbackContext, SimpleNamespace(session=SimpleNamespace(events=events)))
+    return cast(
+        CallbackContext, SimpleNamespace(session=SimpleNamespace(events=events))
+    )
 
 
 INVESTIGATOR_TIMEOUT_ERROR = {
@@ -288,7 +290,10 @@ class TestAfterToolProofreader:
             tool_context=make_tool_context(),
             tool_response="  \n\t",
         )
-        assert result["error"] == "timeout"
+        assert result == {
+            "error": "timeout",
+            "message": f"[SYSTEM] {AI_PROOFREADER_KMT_NAME} returned empty. Possibly a dropped call or timeout. Retry this proofreader.",
+        }
 
     async def test_none_returns_timeout_error(self):
         result = await after_tool(
@@ -297,7 +302,10 @@ class TestAfterToolProofreader:
             tool_context=make_tool_context(),
             tool_response=None,
         )
-        assert result["error"] == "timeout"
+        assert result == {
+            "error": "timeout",
+            "message": f"[SYSTEM] {AI_PROOFREADER_KMT_NAME} returned empty. Possibly a dropped call or timeout. Retry this proofreader.",
+        }
 
     async def test_nonempty_plain_text_passthrough_without_json_parsing(self):
         # Proofreaders return plain prose, not JSON -- must not be run through
@@ -395,11 +403,19 @@ class TestExpandWriterSymbols:
         events = [
             make_fn_call_event(
                 "draft_factcheck_response",
-                {"text": "draft v1", "classification": "RUMOR", "references": "https://x"},
+                {
+                    "text": "draft v1",
+                    "classification": "RUMOR",
+                    "references": "https://x",
+                },
             ),
             make_fn_call_event(
                 "draft_factcheck_response",
-                {"text": "draft v2", "classification": "RUMOR", "references": "https://x"},
+                {
+                    "text": "draft v2",
+                    "classification": "RUMOR",
+                    "references": "https://x",
+                },
             ),
         ]
         args = {"request": "Review this: [[draft]]"}
@@ -426,7 +442,9 @@ class TestExpandWriterSymbols:
         # the text the writer actually proposed -- are still in the event
         # history, so proofreaders can review pre-verification prose too.
         events = [
-            make_fn_call_event("draft_factcheck_response", {"text": "rejected draft text"})
+            make_fn_call_event(
+                "draft_factcheck_response", {"text": "rejected draft text"}
+            )
         ]
         args = {"request": "[[draft]]"}
         expand_writer_symbols(
@@ -492,5 +510,7 @@ class TestExpandWriterSymbols:
         events = [make_fn_call_event("draft_factcheck_response", {"text": "the draft"})]
         for name in (AI_INVESTIGATOR_NAME, AI_VERIFIER_NAME):
             args = {"request": "[[draft]]"}
-            expand_writer_symbols(make_tool(name), args, make_symbol_tool_context(events))
+            expand_writer_symbols(
+                make_tool(name), args, make_symbol_tool_context(events)
+            )
             assert args["request"] == "the draft"
