@@ -9,8 +9,10 @@ This module implements a hierarchical agent system with:
 """
 
 import asyncio
+import hashlib
 import json
 import logging
+import os
 import re
 import time
 from datetime import datetime
@@ -41,6 +43,8 @@ from .agent_names import (
     AI_WRITER_NAME,
 )
 from .media_filedata import (
+    _COFACTS_MEDIA_URL_RE,
+    _URL_TRAILING_PUNCT,
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
@@ -52,6 +56,7 @@ from .tools import (
     search_cofacts_database,
     search_image_web,
 )
+from .url_resolver.client import ResolveStatus, resolve_urls
 
 load_dotenv()
 
@@ -148,30 +153,58 @@ async def append_grounding_sources(
     return _set_text_content(llm_response, serialized)
 
 
-async def append_url_context_sources(
+RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
+
+
+async def append_verifier_sources(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
     """
     After-model callback for ai_verifier.
 
-    Captures clean URL-title pairs from url_context grounding_chunks and wraps
-    the response as {content, sources} JSON. url_context returns real URLs
-    directly — no redirect resolution or hallucination stripping needed.
+    Builds `sources` as the union of (a) pages url-resolver actually fetched
+    — recorded by inject_resolved_url_content in
+    callback_context.state[RESOLVED_META_STATE_KEY], since this callback only
+    sees the LlmResponse and cannot see the [RESOLVED PAGE] parts the
+    before-model callback injected into the request — and (b) url_context's
+    grounding_chunks (real URLs directly, no redirect resolution needed).
+
+    This union is self-correcting without a hard-coded ban list: a genuinely
+    dead URL is fetched by neither path (url-resolver marked it DEAD, and
+    url_context produces no grounding for a page it can't fetch either), so
+    it never appears in `sources`. A page url-resolver couldn't fetch (PDF,
+    blocked) but that url_context DID ground still shows up via (b).
+
+    Unlike the old url_context-only version, this wraps the response even
+    when url_context returned no grounding_metadata at all (e.g. the model
+    skipped calling it) as long as url-resolver resolved something — a lazy
+    or misbehaving model should not also lose the deterministically-fetched
+    resolver sources.
     """
-    if not llm_response.grounding_metadata:
-        return None
-    metadata = llm_response.grounding_metadata
-    chunks = metadata.grounding_chunks
-    if not chunks or not llm_response.content or not llm_response.content.parts:
+    if not llm_response.content or not llm_response.content.parts:
         return None
 
+    resolved_meta = callback_context.state.get(RESOLVED_META_STATE_KEY) or {}
     sources_list = [
-        {
-            "title": (chunk.web and chunk.web.title) or "Unknown Source",
-            "url": chunk.web.uri if chunk.web else None,
-        }
-        for chunk in chunks
+        {"title": meta.get("title") or url, "url": meta.get("canonical") or url}
+        for url, meta in resolved_meta.items()
+        if meta.get("status") == ResolveStatus.RESOLVED.value
     ]
+    seen_urls = {s["url"] for s in sources_list}
+
+    metadata = llm_response.grounding_metadata
+    chunks = metadata.grounding_chunks if metadata else None
+    for chunk in chunks or []:
+        url = chunk.web.uri if chunk.web else None
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        sources_list.append(
+            {
+                "title": (chunk.web and chunk.web.title) or "Unknown Source",
+                "url": url,
+            }
+        )
 
     content = "".join(p.text or "" for p in llm_response.content.parts)
 
@@ -264,6 +297,243 @@ def inject_youtube_filedata(
     return None
 
 
+_HTTP_URL_RE = re.compile(r"https?://[^\s\"'<>]+")
+
+_RESOLVED_PAGE_PREFIX = "[RESOLVED PAGE] "
+_LINK_NOT_FOUND_PREFIX = "[LINK NOT FOUND] "
+_RESOLVER_CANT_FETCH_PREFIX = "[NOTE] url-resolver couldn't fetch "
+
+_DEFAULT_TOTAL_CHAR_BUDGET = 200_000
+
+
+def _resolved_artifact_filename(url: str) -> str:
+    """Stable per-URL artifact filename, used as both the fetch cache key and
+    the UI-visible record of the full page text that was read."""
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()
+    return f"resolved-{digest}.txt"
+
+
+def _water_fill(lengths: dict[str, int], budget: int) -> dict[str, int]:
+    """Max-min fair allocation of `budget` chars across `lengths`.
+
+    Pages shorter than an equal share keep their full length; the budget
+    freed by short pages is redistributed evenly across the pages too long
+    to fit. If the total already fits under budget, every page gets its full
+    length back (the loop below falls through with no truncation).
+    """
+    if not lengths:
+        return {}
+    items = sorted(lengths.items(), key=lambda kv: kv[1])
+    remaining_budget = budget
+    remaining_count = len(items)
+    allocation: dict[str, int] = {}
+    for i, (key, length) in enumerate(items):
+        fair_share = remaining_budget / remaining_count if remaining_count else 0
+        if length <= fair_share:
+            allocation[key] = length
+            remaining_budget -= length
+            remaining_count -= 1
+        else:
+            # This item, and every remaining one (all >= it, since sorted
+            # ascending), gets an equal split of what's left.
+            equal_share = (
+                int(remaining_budget // remaining_count) if remaining_count else 0
+            )
+            for key2, _ in items[i:]:
+                allocation[key2] = equal_share
+            break
+    return allocation
+
+
+def _extract_web_urls(
+    llm_request: LlmRequest,
+) -> tuple[list[str], Optional[genai_types.Content]]:
+    """Plain http(s) URLs to pre-fetch via url-resolver, and the latest user
+    content that mentioned any of them (mirrors inject_youtube_filedata's
+    "latest content wins" — today each verifier AgentTool call is a fresh
+    single-message session, so there is normally just one candidate).
+
+    Excludes YouTube URLs (watched via FileData + url_context; url-resolver
+    can only scrape HTML text, not video content) and Cofacts media URLs
+    (same reason, handled by inject_cofacts_media_filedata).
+    """
+    urls: list[str] = []
+    seen = set()
+    target_content = None
+    for content in llm_request.contents:
+        if content.role != "user" or not content.parts:
+            continue
+        found_here = []
+        for part in content.parts:
+            if not part.text:
+                continue
+            for match in _HTTP_URL_RE.findall(part.text):
+                url = match.rstrip(_URL_TRAILING_PUNCT)
+                if _YOUTUBE_URL_RE.fullmatch(url) or _COFACTS_MEDIA_URL_RE.fullmatch(
+                    url
+                ):
+                    continue
+                found_here.append(url)
+        if not found_here:
+            continue
+        target_content = content
+        for url in found_here:
+            if url not in seen:
+                seen.add(url)
+                urls.append(url)
+    return urls, target_content
+
+
+def _url_already_injected(llm_request: LlmRequest, url: str) -> bool:
+    """True if a [RESOLVED PAGE]/[LINK NOT FOUND]/[NOTE] part for this URL is
+    already present anywhere in the request. The verifier's before_model
+    callbacks re-run on every model call in a turn (the request is rebuilt
+    from conversation history each time), so without this check we'd
+    re-inject the same page text on every call — mirrors the `seen` dedup in
+    inject_cofacts_media_filedata."""
+    markers = (
+        f"{_RESOLVED_PAGE_PREFIX}{url}\n",
+        f"{_LINK_NOT_FOUND_PREFIX}{url}:",
+        f"{_RESOLVER_CANT_FETCH_PREFIX}{url} (",
+    )
+    for content in llm_request.contents:
+        for part in content.parts or []:
+            if part.text and part.text.startswith(markers):
+                return True
+    return False
+
+
+async def inject_resolved_url_content(
+    callback_context: CallbackContext, llm_request: LlmRequest
+) -> None:
+    """Before-model callback for ai_verifier.
+
+    Pre-fetches every plain web URL through url-resolver and injects the
+    real Readability-cleaned body text as [RESOLVED PAGE] parts, so the
+    verifier bases support/refute decisions on text it actually read instead
+    of relying solely on Gemini's black-box url_context tool — which is what
+    let it hallucinate support for dead or irrelevant links. A URL
+    url-resolver could not resolve at all (DNS failure / malformed) gets an
+    advisory [LINK NOT FOUND] note rather than a hard ban, since url_context
+    may still read a page the resolver's simpler fetch missed; a URL the
+    resolver merely couldn't fetch (PDF, blocked, ...) gets nothing injected
+    so url_context gets a clean shot at it.
+
+    Caches full page text as an ADK artifact keyed by a hash of the URL —
+    this doubles as the fetch cache (skips re-resolving on the verifier's
+    ~2 model calls per turn, and across turns in the same session) and as a
+    UI-visible record of exactly what the system was able to read. Only
+    successfully resolved text is cached; dead/unfetchable results are cheap
+    to re-attempt and are not persisted.
+    """
+    try:
+        urls, target_content = _extract_web_urls(llm_request)
+        urls = [url for url in urls if not _url_already_injected(llm_request, url)]
+        if not urls or target_content is None or target_content.parts is None:
+            return None
+
+        resolved_meta: dict[str, dict] = {}
+        injected_parts: list[genai_types.Part] = []
+        lengths: dict[str, int] = {}
+        full_texts: dict[str, str] = {}
+        titles: dict[str, str] = {}
+        canonicals: dict[str, Optional[str]] = {}
+
+        to_fetch: list[str] = []
+        for url in urls:
+            filename = _resolved_artifact_filename(url)
+            cached = await callback_context.load_artifact(filename)
+            if cached is not None and cached.inline_data and cached.inline_data.data:
+                text = cached.inline_data.data.decode("utf-8")
+                version_info = await callback_context.get_artifact_version(filename)
+                meta = (version_info.custom_metadata if version_info else None) or {}
+                full_texts[url] = text
+                lengths[url] = len(text)
+                titles[url] = meta.get("title") or url
+                canonicals[url] = meta.get("canonical")
+            else:
+                to_fetch.append(url)
+
+        if to_fetch:
+            results = await resolve_urls(to_fetch)
+            for r in results:
+                if r.status == ResolveStatus.RESOLVED and r.summary:
+                    full_texts[r.url] = r.summary
+                    lengths[r.url] = len(r.summary)
+                    titles[r.url] = r.title or r.url
+                    canonicals[r.url] = r.canonical
+                    await callback_context.save_artifact(
+                        filename=_resolved_artifact_filename(r.url),
+                        artifact=genai_types.Part(
+                            inline_data=genai_types.Blob(
+                                mime_type="text/plain",
+                                data=r.summary.encode("utf-8"),
+                            )
+                        ),
+                        custom_metadata={"title": r.title, "canonical": r.canonical},
+                    )
+                elif r.status == ResolveStatus.DEAD:
+                    resolved_meta[r.url] = {
+                        "status": ResolveStatus.DEAD.value,
+                        "error": r.error,
+                    }
+                    injected_parts.append(
+                        genai_types.Part(
+                            text=(
+                                f"{_LINK_NOT_FOUND_PREFIX}{r.url}: {r.error}. "
+                                "url-resolver could not resolve this URL (likely "
+                                "nonexistent/malformed). Verify with url_context; "
+                                "if it also retrieves no content, do NOT claim "
+                                "this link supports any claim."
+                            )
+                        )
+                    )
+                elif r.status == ResolveStatus.RESOLVER_CANT_FETCH:
+                    injected_parts.append(
+                        genai_types.Part(
+                            text=(
+                                f"{_RESOLVER_CANT_FETCH_PREFIX}{r.url} ({r.error}) "
+                                "— may be a PDF or blocked; rely on url_context."
+                            )
+                        )
+                    )
+                # TIMEOUT / RESOLVER_UNAVAILABLE: inject nothing, degrade to
+                # url_context — a resolver hiccup must never be mistaken for
+                # proof that a URL is dead.
+
+        budget = int(
+            os.environ.get("URL_RESOLVER_TOTAL_CHAR_BUDGET", _DEFAULT_TOTAL_CHAR_BUDGET)
+        )
+        allocation = _water_fill(lengths, budget)
+        for url, full_text in full_texts.items():
+            allowed = allocation.get(url, len(full_text))
+            truncated = allowed < len(full_text)
+            body = full_text if not truncated else full_text[:allowed]
+            text = f"{_RESOLVED_PAGE_PREFIX}{url}\nTITLE: {titles[url]}\n---\n{body}"
+            if truncated:
+                text += (
+                    f"\n---(truncated from {len(full_text)} chars; full text "
+                    f"in artifact {_resolved_artifact_filename(url)})"
+                )
+            injected_parts.append(genai_types.Part(text=text))
+            resolved_meta[url] = {
+                "status": ResolveStatus.RESOLVED.value,
+                "title": titles[url],
+                "canonical": canonicals[url],
+            }
+
+        if not injected_parts:
+            return None
+        target_content.parts = list(target_content.parts) + injected_parts
+        if resolved_meta:
+            callback_context.state[RESOLVED_META_STATE_KEY] = resolved_meta
+    except Exception:
+        logger.exception(
+            "inject_resolved_url_content failed; skipping url-resolver injection"
+        )
+    return None
+
+
 # AI Web Searcher - Google Search snippet reporter
 ai_investigator = LlmAgent(
     name=AI_INVESTIGATOR_NAME,
@@ -328,16 +598,36 @@ ai_verifier = LlmAgent(
         # Long YouTube videos can otherwise hang with no client-side deadline.
         http_options=genai_types.HttpOptions(timeout=240_000),
     ),
-    before_model_callback=[inject_youtube_filedata, inject_cofacts_media_filedata],
-    after_model_callback=append_url_context_sources,
+    before_model_callback=[
+        inject_youtube_filedata,
+        inject_cofacts_media_filedata,
+        inject_resolved_url_content,
+    ],
+    after_model_callback=append_verifier_sources,
     instruction=f"""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
 
+    ## Pre-fetched page text
+    For plain web URLs, the system has already fetched the real page and injected its
+    cleaned body text as a `[RESOLVED PAGE] <url>` part below — this is a real, verbatim
+    fetch, not a summary. Base support/refute for these URLs ONLY on that injected text
+    (quote verbatim from it) — never on training knowledge or on a URL's mere plausibility.
+    A `[LINK NOT FOUND] <url>` note means the system's fetcher could not resolve that URL
+    at all (likely nonexistent or malformed): treat this as advisory, not a ban — still try
+    url_context on it; only if url_context ALSO retrieves no content should you report the
+    claim as ✗ / cannot-verify for that link, and never present it as a supporting source.
+    A URL with neither a `[RESOLVED PAGE]` nor a `[LINK NOT FOUND]` note simply means the
+    system's fetcher could not get it (e.g. a PDF) — fall back to url_context exactly as
+    for any other URL.
+
     ## Your Task
     1. Call url_context for ALL provided web/news/YouTube page URLs in one call (up to 20) —
-       this is MANDATORY. url_context fetches web PAGE metadata (title, publish date,
-       description) from the HTML.
+       this is MANDATORY, even for URLs that already have injected `[RESOLVED PAGE]` text:
+       url_context is still the only source for page METADATA (title, publish date,
+       description) and for anything the system's fetcher could not get.
+       Division of labour: **body text → injected `[RESOLVED PAGE]` parts; page metadata /
+       upload date / video content → url_context (+ FileData)**.
        For video URLs like YouTube, page metadata and video frames are complementary:
        - url_context → upload date, uploader name, page title/description
        - FileData → observable video content (speech, visuals, on-screen text)
