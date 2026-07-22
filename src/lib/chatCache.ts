@@ -295,19 +295,27 @@ export function applyEventToState(
           args: (args ?? {}) as ToolInvocation['args'],
           resp: toolInvocations[id]?.resp ?? null,
         } as ToolInvocation
-        if (name === 'draft_factcheck_response') {
-          lastReplyDraftId = id
-        }
       }
     }
     if (part.functionResponse) {
       const key = part.functionResponse.id ?? part.functionResponse.name
       if (key && toolInvocations[key]) {
+        const response = (part.functionResponse.response ??
+          null) as ToolInvocation['resp']
         toolInvocations[key] = {
           ...toolInvocations[key],
-          resp: (part.functionResponse.response ??
-            null) as ToolInvocation['resp'],
+          resp: response,
         } as ToolInvocation
+        // Only pop the drawer for a SUCCESSFUL proposal: draft_factcheck_response
+        // is re-callable (cofacts/ai#117), so a gate-rejected call (missing
+        // sources, unconfirmed claims, etc.) must not overwrite a prior good
+        // draft as "the" one auto-shown when the turn ends.
+        if (
+          toolInvocations[key].name === 'draft_factcheck_response' &&
+          (response as { success?: boolean } | null)?.success === true
+        ) {
+          lastReplyDraftId = key
+        }
       }
     }
   }
@@ -429,6 +437,33 @@ export function applyEventToState(
   }
 
   return { ...prev, messages, toolInvocations, lastReplyDraftId }
+}
+
+/**
+ * 1-indexed submission order of every `draft_factcheck_response` call in this
+ * session, keyed by function-call id (1 = first proposal). Matches the
+ * backend's `[[draft:vN]]` versioning (agent.py `expand_writer_symbols`) --
+ * both derive from the same chronological order of draft proposals, so a
+ * version number shown on screen means the same thing if a user tells the
+ * writer to review an earlier one (cofacts/ai#117).
+ */
+export function getDraftVersionsById(
+  messages: Array<ChatMessage>,
+): Record<string, number> {
+  const versions: Record<string, number> = {}
+  let count = 0
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      if (
+        part.functionCall?.name === 'draft_factcheck_response' &&
+        part.functionCall.id
+      ) {
+        count += 1
+        versions[part.functionCall.id] = count
+      }
+    }
+  }
+  return versions
 }
 
 /**
