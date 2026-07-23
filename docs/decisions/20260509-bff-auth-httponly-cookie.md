@@ -93,11 +93,13 @@ login → callback → authenticated-GraphQL → logout flow; the session cookie
 
 ## More Information
 
-- Original design doc (migrated here from Cofacts KB):
-  `src/technical-design/cofacts.ai/Authentication.md`; the options analysis lived in
-  `src/research/cofacts.ai/Authentication Comparison.md`. The KB copy now points here.
+- This ADR records the **cofacts.ai (BFF) side** of a decision that spans two repos. The fuller
+  cross-repo design doc stays in Cofacts KB —
+  [`technical-design/cofacts.ai/Authentication.md`](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Authentication.md)
+  (the paired rumors-api changes and the login / API-request / logout sequence diagrams), with
+  the options analysis in
+  [`research/cofacts.ai/Authentication Comparison.md`](https://github.com/cofacts/kb/blob/main/src/research/cofacts.ai/Authentication%20Comparison.md).
 - Implemented in [cofacts/ai#25](https://github.com/cofacts/ai/pull/25); paired rumors-api
   change [cofacts/rumors-api#386](https://github.com/cofacts/rumors-api/pull/386).
 - How the token is then propagated from the BFF into the ADK backend is covered by
   [`20260603-auth-token-contextvar`](20260603-auth-token-contextvar.md).
-- Full login / API-request / logout sequence diagrams are in the original design doc.
