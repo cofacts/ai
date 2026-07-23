@@ -57,9 +57,13 @@ invokes sub-agents wrapped as ADK `AgentTool`s (the writer cannot call built-in 
 | `ai_verifier`                                | **Confirms** which source backs which claim via `url_context`; the only agent that perceives **video / audio**.           |
 | `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                   |
 
+The `ai_` prefix is only the Python variable name in `adk/cofacts_ai/agent.py`; the ADK runtime
+names — the `name=` strings, mirrored in `src/lib/adk.ts` — drop it: `writer`, `investigator`,
+`verifier`, `proofreader_*`.
+
 Agents exchange data through callbacks in `adk/cofacts_ai/agent.py` (a structured
 `{content, sources}` JSON contract), and media is injected as Gemini `FileData` through
-before-model callbacks in `adk/cofacts_ai/media_filedata.py`.
+before-model callbacks in `adk/cofacts_ai/media_filedata.py` and `agent.py`.
 → decisions:
 [source-integrity contract](decisions/20260515-agent-source-integrity-contract.md),
 [media injection via callbacks](decisions/20260531-callback-media-injection.md),
@@ -78,14 +82,10 @@ files) are stored in GCS.
 Every model turn is traced to **Langfuse**; thumbs-up/down feedback is written back as
 Langfuse scores (the secret key stays server-side, proxied through the BFF). Trace-driven
 debugging is the team's standard workflow — most decisions here cite the trace that exposed
-the problem. _(Observability decisions are still to be backfilled — see the decisions index.)_
+the problem.
 
 ## Invariant
 
 `src/lib/adk.ts` (`AllTools`, the frontend's tool-name → args/response map) must be kept in
 **strict sync** with `adk/cofacts_ai/tools.py` and `agent.py`. Changing a tool's shape means
 changing both.
-
-## Decisions
-
-See [`docs/decisions/index.md`](decisions/index.md) for the full decision log.
