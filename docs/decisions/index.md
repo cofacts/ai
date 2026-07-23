@@ -2,11 +2,12 @@
 
 Decisions are recorded as [MADRs](https://adr.github.io/madr). Filenames are
 `YYYYMMDD-short-name.md`; newest first below. See [`../../AGENTS.md`](../../AGENTS.md) for when
-and how to add one, and [`0000-use-markdown-any-decision-records.md`](0000-use-markdown-any-decision-records.md)
-for why we use this format. The template is [`adr-template.md`](adr-template.md).
+to add one and [`adr-template.md`](adr-template.md) for how. Why we use this format is itself a
+record — the 2026-07-23 entry below.
 
 | Date       | Decision                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------ |
+| 2026-07-23 | [Use Markdown Any Decision Records (MADR)](20260723-use-markdown-any-decision-records.md)              |
 | 2026-06-06 | [Multimodal media perception on Vertex AI](20260606-multimodal-perception-vertex-ai.md)                |
 | 2026-06-03 | [Propagate the auth token to ADK via header + ContextVar](20260603-auth-token-contextvar.md)           |
 | 2026-05-31 | [Inject media into Gemini via before-model callbacks](20260531-callback-media-injection.md)            |

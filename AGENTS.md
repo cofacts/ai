@@ -10,14 +10,15 @@ system and the reasoning behind it from `docs/` alone. When you work in this rep
   it starts, and its components (frontend/BFF, the ADK multi-agent backend, data, deploy). It
   stays a thin overview and links out for detail.
 - **[`docs/decisions/`](docs/decisions/index.md)** — the _why_: one
-  [MADR](https://adr.github.io/madr) per significant decision. `index.md` is the log,
-  `adr-template.md` the template, and `0000-…` explains why we use MADR.
+  [MADR](https://adr.github.io/madr) per significant decision. `index.md` is the log and
+  `adr-template.md` is the template (it explains how to fill each section).
 
 Rule of thumb: **`index.md` = what/how it is now; `decisions/` = why we chose it.**
 
-## When you MUST record a new decision
+## When to record a decision
 
-As you land a change that does any of the following, add a decision record:
+The habit that matters is noticing the moment you're making a **far-reaching, hard-to-reverse
+choice** — one worth understanding months from now. It usually looks like a change that:
 
 - **Spans frontend + backend** — touches both `src/` and `adk/`.
 - **Changes the agent contract or orchestration** — agent roles, the `AgentTool` wiring, a
@@ -26,31 +27,19 @@ As you land a change that does any of the following, add a decision record:
 - **Changes the data model or session persistence** — `SessionService`, the database, artifacts.
 - **Changes authentication** — the cookie/JWT flow or token propagation.
 - **Changes deployment or infra** — Cloud Run containers, sidecars, env, GCP project/IAM.
-- Any plan large enough that you'd want a design discussion. When in doubt, write one.
 
-Small, self-contained bug fixes and refactors do **not** need a record.
+When you notice one, **say so and ask the user whether to capture it as a decision record** —
+don't silently skip a decision this significant, and don't silently write one up either. Small,
+self-contained bug fixes and refactors don't need a record.
 
-## How to add a decision record
+## How to add one
 
-1. Copy [`docs/decisions/adr-template.md`](docs/decisions/adr-template.md) to
-   `docs/decisions/YYYYMMDD-short-name.md` (date = today or the merge date; `short-name` in
-   kebab-case).
-2. Fill **Context and Problem Statement** — name the components in scope and link the PR/issue.
-   **If a production issue drove the change, paste the Langfuse trace URL** (project base
-   `https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/…`) under
-   `### Langfuse evidence`, with a one-line note on what it showed and the analysis it led to.
-3. Fill **Considered Options**, **Decision Outcome**, and **Consequences** (Good / Bad).
-4. Add a row to [`docs/decisions/index.md`](docs/decisions/index.md) (newest first).
-5. **If the change alters the big picture** (a component, a boundary, how it starts, deploy
-   topology), also update [`docs/index.md`](docs/index.md) and link the new record from it.
-
-**Backfilling an old decision?** Reconstruct the rationale from real sources, not guesswork —
-in roughly this order of usefulness: (1) the **PR description and its comments** (pivots often
-surface in the review discussion); (2) the **git commit log** for those commits (a message like
-"switch X to Y" records a change of direction); (3) the **Cofacts weekly meeting notes** for
-that week (`cofacts/kb`, `src/meetings/YYYY/` — occasionally records the alternatives weighed).
-Cite whatever you find. If none of them record any alternatives, trim the _Considered Options_
-to what actually shipped rather than inventing plausible-sounding ones.
+Once the user agrees: copy [`docs/decisions/adr-template.md`](docs/decisions/adr-template.md)
+to `docs/decisions/YYYYMMDD-short-name.md` and fill it in — the template explains each section,
+including the Langfuse-evidence block and how to source a backfilled record honestly rather
+than inventing options. Then add a row to [`docs/decisions/index.md`](docs/decisions/index.md)
+(newest first). If the change alters the big picture (a component, a boundary, how it starts,
+deploy topology), also update [`docs/index.md`](docs/index.md) and link the record.
 
 ## When to update `docs/index.md`
 
