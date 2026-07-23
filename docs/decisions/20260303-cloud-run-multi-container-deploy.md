@@ -21,23 +21,32 @@ container, the ADK backend container, and the deploy/cleanup workflows (no appli
 
 ## Decision Drivers
 
-- The frontend/BFF and the ADK backend must be deployed and versioned as one unit and talk to
-  each other with minimal latency.
-- Keep infrastructure minimal and cheap to run — one service to manage, able to scale to zero.
-- Every PR needs an isolated, reviewable preview at its own URL, with zero impact on the
-  revision serving production traffic.
-- CI must authenticate to GCP without storing exported service-account JSON keys as secrets.
-- The service definition should be declarative and reproducible across environments.
+Recorded in the Cofacts weekly meetings while the app was being stood up:
+
+- Keep hosting cheap and simple — the staging service ran at `min instance = 0`
+  ([2026-03-05 meeting](https://github.com/cofacts/kb/blob/main/src/meetings/2026/20260305.md)).
+- Don't expose the Python ADK API publicly — the Tanstack Start server proxies it (same
+  meeting).
+- Ship and run the frontend/BFF and the ADK backend together.
 
 ## Considered Options
 
-- **Single Cloud Run service with multiple containers** — an `ingress` container plus an ADK
-  backend sidecar in the same revision, communicating over `localhost`.
-- Two separate Cloud Run services (one per component) calling each other over the network.
-- One container image bundling both the Node and Python runtimes.
-- For previews: **a 0%-traffic tagged revision on the same service** vs. a separate ephemeral
-  service per PR.
-- For CI auth: **Workload Identity Federation** vs. an exported service-account JSON key.
+Alternatives the team actually weighed (per the meeting notes and the PR discussion), not
+reconstructed:
+
+- **Hosting platform** — Cloud Run vs. Linode
+  ([2026-02-10 meeting](https://github.com/cofacts/kb/blob/main/src/meetings/2026/20260210.md)).
+- **Deploy topology** — build the Tanstack Start and Python ADK images separately and put
+  **both in one Cloud Run service as sidecars** (communicating over `localhost`, with the ADK
+  proxied by the frontend rather than exposed directly) — the chosen approach
+  ([2026-03-05 meeting](https://github.com/cofacts/kb/blob/main/src/meetings/2026/20260305.md)).
+- **Secrets delivery** — Google Secret Manager (the initial approach) vs. GitHub repository
+  secrets injected via `envsubst` at deploy time; pivoted to the latter mid-PR after a Secret
+  Manager IAM permission error
+  ([#10 discussion](https://github.com/cofacts/ai/pull/10#issuecomment-3977901879)).
+
+Workload Identity Federation and the 0%-traffic preview-revision model (see Decision Outcome)
+are how #10 implemented the chosen option; they weren't recorded as compared alternatives.
 
 ## Decision Outcome
 

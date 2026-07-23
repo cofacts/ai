@@ -30,6 +30,11 @@ deploy). Link the driving PR/issue.}
 
 ## Considered Options
 
+<!-- Backfilling an old decision? Reconstruct from real sources, not guesswork: the PR
+description & comments (pivots surface in review), the git commit log for those commits, and the
+Cofacts weekly meeting notes (cofacts/kb, src/meetings/YYYY/). Cite what you find. If no
+alternatives were recorded anywhere, trim this section to what shipped rather than inventing options. -->
+
 - {title of option 1}
 - {title of option 2}
 

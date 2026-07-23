@@ -44,6 +44,14 @@ Small, self-contained bug fixes and refactors do **not** need a record.
 5. **If the change alters the big picture** (a component, a boundary, how it starts, deploy
    topology), also update [`docs/index.md`](docs/index.md) and link the new record from it.
 
+**Backfilling an old decision?** Reconstruct the rationale from real sources, not guesswork —
+in roughly this order of usefulness: (1) the **PR description and its comments** (pivots often
+surface in the review discussion); (2) the **git commit log** for those commits (a message like
+"switch X to Y" records a change of direction); (3) the **Cofacts weekly meeting notes** for
+that week (`cofacts/kb`, `src/meetings/YYYY/` — occasionally records the alternatives weighed).
+Cite whatever you find. If none of them record any alternatives, trim the _Considered Options_
+to what actually shipped rather than inventing plausible-sounding ones.
+
 ## When to update `docs/index.md`
 
 Whenever a component, the frontend/backend boundary, the startup/dev commands, or the

@@ -33,12 +33,11 @@ Driving PR: [cofacts/ai#33](https://github.com/cofacts/ai/pull/33).
 
 ## Considered Options
 
-- **In-memory (`InMemorySessionService`, status quo)** — no persistence.
-- **SQLite only** — a file-backed `DatabaseSessionService` everywhere.
-- **PostgreSQL via a Cloud SQL Auth Proxy sidecar** — SQLite locally, PostgreSQL in
-  deployed environments, reached through an in-pod proxy container.
-- **Managed PostgreSQL with a direct connection** — the backend opens a direct, password- or
-  TLS-authenticated connection to Cloud SQL.
+Neither PR #33 nor the weekly meeting that logged it
+([2026-04-28](https://github.com/cofacts/kb/blob/main/src/meetings/2026/20260428.md)) recorded a
+comparison of alternatives — only the chosen approach (see Decision Outcome) is on record. The
+baseline it replaced was the in-memory `InMemorySessionService`, which lost all sessions on
+every restart.
 
 ## Decision Outcome
 
