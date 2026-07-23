@@ -38,6 +38,9 @@ Driving PR: [cofacts/ai#76](https://github.com/cofacts/ai/pull/76).
 
 ## Considered Options
 
+PR #76 frames this as a fix, not a comparison — the broken original versus the mechanism that
+replaced it:
+
 - **Session `stateDelta` with a `temp:`-prefixed key** — the original approach.
   Rejected: silently stripped. ADK's `BaseSessionService.append_event` calls
   `_trim_temp_delta_state`, which removes all `temp:`-prefixed keys from the event
@@ -45,12 +48,11 @@ Driving PR: [cofacts/ai#76](https://github.com/cofacts/ai/pull/76).
   always returns `None`. `temp:` state is only meant to be set by Python callbacks
   _within_ an invocation (mutating the `session.state` dict directly), not passed in
   over the HTTP `stateDelta` field.
-- **A non-`temp:` session state key** — would survive the trim, but persists the
-  short-lived JWT into durable session state, exposing it in `list_sessions` and
-  entangling a per-request secret with long-lived conversation state.
 - **`Authorization: Bearer` header + a `ContextVar` set by FastAPI middleware** — the
   BFF sends the token as a standard bearer header; middleware lifts it into a
-  request-scoped `ContextVar` that tools read directly. Chosen.
+  request-scoped `ContextVar` that tools read directly. **Chosen** — and it deliberately
+  keeps the token out of session state, so the per-request JWT never persists into
+  `list_sessions`.
 
 ## Decision Outcome
 

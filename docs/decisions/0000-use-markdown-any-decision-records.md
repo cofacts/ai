@@ -16,16 +16,17 @@ that both humans and coding agents can read, link to, and extend.
 
 ## Considered Options
 
-- MADR (Markdown Any Decision Records)
-- Nygard-style lightweight ADRs
-- Keep design docs in `cofacts/kb` only
-- A single long `ARCHITECTURE.md`
+MADR was specified up front in the request that started this docs restructure (it linked the
+MADR spec directly), so this is a recorded choice rather than a comparison. The only real
+alternative was the **status quo** — leaving the "why" scattered across `cofacts/kb` design
+docs, PR descriptions, and code comments — which is the problem this solves. Other ADR formats
+(e.g. Nygard-style) and a single long `ARCHITECTURE.md` were not evaluated.
 
 ## Decision Outcome
 
-Chosen option: "MADR", because it is a widely-adopted, plain-Markdown template that records
-the options and consequences (not just the final choice), needs no tooling, and is trivial
-for an agent to instantiate from a template. See <https://adr.github.io/madr>.
+Chosen: **MADR** (<https://adr.github.io/madr>) — a widely-adopted, plain-Markdown template
+that records the options and consequences (not just the final choice), needs no tooling, and is
+trivial for an agent to instantiate from a template.
 
 ### Consequences
 

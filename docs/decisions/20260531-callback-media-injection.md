@@ -43,23 +43,29 @@ verifier reports. Driving PR: [cofacts/ai#68](https://github.com/cofacts/ai/pull
   on-screen text). A correct verification needs both layers kept distinct.
 - Vertex AI natively understands a YouTube URL passed as `FileData` (one video per request,
   `mimeType` required) — reuse it instead of building a media pipeline.
-- Keep the orchestrator stable: handing temporal media to the `ai_writer` makes it
-  narrate/confabulate playback instead of orchestrating, so only the verifier/investigator may
-  perceive video/audio.
+- Keep the orchestrator out of the perception path — #68 wires the video callback onto the
+  verifier/investigator, not `ai_writer`. (The rationale that temporal media _destabilizes_ the
+  orchestrator was articulated later in
+  [`20260606-multimodal-perception-vertex-ai`](20260606-multimodal-perception-vertex-ai.md).)
 - Resilience: a failing built-in tool (`url_context`, `google_search`) must not crash the
   whole writer session.
-- Minimal footprint — implement inside ADK's existing callback hooks, no separate download,
-  storage, or transcode step.
+- Minimal footprint — implement inside ADK's existing callback hooks, with no separate media
+  download or storage step.
 
 ## Considered Options
 
-- **`FileData` only** — inject the watchable video, drop the original URL text.
-- **`url_context` text only** — status quo: page metadata alone, no frames.
-- **Both / complementary context** — inject the video as `FileData` _and_ keep the URL in the
-  text so `url_context` still fetches page metadata, governed by a hard "report only what is
-  visible/audible" rule.
-- **Download-and-transcode** — fetch the video ourselves, extract frames/audio, and feed those
-  to the model through a bespoke pipeline.
+PR #68 records the chosen approach against the status quo it fixes; it did not lay out a wider
+option set.
+
+- **`url_context` text only** — the status quo: the agents saw only page metadata, never a
+  frame. This is the failure mode being fixed.
+- **`FileData` + `url_context` (complementary)** — inject the video as a watchable `FileData`
+  part _and_ keep the URL in the text so `url_context` still fetches page metadata, governed by
+  a hard "report only what is visible/audible" rule. **Chosen.**
+
+Injecting `FileData` _alone_ (dropping the URL text) is noted in the PR only as the reason to
+keep the URL — a frame can't show the upload date or uploader — not as a separately evaluated
+option.
 
 ## Decision Outcome
 
@@ -67,8 +73,7 @@ Chosen option: **both / complementary context**, because it is the only option t
 verifier the full picture — the observable content _and_ the page's own claims about it —
 while reusing Vertex's native YouTube understanding and ADK callbacks, with no media pipeline
 to build or operate. `FileData`-only loses the upload date and uploader (which frames cannot
-show); `url_context`-only is the failure mode we are fixing; download-and-transcode duplicates
-what Vertex already does and adds storage/transcode infrastructure for no gain.
+show); `url_context`-only is the failure mode we are fixing.
 
 Key decisions:
 

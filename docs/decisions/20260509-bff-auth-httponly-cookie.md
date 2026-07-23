@@ -32,13 +32,22 @@ loader), and a paired change in `rumors-api` (short-lived code + `/auth/token` e
 
 ## Considered Options
 
-- **Custom authorization-code flow via the BFF** — `rumors-api` issues a 30-second
-  short-lived JWT as an authorization code; the BFF exchanges it server-to-server for a
-  long-lived JWT stored in an HttpOnly cookie.
-- Store the `rumors-api` JWT directly in browser-accessible storage (localStorage or a
-  non-HttpOnly cookie).
-- Full OAuth 2.0 with client registration and refresh tokens.
-- Keep the legacy `koa-session` cookie as the only mechanism.
+The alternatives were weighed in the research doc
+[`Authentication Comparison.md`](https://github.com/cofacts/kb/blob/main/src/research/cofacts.ai/Authentication%20Comparison.md)
+(four scenarios), which stays in `cofacts/kb`:
+
+- **Scenario 1 — status quo, legacy `koa-session` cookie only.** Rejected as "untenable": the
+  SSR server can't read a cookie scoped to the api domain.
+- **Scenario 2 — custom authorization-code flow via the BFF** — a short-lived JWT auth code
+  exchanged server-to-server for a long-lived JWT in an HttpOnly cookie; the doc's
+  "recommended / best-balance" scenario. **Chosen.**
+- **Scenario 3 — BFF / trusted-client** — cofacts.ai runs its own OAuth (e.g. NextAuth) and
+  `rumors-api` trusts an `x-app-secret`. Fine for microservices, but a "skeleton-key" risk.
+- **Scenario 4 — IDaaS (Firebase / Auth0)** — delegate identity to a managed provider. Judged
+  best long-term, but the most refactoring.
+
+Full OAuth 2.0 with client registration and refresh tokens was ruled out up front — design doc
+Key Decisions #2 "No OAuth App Registry" and #4 "No Refresh Tokens".
 
 ## Decision Outcome
 

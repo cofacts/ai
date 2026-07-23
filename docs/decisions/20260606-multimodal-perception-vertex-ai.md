@@ -71,8 +71,8 @@ temporal media rather than a transport bug.
 
 **Delivery / platform**
 
-- **Developer API (API key) + Gemini Files-API handles** — upload each media object to the
-  Files API and pass the returned handle (explored in #79).
+- **Developer API (API key) + Gemini Files-API handles** — register the `gs://` object via the
+  Files API (`register_files`) and inject the returned `files/…` handle (explored in #79).
 - **Developer API + signed HTTPS `attachmentUrl` with on-demand re-signing** — inject the
   signed GCS URL as-is and rebuild it when it expires (the plan's approach, built in #81).
 - **Vertex AI + native `gs://` URIs** — hand Gemini the `gs://` form and let the Vertex
