@@ -1,5 +1,5 @@
 ---
-status: "accepted"
+status: 'accepted'
 date: 2026-06-06
 decision-makers: [MrOrz]
 consulted:
@@ -11,7 +11,7 @@ informed:
 ## Context and Problem Statement
 
 Cofacts articles are not always text — an article can be an IMAGE, VIDEO, or AUDIO whose
-media lives as an object in `gs://cofacts-media-collection`. The ADK agent needs to *perceive*
+media lives as an object in `gs://cofacts-media-collection`. The ADK agent needs to _perceive_
 that media through Gemini (no download/re-upload, no artifact store, no extra agent-visible
 tool call), which raises two independent questions that this decision settles together:
 **how** the media is delivered to Gemini, and **who** in the multi-agent pipeline actually
@@ -29,7 +29,7 @@ platform migration stacked underneath it).
 
 - [Verifier watching carries the whole case — `42543ea6`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/sessions/42543ea6-a707-4843-90d7-2cf4bf6730a9) —
   an AI-generated bird montage with no meaningful narration and many on-screen FB/IG handles.
-  The transcript is worthless; everything that matters is *visual*. The writer correctly
+  The transcript is worthless; everything that matters is _visual_. The writer correctly
   forwarded the `gs://` URL to the verifier (twice) and the verifier watched it. This is the
   canonical case the writer→verifier delegation exists for.
 - [Rich transcript ⇒ writer skips the video — `cc9ed3bd`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/sessions/cc9ed3bd-65aa-405f-b799-d650880118e7) —
@@ -37,8 +37,8 @@ platform migration stacked underneath it).
   writer extracted the claims from the transcript and called the verifier only as a web-page
   checker — it never forwarded the `gs://` media, so the visual layer (on-screen text,
   AI-generated B-roll, source watermarks) went unexamined. This motivated the instruction that
-  a VIDEO/AUDIO article needs **at least one** media-watching verifier pass *even when the
-  transcript looks complete*, because the transcript only covers the audio.
+  a VIDEO/AUDIO article needs **at least one** media-watching verifier pass _even when the
+  transcript looks complete_, because the transcript only covers the audio.
 - [Over-iteration ⇒ timeout — `03826a6b`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/sessions/03826a6b-bbfd-4ea1-8e20-0a3f1bc31b98) —
   a Jingdezhen-ceramics craft video (article `prqoNp0B-5SQhC6hlKzX`). Delivery worked
   perfectly (3 verifier passes, all with the correct `gs://`), but with no clear-cut false
@@ -48,7 +48,7 @@ platform migration stacked underneath it).
 
 A cross-cutting observation from #82's traces closed the delivery question: on both correct
 and broken runs the signed-URL transport was already fetching and tokenizing the video (a
-constant `VIDEO 7098` tokens). Media *delivery* was never the failure; the signing/re-signing
+constant `VIDEO 7098` tokens). Media _delivery_ was never the failure; the signing/re-signing
 apparatus was avoidable complexity, and the real instability was the orchestrator narrating
 temporal media rather than a transport bug.
 
@@ -60,7 +60,7 @@ temporal media rather than a transport bug.
 - Langfuse showed the transport already worked, so signing was complexity with no payoff.
 - Handing temporal media (VIDEO/AUDIO) to the orchestrator destabilizes it — it narrates and
   confabulates the playback instead of orchestrating.
-- The verifier is the *only* agent that perceives video/audio, so anything it omits is
+- The verifier is the _only_ agent that perceives video/audio, so anything it omits is
   invisible to the whole pipeline — its output must be an exhaustive, auditable claim inventory.
 - Prefer a plain IAM grant (bucket read on the runtime service account) over bespoke signing
   infrastructure; `rumors-api` already runs on Vertex and can read `gs://cofacts-media-collection`.
@@ -76,14 +76,14 @@ temporal media rather than a transport bug.
 - **Developer API + signed HTTPS `attachmentUrl` with on-demand re-signing** — inject the
   signed GCS URL as-is and rebuild it when it expires (the plan's approach, built in #81).
 - **Vertex AI + native `gs://` URIs** — hand Gemini the `gs://` form and let the Vertex
-  runtime service account read the bucket directly (#82). *Chosen.*
+  runtime service account read the bucket directly (#82). _Chosen._
 
 **Perceiver ("who perceives the media")**
 
 - **Writer perceives all media directly** — inject IMAGE, VIDEO, and AUDIO into the
   orchestrator's context (#72's original thesis).
 - **Writer sees IMAGE only; VIDEO/AUDIO delegated to the verifier** — the temporal media goes
-  to the sub-agent that already watches/listens. *Chosen.*
+  to the sub-agent that already watches/listens. _Chosen._
 
 ## Decision Outcome
 
@@ -98,7 +98,7 @@ non-expiring `gs://` URI, and `after_tool` rewrites the writer-visible `attachme
 `gs://` so the value the model sees is the value that works. This deleted #81's re-sign
 machinery (credentials cache, expiry parsing, `_resign_gcs_blob`, `_refresh_attachment_url`)
 and the `google-cloud-storage` / `google-auth` dependencies. Because Cofacts `gs://` objects
-have no web page, `url_context` is explicitly *not* called on them. Deploy prerequisite: the
+have no web page, `url_context` is explicitly _not_ called on them. Deploy prerequisite: the
 runtime service account needs `roles/aiplatform.user` plus `roles/storage.objectViewer` on
 `cofacts-media-collection`.
 

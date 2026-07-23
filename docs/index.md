@@ -6,7 +6,7 @@ research and verify claims, and draft fact-check replies. It builds on the exist
 `rumors-api` (article data + OAuth login), Google Gemini via Vertex AI (the agents), and
 Langfuse (observability + feedback).
 
-This page is the **current-state overview**. The *why* behind each choice lives in
+This page is the **current-state overview**. The _why_ behind each choice lives in
 [`decisions/`](decisions/index.md) as MADRs — this page links out to them rather than
 repeating them. See [`AGENTS.md`](../AGENTS.md) for how to keep both up to date.
 
@@ -24,7 +24,7 @@ flowchart LR
 ```
 
 1. **Frontend + BFF** — a TanStack Start (React / Vite / Nitro) app at the repo root
-   (`src/`). The browser talks *only* to the BFF (server functions + `/api/*` routes). Auth
+   (`src/`). The browser talks _only_ to the BFF (server functions + `/api/*` routes). Auth
    is an HttpOnly `cofacts_session` cookie — the JWT never reaches browser JavaScript. The
    BFF proxies to the ADK backend and to `rumors-api`.
    → decision: [BFF auth](decisions/20260509-bff-auth-httponly-cookie.md).
@@ -50,12 +50,12 @@ The root agent is **`ai_writer`**, the orchestrator that composes fact-check rep
 invokes sub-agents wrapped as ADK `AgentTool`s (the writer cannot call built-in tools such as
 `google_search` / `url_context` alongside function tools in a single agent):
 
-| Agent | Role |
-|---|---|
-| `ai_writer` | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Perceives **images** only. |
-| `ai_investigator` | **Discovers** candidate sources via `google_search`. |
-| `ai_verifier` | **Confirms** which source backs which claim via `url_context`; the only agent that perceives **video / audio**. |
-| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality. |
+| Agent                                        | Role                                                                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `ai_writer`                                  | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Perceives **images** only. |
+| `ai_investigator`                            | **Discovers** candidate sources via `google_search`.                                                                      |
+| `ai_verifier`                                | **Confirms** which source backs which claim via `url_context`; the only agent that perceives **video / audio**.           |
+| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                   |
 
 Agents exchange data through callbacks in `adk/cofacts_ai/agent.py` (a structured
 `{content, sources}` JSON contract), and media is injected as Gemini `FileData` through
@@ -78,7 +78,7 @@ files) are stored in GCS.
 Every model turn is traced to **Langfuse**; thumbs-up/down feedback is written back as
 Langfuse scores (the secret key stays server-side, proxied through the BFF). Trace-driven
 debugging is the team's standard workflow — most decisions here cite the trace that exposed
-the problem. *(Observability decisions are still to be backfilled — see the decisions index.)*
+the problem. _(Observability decisions are still to be backfilled — see the decisions index.)_
 
 ## Invariant
 

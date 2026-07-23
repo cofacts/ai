@@ -6,10 +6,10 @@ system and the reasoning behind it from `docs/` alone. When you work in this rep
 
 ## What `docs/` is
 
-- **[`docs/index.md`](docs/index.md)** — the *current-state* overview: what the system is, how
+- **[`docs/index.md`](docs/index.md)** — the _current-state_ overview: what the system is, how
   it starts, and its components (frontend/BFF, the ADK multi-agent backend, data, deploy). It
   stays a thin overview and links out for detail.
-- **[`docs/decisions/`](docs/decisions/index.md)** — the *why*: one
+- **[`docs/decisions/`](docs/decisions/index.md)** — the _why_: one
   [MADR](https://adr.github.io/madr) per significant decision. `index.md` is the log,
   `adr-template.md` the template, and `0000-…` explains why we use MADR.
 

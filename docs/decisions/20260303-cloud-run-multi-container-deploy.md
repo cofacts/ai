@@ -1,5 +1,5 @@
 ---
-status: "accepted"
+status: 'accepted'
 date: 2026-03-03
 decision-makers: [MrOrz]
 consulted:
@@ -64,7 +64,7 @@ As originally shipped in #10 (two containers):
    **0% traffic** tagged `pr-<n>`, leaving the current 100% revision serving; a transient GitHub
    Deployment (environment `pr-<n>`) is created and its status updated with the preview URL.
 5. **Cleanup** — on PR close, `preview-cleanup.yml` runs `gcloud run services update-traffic
-   --remove-tags=pr-<n>` and deactivates/deletes the PR's GitHub Deployments.
+--remove-tags=pr-<n>` and deactivates/deletes the PR's GitHub Deployments.
 
 This established the multi-container/sidecar + preview model that later PRs amend (a third
 `cloudsql-proxy` sidecar was added afterwards — see More Information).

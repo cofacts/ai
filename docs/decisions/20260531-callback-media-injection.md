@@ -1,5 +1,5 @@
 ---
-status: "accepted"
+status: 'accepted'
 date: 2026-05-31
 decision-makers: [MrOrz]
 consulted:
@@ -11,7 +11,7 @@ informed:
 ## Context and Problem Statement
 
 The Cofacts.ai ADK backend routinely fact-checks suspicious messages that center on a
-YouTube video. Until now the agents saw only the *page* — `url_context` fetches a video's
+YouTube video. Until now the agents saw only the _page_ — `url_context` fetches a video's
 HTML metadata (title, uploader, description, upload date) but never a single frame — so the
 `ai_verifier` and `ai_investigator` had to reason about the video from text alone. The result
 was hallucinated or incomplete perception: the model would name an event, a location, or a
@@ -38,8 +38,8 @@ verifier reports. Driving PR: [cofacts/ai#68](https://github.com/cofacts/ai/pull
 - Eliminate the hallucination/incomplete-context failure mode that came from perceiving a
   video only through its page metadata.
 - The two signals are complementary, not interchangeable: `url_context` supplies what the
-  page *asserts* (upload date, uploader, title/description — the "when it went online" a video
-  frame can never reveal), while `FileData` supplies what is *observable* (speech, visuals,
+  page _asserts_ (upload date, uploader, title/description — the "when it went online" a video
+  frame can never reveal), while `FileData` supplies what is _observable_ (speech, visuals,
   on-screen text). A correct verification needs both layers kept distinct.
 - Vertex AI natively understands a YouTube URL passed as `FileData` (one video per request,
   `mimeType` required) — reuse it instead of building a media pipeline.
@@ -55,7 +55,7 @@ verifier reports. Driving PR: [cofacts/ai#68](https://github.com/cofacts/ai/pull
 
 - **`FileData` only** — inject the watchable video, drop the original URL text.
 - **`url_context` text only** — status quo: page metadata alone, no frames.
-- **Both / complementary context** — inject the video as `FileData` *and* keep the URL in the
+- **Both / complementary context** — inject the video as `FileData` _and_ keep the URL in the
   text so `url_context` still fetches page metadata, governed by a hard "report only what is
   visible/audible" rule.
 - **Download-and-transcode** — fetch the video ourselves, extract frames/audio, and feed those
@@ -64,7 +64,7 @@ verifier reports. Driving PR: [cofacts/ai#68](https://github.com/cofacts/ai/pull
 ## Decision Outcome
 
 Chosen option: **both / complementary context**, because it is the only option that gives the
-verifier the full picture — the observable content *and* the page's own claims about it —
+verifier the full picture — the observable content _and_ the page's own claims about it —
 while reusing Vertex's native YouTube understanding and ADK callbacks, with no media pipeline
 to build or operate. `FileData`-only loses the upload date and uploader (which frames cannot
 show); `url_context`-only is the failure mode we are fixing; download-and-transcode duplicates

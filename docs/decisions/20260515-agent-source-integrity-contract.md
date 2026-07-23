@@ -1,5 +1,5 @@
 ---
-status: "accepted"
+status: 'accepted'
 date: 2026-05-15
 decision-makers: [MrOrz]
 consulted:
@@ -31,11 +31,11 @@ discipline + source-coverage enforcement).
 - [#55 root-cause session `3b7812cd`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/sessions/3b7812cd-5e6f-4b15-b7d7-ea904199ca44) —
   the writer emitted "cleaner"-looking URLs that were absent from the investigator's grounded
   results; the model had reconstructed them from training data. Analysis: because sources
-  lived inside prose, the writer treated URLs as something to *compose* rather than *copy* —
+  lived inside prose, the writer treated URLs as something to _compose_ rather than _copy_ —
   a structural problem, not a prompt-wording problem.
 - [#77 session `1878006f`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/sessions/1878006f-c8c4-443d-968c-5a77db4dbe50)
   and [#77 session `ebc732b2`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/sessions/ebc732b2-9607-415d-8561-79bd0066403e) —
-  two runs on the *same* YouTube-Shorts message (Taiwan / ALTIUS drone procurement). The
+  two runs on the _same_ YouTube-Shorts message (Taiwan / ALTIUS drone procurement). The
   writer never proactively asked the verifier to enumerate the video's claims (the human had
   to type "請 verifier 看影片整理 claims" every time), and its `references` failed to cover
   every factual number in the reply. Analysis: `grounding_supports` over-attributed — measured
@@ -45,7 +45,7 @@ discipline + source-coverage enforcement).
 - [#77 session `2d97c04f`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/sessions/2d97c04f-eb5c-4461-a4c4-42187d6d3c2b) —
   the fact-checker gave up and had the writer produce a handover prompt, ran it through Gemini
   Pro and Claude Opus, then pasted the results back. Analysis: even fed two complete external
-  investigations, the writer's final citations *still* did not cover all factual claims —
+  investigations, the writer's final citations _still_ did not cover all factual claims —
   proving the gap was in the writer's orchestration and the claim↔source data flow, not in the
   sub-agents (investigator/verifier worked fine) or the prose.
 - [#55 test-plan trace `4f11af14`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/traces/4f11af14f7758425cba14ff0653039ce?timestamp=2026-05-15T04:23:41.975Z) —
@@ -54,7 +54,7 @@ discipline + source-coverage enforcement).
 
 ## Decision Drivers
 
-- A cited URL must be one the writer could only have *copied* from an agent — a URL the model
+- A cited URL must be one the writer could only have _copied_ from an agent — a URL the model
   can write without looking at `sources` is, by definition, a hallucination.
 - Every factual statement or number in a published reply must map to a source that a
   page-reading agent has confirmed actually supports it.
@@ -94,7 +94,7 @@ The contract, as shipped across #55 and #77:
 
 1. **Structured `{content, sources}` JSON handoff.** The investigator's and verifier's
    `after_model_callback`s (`append_grounding_sources`, `append_url_context_sources` in
-   `agent.py`) serialize each sub-agent's output as JSON the writer *cannot misinterpret*;
+   `agent.py`) serialize each sub-agent's output as JSON the writer _cannot misinterpret_;
    `sources` is a list of `{title, url}`. The writer's `after_tool` callback deserializes it
    back into a structured dict. URLs are extracted mechanically from grounding chunks — the
    investigator is forbidden from putting any URL in its prose.
@@ -118,9 +118,9 @@ The contract, as shipped across #55 and #77:
    `references` (`NOT_ARTICLE` is exempt). The reference match parses the leading URL token of
    each line and compares exactly, not as a substring.
 6. **Discover-vs-confirm roles.** The investigator **DISCOVERS** — its `sources[]` are
-   *candidates only*. The verifier **CONFIRMS** — it reads the pages and is the source of
+   _candidates only_. The verifier **CONFIRMS** — it reads the pages and is the source of
    truth for which URL supports which claim. Final citations come exclusively from the
-   verifier's ✓ output; a ✗ claim must be dropped or re-verified against a *different* source,
+   verifier's ✓ output; a ✗ claim must be dropped or re-verified against a _different_ source,
    never re-submitted or relabeled.
 7. **Orchestration discipline.** Claim-extraction first (for video/URL messages the writer's
    first action is to delegate claim enumeration to the verifier, which can actually watch the
@@ -145,7 +145,7 @@ The contract, as shipped across #55 and #77:
 - Bad, because the JSON handoff is a private convention carried in callbacks — a sub-agent that
   fails to emit the expected shape, or a future ADK change to grounding metadata, silently
   degrades the writer's inputs.
-- Bad, because the gate enforces *coverage and provenance*, not *correctness*: it guarantees
+- Bad, because the gate enforces _coverage and provenance_, not _correctness_: it guarantees
   each claim has a verifier-✓ URL in `references`, not that the human should agree with the
   verdict.
 
@@ -160,7 +160,7 @@ The contract, as shipped across #55 and #77:
 - End-to-end Langfuse verification: #55's test-plan trace confirms structured investigator
   output and no hallucinated domains; #77's fresh run (session `8d667352…`) showed the correct
   tool order `get_article → verifier (enumerate) → investigator → proofreaders → verifier
-  (verify) → proofreaders → draft_factcheck_response (last, alone)`, with three
+(verify) → proofreaders → draft_factcheck_response (last, alone)`, with three
   `claim_sources` all `verifier_confirmed=true` and present in `references` and the gate
   returning `success:true`.
 

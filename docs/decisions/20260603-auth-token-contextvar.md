@@ -1,5 +1,5 @@
 ---
-status: "accepted"
+status: 'accepted'
 date: 2026-06-03
 decision-makers: [MrOrz]
 consulted:
@@ -43,7 +43,7 @@ Driving PR: [cofacts/ai#76](https://github.com/cofacts/ai/pull/76).
   `_trim_temp_delta_state`, which removes all `temp:`-prefixed keys from the event
   before they ever land in `session.state`, so `tool_context.state.get("temp:...")`
   always returns `None`. `temp:` state is only meant to be set by Python callbacks
-  *within* an invocation (mutating the `session.state` dict directly), not passed in
+  _within_ an invocation (mutating the `session.state` dict directly), not passed in
   over the HTTP `stateDelta` field.
 - **A non-`temp:` session state key** — would survive the trim, but persists the
   short-lived JWT into durable session state, exposing it in `list_sessions` and
@@ -79,7 +79,7 @@ middleware is visible everywhere in the request chain, including inside
 Replacing the CLI entrypoint with a hand-written `main.py` was a foundational change:
 it is the seam where request-scoped middleware can live at all, and `main.py` later
 became the natural home for the Langfuse instrumentation-ordering fix
-(`setup_instrumentation()` must run *before* `get_fast_api_app()` so Langfuse's OTel
+(`setup_instrumentation()` must run _before_ `get_fast_api_app()` so Langfuse's OTel
 `TracerProvider` wins the global registration instead of ADK's bare one).
 
 ### Consequences
@@ -114,6 +114,6 @@ the token is absent from `list_sessions` responses.
   `auth_context.py`, `main.py`, `tools.py`, `run-sse.ts`, `Dockerfile`, and supporting
   changes). The PR traced the silent failure through ADK source
   (`BaseSessionService.append_event` → `_trim_temp_delta_state`).
-- This is the token-propagation mechanism that sits *under* the BFF auth decision: it
+- This is the token-propagation mechanism that sits _under_ the BFF auth decision: it
   extends [`20260509-bff-auth-httponly-cookie`](20260509-bff-auth-httponly-cookie.md),
   which decides how the BFF obtains and relays the long-lived JWT in the first place.
