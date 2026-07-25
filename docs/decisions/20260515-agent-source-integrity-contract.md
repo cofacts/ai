@@ -171,6 +171,12 @@ The contract, as shipped across #55 and #77:
   hardened in [cofacts/ai#77](https://github.com/cofacts/ai/pull/77) (claim-extraction-first /
   draft-last sequencing, `claim_sources` coverage gate, `grounding_supports` removed, verifier
   thinking → HIGH).
+- This contract guarantees a cited URL's _provenance_, but not that the verifier actually read
+  the page behind it — `url_context` returning nothing was indistinguishable from it returning
+  support, so the verifier could still ✓ a dead or irrelevant link. That gap is closed by
+  [`20260722-url-resolver-verifier-prefetch`](20260722-url-resolver-verifier-prefetch.md), which
+  also renames `append_url_context_sources` to `append_verifier_sources` (same role, now
+  unioning pre-fetched pages with `url_context` grounding).
 - The verifier's ability to watch/read media directly is the other half of this contract — how
   media is loaded into the sub-agents is covered by
   [`20260531-callback-media-injection`](20260531-callback-media-injection.md), and how the
