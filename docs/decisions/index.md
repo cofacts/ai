@@ -8,6 +8,7 @@ this format is itself a record — the 2026-07-23 entry below.
 | Date       | Decision                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------ |
 | 2026-07-23 | [Use Markdown Any Decision Records (MADR)](20260723-use-markdown-any-decision-records.md)              |
+| 2026-07-22 | [Symbol references for stateless sub-agent calls](20260722-subagent-context-symbols.md)                |
 | 2026-06-06 | [Multimodal media perception on Vertex AI](20260606-multimodal-perception-vertex-ai.md)                |
 | 2026-06-03 | [Propagate the auth token to ADK via header + ContextVar](20260603-auth-token-contextvar.md)           |
 | 2026-05-31 | [Inject media into Gemini via before-model callbacks](20260531-callback-media-injection.md)            |

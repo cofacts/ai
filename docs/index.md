@@ -64,8 +64,14 @@ names — the `name=` strings, mirrored in `src/lib/adk.ts` — drop it: `writer
 Agents exchange data through callbacks in `adk/cofacts_ai/agent.py` (a structured
 `{content, sources}` JSON contract), and media is injected as Gemini `FileData` through
 before-model callbacks in `adk/cofacts_ai/media_filedata.py` and `agent.py`.
+
+Each `AgentTool` call is a **fresh, stateless, single-message session** — a sub-agent sees only
+that call's `request` string. So the writer references shared content by symbol
+(`[[message]]`, `[[draft]]`, `[[draft:vN]]`), expanded from the writer's own event history by a
+before-tool callback before the call is dispatched.
 → decisions:
 [source-integrity contract](decisions/20260515-agent-source-integrity-contract.md),
+[symbol references for stateless sub-agent calls](decisions/20260722-subagent-context-symbols.md),
 [media injection via callbacks](decisions/20260531-callback-media-injection.md),
 [multimodal perception on Vertex AI](decisions/20260606-multimodal-perception-vertex-ai.md),
 [auth token via ContextVar](decisions/20260603-auth-token-contextvar.md).
