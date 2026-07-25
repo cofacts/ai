@@ -20,6 +20,7 @@ flowchart LR
     ADK -->|GraphQL tools · Bearer token| API
     ADK --> GEM[Gemini · Vertex AI]
     ADK --> VIS[Google Vision]
+    ADK -->|gRPC · internal only| UR[url-resolver]
     ADK --> LF[Langfuse]
 ```
 
@@ -50,12 +51,12 @@ The root agent is **`ai_writer`**, the orchestrator that composes fact-check rep
 invokes sub-agents wrapped as ADK `AgentTool`s (the writer cannot call built-in tools such as
 `google_search` / `url_context` alongside function tools in a single agent):
 
-| Agent                                        | Role                                                                                                                      |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `ai_writer`                                  | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Perceives **images** only. |
-| `ai_investigator`                            | **Discovers** candidate sources via `google_search`.                                                                      |
-| `ai_verifier`                                | **Confirms** which source backs which claim via `url_context`; the only agent that perceives **video / audio**.           |
-| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                   |
+| Agent                                        | Role                                                                                                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ai_writer`                                  | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Perceives **images** only.                                       |
+| `ai_investigator`                            | **Discovers** candidate sources via `google_search`.                                                                                                            |
+| `ai_verifier`                                | **Confirms** which source backs which claim, from page text pre-fetched via `url-resolver` plus `url_context`; the only agent that perceives **video / audio**. |
+| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                                                         |
 
 The `ai_` prefix is only the Python variable name in `adk/cofacts_ai/agent.py`; the ADK runtime
 names — the `name=` strings, mirrored in `src/lib/adk.ts` — drop it: `writer`, `investigator`,
@@ -63,9 +64,12 @@ names — the `name=` strings, mirrored in `src/lib/adk.ts` — drop it: `writer
 
 Agents exchange data through callbacks in `adk/cofacts_ai/agent.py` (a structured
 `{content, sources}` JSON contract), and media is injected as Gemini `FileData` through
-before-model callbacks in `adk/cofacts_ai/media_filedata.py` and `agent.py`.
+before-model callbacks in `adk/cofacts_ai/media_filedata.py` and `agent.py`. The same callback
+chain pre-fetches web pages for the verifier through the internal **url-resolver** gRPC service
+(`adk/cofacts_ai/url_resolver/`), so its verdicts rest on page text the system actually read.
 → decisions:
 [source-integrity contract](decisions/20260515-agent-source-integrity-contract.md),
+[verifier page pre-fetch](decisions/20260722-url-resolver-verifier-prefetch.md),
 [media injection via callbacks](decisions/20260531-callback-media-injection.md),
 [multimodal perception on Vertex AI](decisions/20260606-multimodal-perception-vertex-ai.md),
 [auth token via ContextVar](decisions/20260603-auth-token-contextvar.md).
