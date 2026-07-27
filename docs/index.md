@@ -66,13 +66,14 @@ Agents exchange data through callbacks in `adk/cofacts_ai/agent.py` (a structure
 before-model callbacks in `adk/cofacts_ai/media_filedata.py` and `agent.py`.
 
 Each `AgentTool` call is a **fresh, stateless, single-message session** — a sub-agent sees only
-that call's `request` string. So the writer references shared content by symbol
-(`[[message]]`, `[[message:<articleId>]]`, `[[draft]]`, `[[draft:vN]]` — bare means the most
-recent), expanded from the writer's own event history by a before-tool callback
-(`adk/cofacts_ai/writer_symbols.py`) before the call is dispatched.
+that call's `request` string. So every tool result is stamped with a footnote id (`cite_as`, e.g.
+`[^verifier-ab12cd]`), and writing that id in a sub-agent's `request` hoists the result's full
+text to the top of the request as a block tagged with the same id — both halves in
+`adk/cofacts_ai/writer_citations.py`, one in an after-tool callback and one in a before-tool
+callback.
 → decisions:
 [source-integrity contract](decisions/20260515-agent-source-integrity-contract.md),
-[symbol references for stateless sub-agent calls](decisions/20260722-subagent-context-symbols.md),
+[footnote citations for stateless sub-agent calls](decisions/20260722-subagent-context-citations.md),
 [media injection via callbacks](decisions/20260531-callback-media-injection.md),
 [multimodal perception on Vertex AI](decisions/20260606-multimodal-perception-vertex-ai.md),
 [auth token via ContextVar](decisions/20260603-auth-token-contextvar.md).

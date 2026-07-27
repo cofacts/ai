@@ -324,6 +324,9 @@ async def get_single_cofacts_article(
 
     The article ID can be used to construct Cofacts URLs: https://cofacts.tw/article/{article_id}
 
+    The result carries a `cite_as` id — cite it to let a sub-agent read the suspicious
+    message in full instead of retyping or paraphrasing it.
+
     Args:
         article_id: The Cofacts article ID to retrieve
 
@@ -433,9 +436,10 @@ def draft_factcheck_response(
 
     This tool is re-callable: submit a proposal, read the validation feedback below
     (or feedback from proofreader review), revise, and call it again — as many times
-    as needed. Always call it alone, never in the same turn as any other tool, so
-    each proposal is reliably in place before you reference it (e.g. via `[[draft]]`
-    when asking a proofreader to review it).
+    as needed. Every call returns its own `cite_as` id, so any proposal — including
+    one this tool rejected — can be quoted verbatim to a proofreader later. Always
+    call it alone, never in the same turn as any other tool, so a proposal is
+    reliably in place before you cite it.
 
     Before calling, share your analysis and reasoning in text — explain your
     classification choice and the key points of the reply. Call this tool once you
@@ -573,11 +577,12 @@ def draft_factcheck_response(
     return {
         "success": True,
         "text": (
-            "Proposal accepted. If proofreader review or your own judgment still calls for changes, "
-            "revise and call this tool again — only your LAST successful call is shown to the user "
-            "once you finish responding. If this is your final proposal, guide the user to open the "
-            "tool call result above to read the draft, then ask if they have any feedback or edits "
-            "before submitting to Cofacts."
+            "Proposal accepted. To have a proofreader review it, cite this result's `cite_as` id in "
+            "the proofreader's request. If proofreader review or your own judgment still calls for "
+            "changes, revise and call this tool again — only your LAST successful call is shown to "
+            "the user once you finish responding. If this is your final proposal, guide the user to "
+            "open the tool call result above to read the draft, then ask if they have any feedback "
+            "or edits before submitting to Cofacts."
         ),
     }
 

@@ -62,6 +62,19 @@ export type ToolSource = { title: string; url: string }
 type AdkFallbackResp = { result: string }
 
 /**
+ * Citation fields the writer's `after_tool` callback stamps onto every tool
+ * result (`adk/cofacts_ai/writer_citations.py`), so the writer can quote that
+ * result verbatim to a stateless sub-agent by writing `cite_as` in its request.
+ *
+ * Optional on purpose: sessions recorded before citations existed have neither
+ * field, and error payloads are never stamped.
+ */
+export type ToolCitation = {
+  cite_as?: string
+  cite_hint?: string
+}
+
+/**
  * Map of all cofacts_ai tool names to their `args` / `resp` shapes.
  *
  * **IMPORTANT:** Keep in strict sync with `adk/cofacts_ai/tools.py` and `agent.py`.
@@ -190,7 +203,7 @@ export type FunctionResponseOutput =
   | {
       [K in keyof AllTools]: AdkResponseBase & {
         name: K
-        response: AllTools[K]['resp']
+        response: AllTools[K]['resp'] & ToolCitation
       }
     }[keyof AllTools]
   | components['schemas']['FunctionResponse-Output']
@@ -201,6 +214,6 @@ export type ToolInvocation = {
     id: string
     name: K
     args: AllTools[K]['args']
-    resp: AllTools[K]['resp'] | null
+    resp: (AllTools[K]['resp'] & ToolCitation) | null
   }
 }[keyof AllTools]

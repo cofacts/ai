@@ -6,7 +6,7 @@ consulted:
 informed:
 ---
 
-# Reference the message and drafts by symbol in stateless sub-agent calls
+# Cite tool results by footnote id in stateless sub-agent calls
 
 ## Context and Problem Statement
 
@@ -31,11 +31,16 @@ near-constant "1 full + 3 placeholders" shape.
 
 Scope: the ADK agent contract and orchestration — the `request` argument of every
 `AgentTool`-wrapped sub-agent (`ai_investigator`, `ai_verifier`, the four `ai_proofreader_*`),
-callbacks in `adk/cofacts_ai/agent.py` and the new `writer_symbols.py`, the
-`draft_factcheck_response` contract in `tools.py` —
-plus the frontend that renders draft proposals (`src/lib/chatCache.ts`, `RightDrawer.tsx`).
+the response payload of **every** writer tool, callbacks in `adk/cofacts_ai/agent.py` and the new
+`writer_citations.py`, the `draft_factcheck_response` contract in `tools.py` — plus the frontend
+tool-response types (`src/lib/adk.ts`) and the draft drawer (`src/lib/chatCache.ts`).
 Driving issue: [cofacts/ai#117](https://github.com/cofacts/ai/issues/117); implemented in
 [cofacts/ai#119](https://github.com/cofacts/ai/pull/119).
+
+This record was revised before merging: the first implementation used inline symbol substitution
+(`[[message]]` / `[[draft]]`), and a live trace showed that shape was wrong in three ways. The
+history is kept in "Considered Options" and "Decision Outcome" rather than split into a
+superseding record, because nothing ever shipped to production.
 
 ### Langfuse evidence
 
@@ -59,6 +64,17 @@ Driving issue: [cofacts/ai#117](https://github.com/cofacts/ai/issues/117); imple
   KMT and DPP proofreaders returned `None` (empty output). A different root cause, addressed
   alongside: proofreaders had no empty-response retry, and their instructions still ended with a
   dead "transfer back to the main AI Writer" clause.
+- [Trace `01d4bc4f`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/traces/01d4bc4fe799344a0b083b13e7d1b918)
+  (2026-07-27) — the first live run of the shipped symbol mechanism. Substitution worked, and
+  broke three ways at once. (a) The suspicious message was a bare YouTube link, so the claim
+  inventory existed only in an `ai_verifier` response — for which there was no symbol — and the
+  writer fell back to re-narrating it from memory, the exact drift this record exists to remove.
+  (b) The writer placed `[[message]]` mid-sentence; harmless for a one-line link, but it means a
+  long rumor would be spliced into the middle of an instruction. (c) It wrote
+  `[[message]][[draft]]` adjacently, and the expansion had no boundary between the rumor and the
+  reply under review. Analysis: a hand-maintained symbol vocabulary can only cover content we
+  anticipated, and substitution is the wrong operation — the writer is _citing_, not
+  _interpolating_.
 
 ## Decision Drivers
 
@@ -77,6 +93,10 @@ Driving issue: [cofacts/ai#117](https://github.com/cofacts/ai/issues/117); imple
 - Proofreader feedback must be able to reference **any** version of the reply the writer has
   drafted, not only the latest, since review is iterative.
 - Prefer public, documented ADK surfaces so an ADK upgrade cannot silently break the mechanism.
+- (Added after trace `01d4bc4f`.) Anything the writer might need to forward must be referenceable,
+  not just the contents we thought of in advance; the sub-agent must be able to tell one piece of
+  forwarded content from another; and where the writer happens to put a reference must not change
+  what the sub-agent receives.
 
 ### ADK facts established while deciding (verified against the installed 1.26.0 source)
 
@@ -124,20 +144,38 @@ contained) and the design discussion that produced PR #119.
   in markers in its ordinary text output and scan the assistant messages for the latest block.
 - **A dedicated `save_draft` tool** as the anchor for the draft, separate from
   `draft_factcheck_response`.
-- **LLM-written symbols expanded from the writer's event history**, with
-  `draft_factcheck_response` itself as the draft anchor. **Chosen.**
+- **LLM-written symbols expanded inline from the writer's event history** (`[[message]]`,
+  `[[draft]]`, `[[draft:vN]]`), with `draft_factcheck_response` itself as the draft anchor.
+  Implemented first, then revised after trace `01d4bc4f`.
+- **A `set_symbol(name, content)` tool** letting the writer define its own named text for reuse
+  across a fan-out.
+- **Footnote citations of tool results, hoisted into labelled blocks.** **Chosen.**
 
 ## Decision Outcome
 
-Chosen option: **LLM-written symbols (`[[message]]`, `[[draft]]`, `[[draft:vN]]`) expanded from
-the writer's own event history in a `before_tool_callback`, with `draft_factcheck_response`
-reframed as a re-callable draft-proposal tool that serves as the anchor** — because it is the
-only option where the _writer decides_ what each call must see (the requirement no mechanical
-rule can satisfy), the draft is _never retyped_, _any_ version stays referenceable, and nothing
-is written to session state at all, so `list_sessions` is untouched. The content already exists
-in the event history; copying it into state would duplicate data purely to hand it back.
+Chosen option: **every tool result hands the writer a footnote id; writing `[^id]` in a
+sub-agent's `request` hoists that result's full text to the top of the request as a block tagged
+with the same id** — because it is the only option where the _writer decides_ what each call must
+see (the requirement no mechanical rule can satisfy), content is _never retyped_, _any_ result
+stays referenceable, and nothing is written to session state at all, so `list_sessions` is
+untouched. The content already exists in the event history; copying it into state would duplicate
+data purely to hand it back.
 
 The other options were rejected, or kept in a smaller role:
+
+- **Inline symbol substitution** was implemented first and revised after one live trace. Three
+  faults, all traceable to substituting rather than citing: a fixed vocabulary
+  (`[[message]]`/`[[draft]]`) could not name a verifier report, so the writer paraphrased it;
+  content landed wherever the writer put the symbol, mid-sentence included; and adjacent symbols
+  expanded into one undifferentiated blob. Citing fixes all three at once — the id comes from the
+  result rather than from a vocabulary, and the definition is a delimited block in a fixed place.
+- **`set_symbol(name, content)`** would let the writer define arbitrary reusable text, which is
+  strictly more general. Rejected because it does not solve the problem that prompted it: the
+  writer has to _type_ the content, so what the sub-agents receive is still a re-narration —
+  the drift this record exists to remove, now wearing the costume of correct usage. It would also
+  need its own "call it in an earlier turn" rule (parallel calls cannot see each other), a new
+  entry in `src/lib/adk.ts`, and a UI chip for what is effectively a variable assignment. Worth
+  revisiting only if traces show the writer wanting to reuse text that has no tool-call anchor.
 
 - **`temp:` state + native interpolation** was the leading candidate and remains a sound
   fallback, but ADK templating applies only to _our_ instruction strings, so injection is
@@ -155,88 +193,129 @@ The other options were rejected, or kept in a smaller role:
   revision feedback** (which URLs are unverified, which claims fail coverage); a bare
   `save_draft` would have to reproduce that or forgo it.
 - **Report-back was adopted too**, not as the primary fix but as the **safety net** for the one
-  weakness of an opt-in mechanism: the writer can forget to write the symbol.
+  weakness of an opt-in mechanism: the writer can forget to cite anything at all.
 
-As shipped in PR #119:
+As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, following
+`media_filedata.py`) — minting and resolution live together so the two halves cannot drift:
 
-1. **`expand_writer_symbols`, a `before_tool_callback` on `ai_writer`** (in its own module,
-   `adk/cofacts_ai/writer_symbols.py`, following `media_filedata.py`). For calls to the six
-   `AgentTool` sub-agents it rewrites `args['request']` in place and returns `None` so the call
-   proceeds: `[[message]]` / `[[message:<articleId>]]` → the article text from the writer's own
-   `get_single_cofacts_article` function-**response**; `[[draft]]` / `[[draft:vN]]` → the `text`
-   argument of the latest / Nth `draft_factcheck_response` function-**call**, 1-indexed in
-   submission order. Reading the _call_ arguments rather than the response means a proposal the
-   validation gate **rejected** is still reviewable — useful, since reviewing prose before its
-   citations are settled is legitimate.
+1. **`attach_citation`, called from `after_tool` for every tool.** It stamps the response with
+   `cite_as` (the exact string to type, e.g. `[^verifier-ab12cd]`) and a one-line `cite_hint`.
+   The id is `f"{tool.name}-{first 6 alphanumerics of the call id}"` — **one formula, no per-tool
+   branching**. Three properties fall out of deriving it from the call id: calls issued in
+   parallel cannot collide (counting them would); the call and its response share the id, so a
+   citation can resolve to content on either side; and the tool name in front keeps it legible,
+   which matters because citing the wrong id resolves _successfully_ to the wrong content — a
+   silent failure, worse than not resolving. Error payloads are not stamped.
 
-   **A bare symbol always resolves to the most recent of its kind.** One conversation can cover
-   more than one suspicious message — the user may paste a second Cofacts URL, and the writer may
-   pull up a related article for comparison — so pinning `[[message]]` to the _first_ article
-   fetched would silently review a new draft against an old message, the very failure class this
-   record exists to remove. "Latest wins" follows the same reasoning already documented for
-   `inject_youtube_filedata` ("the most recent message is the current task"), and keeps
-   `[[message]]` consistent with `[[draft]]`. Because "most recent" is still a guess about intent
-   when several articles are in play, `[[message:<articleId>]]` addresses one explicitly, and the
-   writer is instructed to prefer that form whenever a conversation covers more than one article;
-   an unknown id resolves to a marker that lists the ids actually fetched, so the writer can
-   correct itself.
+   The id has to travel **inside the payload**: ADK strips its own `adk-…` ids from the history it
+   sends to the model (`flows/llm_flows/contents.py`), so this is the writer's only chance to
+   learn it.
 
-2. **Square brackets, deliberately, not curly braces.** These symbols are documented in the
-   writer's own instruction, and ADK would parse `{draft}` there as a session-state reference and
-   raise `KeyError` while rendering that very instruction. `[[…]]` sidesteps ADK's templating
-   entirely.
-3. **An unresolved symbol becomes an explicit `[SYSTEM: …]` marker**, never a silent drop and
-   never bare literal text — so a mistake is visible in the forwarded request and in the trace.
-4. **`draft_factcheck_response` reframed from a one-shot final action into a re-callable draft
+2. **`resolve_citations`, a `before_tool_callback` on `ai_writer`.** For calls to the six
+   `AgentTool` sub-agents it scans `request` once for `[^id]` markers, then rewrites
+   `args['request']` in place and returns `None` so the call proceeds. Cited results are **hoisted
+   above the prose**, each in its own block, separated from the request by `---`; the marker stays
+   where the writer wrote it, exactly as a footnote marker does.
+
+   Hoisting is the fix for two of the three faults trace `01d4bc4f` exposed: a long rumor is never
+   spliced into the middle of an instruction, and where the writer puts a marker no longer changes
+   what the sub-agent receives. Blocks are emitted in the order the underlying results occurred,
+   which yields 原文 → 查證 → 草稿 in the normal flow without any type-ranking rule, and a result
+   cited twice produces one block.
+
+3. **The citation id is the block's tag name** — `<verifier-ab12cd>…</verifier-ab12cd>`, no `ref`
+   attribute and no per-tool tag vocabulary to maintain. The marker and both delimiters are the
+   same string, which is the strongest join available, and it makes the closing delimiter
+   unguessable, so untrusted message text cannot break out of its own block (it is escaped as
+   well, cheaply). The cost is that a sub-agent sees provenance rather than meaning
+   (`<get_single_cofacts_article-…>`, not `<suspicious_message>`); acceptable, since the tool names
+   are descriptive and the writer's prose supplies the framing.
+
+   The **marker** syntax is GitHub-flavored markdown's footnote form, `[^id]`. Its _definition_
+   form (`[^id]: …`) is not used: GFM requires every continuation line of a footnote definition to
+   be indented, which would rewrite a multi-paragraph rumor — the same objection that ruled out
+   blockquotes. Square-bracket syntax also sidesteps ADK's instruction templating, which would
+   parse a curly-brace symbol in the writer's own instruction as a state reference and raise
+   `KeyError` while rendering it.
+
+4. **Minting is uniform; body extraction is not.** A small table decides which field of each
+   response becomes the block body, with a compact-JSON fallback for unlisted tools. The
+   article-specific entry matters: dumping the whole `get_single_cofacts_article` payload would
+   hand a proofreader the existing fact-check responses and reply counts — other people's verdicts
+   on the very thing we are asking it to judge. `draft_factcheck_response` is the one tool read
+   from its **call** arguments, so a proposal the validation gate **rejected** is still reviewable.
+
+5. **An unresolvable id becomes an explicit `[SYSTEM: …]` note** listing what _is_ citable, never
+   a silent drop — so a mistake is visible in the forwarded request and in the trace. Hoisted text
+   is never rescanned, so a citation-shaped string inside a rumor or a draft stays literal.
+
+6. **`draft_factcheck_response` reframed from a one-shot final action into a re-callable draft
    proposal** (docstring, writer instruction, and success message only — **the validation logic
-   is unchanged**). Its Steps 6/7 became a propose → `[[draft]]`-review → revise loop. It keeps
-   the pre-existing "call it alone, never in the same turn as another tool" rule, which now also
-   guarantees a proposal is committed to the event history before any later `[[draft]]` resolves
+   is unchanged**). Its Steps 6/7 became a propose → cite-and-review → revise loop. It keeps the
+   pre-existing "call it alone, never in the same turn as another tool" rule, which now also
+   guarantees a proposal is committed to the event history before any later citation resolves
    against it — the ordering constraint the parallel-delta finding demands, satisfied by a rule
    that already existed.
-5. **A report-back protocol in all four proofreader instructions**: every call is a fresh
+7. **A report-back protocol in all four proofreader instructions**: every call is a fresh
    conversation; if the request references something you cannot see, do not answer or guess —
-   reply that you did not receive the full content and ask for it.
-6. **The dead "Control Flow — transfer back to the main AI Writer" block removed** from all four
+   reply that you did not receive the full content and ask for it. All six sub-agent instructions
+   also explain the `[^id]` / `<id>…</id>` pairing so a block is never mistaken for stray markup.
+8. **The dead "Control Flow — transfer back to the main AI Writer" block removed** from all four
    proofreaders. An `AgentTool` child runs in an isolated runner with no `transfer_to_agent`
    tool, so the instruction was unreachable, and a model told to perform a transfer it cannot
    perform is a plausible source of the empty-output (`None`) traces.
-7. **Empty-response retry extended to proofreaders** in `after_tool`, mirroring
-   investigator/verifier — but as a passthrough (`return None`) for non-empty responses, since
-   proofreaders return plain prose and must **not** be run through `json.loads`.
-8. **Frontend** — only a proposal that actually passes validation (`success === true`) becomes
-   the draft auto-opened in the right drawer when a turn ends, so a rejected proposal no longer
-   clobbers a good one; and every proposal shows its version number ("第 N 版") on both the chat
-   chip and the drawer, numbered by the same submission order `[[draft:vN]]` resolves against, so
-   a human asking to revisit "version 3" means what the writer will resolve.
+9. **Empty-response retry extended to proofreaders** in `after_tool`, mirroring
+   investigator/verifier. Proofreaders return plain prose and must **not** be run through
+   `json.loads`; the prose is preserved verbatim under `result`, which is how ADK would have
+   wrapped it anyway, plus the citation fields.
+10. **Frontend** — only a proposal that actually passes validation (`success === true`) becomes
+    the draft auto-opened in the right drawer when a turn ends, so a rejected proposal no longer
+    clobbers a good one. `cite_as` / `cite_hint` are added to every response type in
+    `src/lib/adk.ts` as **optional** fields, because sessions recorded before this change have
+    neither and error payloads are never stamped.
+
+    An earlier iteration also numbered each proposal ("第 N 版") on the chip and in the drawer.
+    That was dropped: users refer to drafts naturally (「前一版」、「寫著 OOO 那一版」) and the
+    writer can map that onto the right id from its own history, so the counter bought nothing the
+    conversation did not already provide — at the cost of an ordinal threaded through eight
+    frontend files.
 
 ### Consequences
 
 - Good, because the failure class is closed at its source: the sub-agent receives the actual
-  text, never a dangling reference — and because expansion happens at dispatch, the Langfuse
-  trace records the fully expanded request, so what the sub-agent really saw is auditable.
-- Good, because the writer keeps the cheap reference it wanted (a short symbol) while every
+  text, never a dangling reference — and because resolution happens at dispatch, the Langfuse
+  trace records the fully resolved request, so what the sub-agent really saw is auditable.
+- Good, because the writer keeps the cheap reference it wanted (a short marker) while every
   parallel call still gets the full content, and it stays free to send a message-only call
   without a draft.
-- Good, because "any version" comes for free — each proposal is already its own event, so
-  `[[draft:vN]]` needs no version store — and because the frontend and backend number versions
-  from the same ordering, so the human and the writer mean the same "version N".
+- Good, because **the writer never constructs a reference** — it only ever copies an id a tool
+  result just handed it. There is no vocabulary to remember, no numbering rule to get wrong, and
+  the teaching (`cite_hint`) arrives at the moment there is something worth forwarding rather than
+  sitting hundreds of lines up in the system instruction.
+- Good, because coverage is now open-ended: anything a tool returns is citable, including the
+  verifier reports whose absence caused the paraphrase in trace `01d4bc4f`. "Any version" of the
+  draft also comes for free, since each proposal is already its own event.
 - Good, because zero session-state writes means zero `list_sessions` cost and no interaction with
   the sidebar payload, and because the event history is reached through a public ADK property.
 - Good, because the draft tool's validation gate stopped being pure friction and became the
   revision signal of the review loop.
-- Bad, because the mechanism is **opt-in**: the writer can omit a symbol and still ship a
+- Bad, because the mechanism is **opt-in**: the writer can omit a citation and still ship a
   dangling reference. This is mitigated, not eliminated, by the report-back protocol (which also
   catches unrelated drift) — the two are deliberately paired, and report-back must not be dropped
   as redundant.
-- Bad, because expansion couples us to the shape of ADK events and `google.genai` parts
-  (iterating `session.events` for `function_call` / `function_response`); a unit test pins the
-  behaviour so an ADK upgrade fails loudly instead of silently.
-- Bad, because `[[…]]` is a bespoke convention that exists only to avoid a collision with ADK's
-  own templating, and it must be kept out of instruction strings.
+- Bad, because there is no automatic "latest" any more: citing an older draft after producing a
+  newer one is possible, and it resolves silently. Recency is the mitigation — the fresh
+  `cite_as` is the last thing the writer reads before the proofreader fan-out — plus an explicit
+  instruction in Step 7.
+- Bad, because resolution couples us to the shape of ADK events and `google.genai` parts
+  (iterating `session.events` for `function_call` / `function_response`, and relying on a response
+  carrying its call's id); unit tests pin the behaviour so an ADK upgrade fails loudly instead of
+  silently.
+- Bad, because every tool response now carries two extra fields, so `src/lib/adk.ts` has to stay
+  in sync and consumers must treat them as optional.
 - Bad, because a session can now contain several `draft_factcheck_response` calls, so "the draft"
   is no longer unambiguous — anything reading drafts back (the drawer, future exports) has to
-  choose a version deliberately.
+  choose deliberately.
 - Neutral: **this does not save tokens.** An early justification claimed it removes a 4× draft
   repetition; that was wrong — the draft was already emitted once (one full copy plus three
   placeholders), which is precisely why three proofreaders starved. The real gain is correctness;
@@ -245,24 +324,28 @@ As shipped in PR #119:
 
 ## Confirmation
 
-- Unit tests in `adk/cofacts_ai/tests/test_writer_symbols.py` cover `expand_writer_symbols`:
-  latest-draft and `[[draft:vN]]` selection (asserting `v1` is the _first_ proposal), a
-  gate-rejected proposal still resolving, `[[message]]` from the article response, multi-article
-  resolution (bare = most recent, `[[message:<id>]]` addressing a specific one, a re-fetch
-  becoming most recent, an unknown id listing what is available, an error response never
-  resolving), both symbols
-  in one request, an unresolved symbol becoming a `[SYSTEM: …]` marker, the tool-name gate
-  skipping non-sub-agent tools, and the proofreader `after_tool` branch (empty/`None` → retry
-  dict; non-JSON prose → passthrough without parsing).
+- Unit tests in `adk/cofacts_ai/tests/test_writer_citations.py` cover both halves: minting
+  (distinct ids for two parallel calls to the same tool, error payloads and id-less calls left
+  alone, a plain string wrapped the way ADK would) and resolution (hoisting above the prose,
+  chronological block order regardless of citation order, one block for a doubly-cited id, the
+  draft resolving from its **call** args so a gate-rejected proposal still works, a verifier
+  report and a proofreader's feedback both citable, a compact-JSON fallback for unlisted tools, an
+  unknown id becoming a `[SYSTEM: …]` note listing what is citable, error responses never
+  resolving, hoisted content never rescanned, a forged closing tag escaped, and a
+  pre-citation-era response still resolving). One test round-trips `attach_citation` into
+  `resolve_citations` so the two halves cannot silently disagree.
+- `adk/cofacts_ai/tests/test_writer_callbacks.py` covers the `after_tool` routing: every response
+  shape emerges stamped, timeout errors emerge unstamped.
 - Frontend tests in `src/lib/__tests__/chatCache.test.ts` cover the auto-open gating (a rejected
-  proposal never becomes `lastReplyDraftId`, and never clobbers a prior successful one) and
-  version numbering across messages.
+  proposal never becomes `lastReplyDraftId`, and never clobbers a prior successful one).
 - CI: `ruff format`/`ruff check`/`ty` and pytest for `adk/`; ESLint/Prettier/`tsc` and vitest for
   the frontend.
 - An adversarial fresh-context review of the whole diff confirmed each claim above, including
   that `draft_factcheck_response`'s validation gate is logically byte-for-byte unchanged.
-- Still open: a live end-to-end smoke test of a review round — all four proofreaders receiving
-  the draft via `[[draft]]`, and report-back firing when a symbol is omitted.
+- Still open: a live end-to-end run on a YouTube-link article, checking in the trace that the
+  writer cites the verifier report instead of re-narrating it, that all four proofreader requests
+  open with the same hoisted blocks, and that report-back fires when a citation is omitted. This
+  mechanism is being iterated trace-first; trace `01d4bc4f` is why the first shape was replaced.
 
 ## More Information
 

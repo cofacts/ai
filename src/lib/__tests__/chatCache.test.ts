@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import {
-  INITIAL_CHAT_STATE,
-  applyEventToState,
-  getDraftVersionsById,
-} from '../chatCache'
-import type { AdkEvent, ChatMessage } from '../adk'
+import { INITIAL_CHAT_STATE, applyEventToState } from '../chatCache'
+import type { AdkEvent } from '../adk'
 
 /**
  * draft_factcheck_response is re-callable (cofacts/ai#117): the writer may
@@ -131,107 +127,5 @@ describe('applyEventToState / lastReplyDraftId', () => {
       },
     } as unknown as AdkEvent)
     expect(state.lastReplyDraftId).toBeNull()
-  })
-})
-
-describe('getDraftVersionsById', () => {
-  test('empty messages yields an empty map', () => {
-    expect(getDraftVersionsById([])).toEqual({})
-  })
-
-  test('numbers draft_factcheck_response calls in submission order across messages', () => {
-    const messages: Array<ChatMessage> = [
-      {
-        id: 'm1',
-        role: 'model',
-        parts: [
-          {
-            functionCall: {
-              id: 'fc-1',
-              name: 'draft_factcheck_response',
-              args: { text: 'draft v1' },
-            },
-          },
-        ],
-      },
-      {
-        id: 'm2',
-        role: 'model',
-        parts: [
-          { functionCall: { id: 'fc-2', name: 'search_cofacts_database' } },
-        ],
-      },
-      {
-        id: 'm3',
-        role: 'model',
-        parts: [
-          {
-            functionCall: {
-              id: 'fc-3',
-              name: 'draft_factcheck_response',
-              args: { text: 'draft v2' },
-            },
-          },
-        ],
-      },
-    ]
-    expect(getDraftVersionsById(messages)).toEqual({ 'fc-1': 1, 'fc-3': 2 })
-  })
-
-  test('multiple draft calls within the same message are still ordered by array position', () => {
-    const messages: Array<ChatMessage> = [
-      {
-        id: 'm1',
-        role: 'model',
-        parts: [
-          {
-            functionCall: {
-              id: 'fc-1',
-              name: 'draft_factcheck_response',
-              args: { text: 'draft v1' },
-            },
-          },
-          {
-            functionCall: {
-              id: 'fc-2',
-              name: 'draft_factcheck_response',
-              args: { text: 'draft v2' },
-            },
-          },
-        ],
-      },
-    ]
-    expect(getDraftVersionsById(messages)).toEqual({ 'fc-1': 1, 'fc-2': 2 })
-  })
-
-  test('a function_call with no id is skipped', () => {
-    const messages: Array<ChatMessage> = [
-      {
-        id: 'm1',
-        role: 'model',
-        parts: [
-          {
-            functionCall: {
-              name: 'draft_factcheck_response',
-              args: { text: 'draft with no id' },
-            },
-          },
-        ],
-      },
-    ]
-    expect(getDraftVersionsById(messages)).toEqual({})
-  })
-
-  test('a function_call with no text arg is skipped (matches backend parity)', () => {
-    const messages: Array<ChatMessage> = [
-      {
-        id: 'm1',
-        role: 'model',
-        parts: [
-          { functionCall: { id: 'fc-1', name: 'draft_factcheck_response' } },
-        ],
-      },
-    ]
-    expect(getDraftVersionsById(messages)).toEqual({})
   })
 })

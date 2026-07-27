@@ -9,7 +9,6 @@ interface AgentMessageProps {
   showAvatar?: boolean
   focusedToolCallId?: string | null
   onToolBadgeClick?: (id: string) => void
-  draftVersionsById?: Record<string, number>
 }
 
 export function AgentMessage({
@@ -17,7 +16,6 @@ export function AgentMessage({
   showAvatar = true,
   focusedToolCallId,
   onToolBadgeClick,
-  draftVersionsById,
 }: AgentMessageProps) {
   return (
     <div className="flex flex-col items-start w-full">
@@ -57,10 +55,6 @@ export function AgentMessage({
             const lowerName = name?.toLowerCase() ?? ''
             const isFocused = !!id && id === focusedToolCallId
             const isInvestigator = name === 'investigator'
-            const draftVersion =
-              name === 'draft_factcheck_response' && id
-                ? draftVersionsById?.[id]
-                : undefined
             return (
               <div key={i} className="flex items-center gap-2 pl-1">
                 <span className="material-symbols-outlined text-gray-300 text-xs">
@@ -85,10 +79,7 @@ export function AgentMessage({
                           ? 'fact_check'
                           : 'build'}
                   </span>
-                  <span>
-                    {name}
-                    {draftVersion !== undefined && ` · 第 ${draftVersion} 版`}
-                  </span>
+                  <span>{name}</span>
                 </button>
                 {isInvestigator && id && (
                   <SearchSuggestions

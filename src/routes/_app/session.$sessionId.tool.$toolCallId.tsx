@@ -14,7 +14,7 @@ function ToolDrawer() {
     from: '/_app/session/$sessionId/tool/$toolCallId',
   })
   const navigate = useNavigate()
-  const { toolInvocations, draftVersionsById } = useChat({ sessionId })
+  const { toolInvocations } = useChat({ sessionId })
 
   const handleClose = useCallback(() => {
     navigate({
@@ -25,17 +25,8 @@ function ToolDrawer() {
   }, [sessionId, navigate])
 
   const invocation = toolInvocations[toolCallId] ?? null
-  const draftVersion =
-    invocation?.name === 'draft_factcheck_response'
-      ? draftVersionsById[toolCallId]
-      : undefined
 
   return (
-    <RightDrawer
-      isOpen={true}
-      onClose={handleClose}
-      invocation={invocation}
-      draftVersion={draftVersion}
-    />
+    <RightDrawer isOpen={true} onClose={handleClose} invocation={invocation} />
   )
 }

@@ -440,38 +440,6 @@ export function applyEventToState(
 }
 
 /**
- * 1-indexed submission order of every `draft_factcheck_response` call in this
- * session, keyed by function-call id (1 = first proposal). Matches the
- * backend's `[[draft:vN]]` versioning (agent.py `expand_writer_symbols`) --
- * both derive from the same chronological order of draft proposals, so a
- * version number shown on screen means the same thing if a user tells the
- * writer to review an earlier one (cofacts/ai#117).
- *
- * A call with no `text` arg is skipped, matching the backend's
- * `_writer_draft_texts` (which only counts calls with a truthy `text`) --
- * keeping both sides in sync even in the degenerate case of an empty draft.
- */
-export function getDraftVersionsById(
-  messages: Array<ChatMessage>,
-): Record<string, number> {
-  const versions: Record<string, number> = {}
-  let count = 0
-  for (const message of messages) {
-    for (const part of message.parts ?? []) {
-      if (
-        part.functionCall?.name === 'draft_factcheck_response' &&
-        part.functionCall.id &&
-        part.functionCall.args?.text
-      ) {
-        count += 1
-        versions[part.functionCall.id] = count
-      }
-    }
-  }
-  return versions
-}
-
-/**
  * Converts a full ADK session (with history) into ChatSessionState.
  */
 export function convertAdkSessionToChatState(
