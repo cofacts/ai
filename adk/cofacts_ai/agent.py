@@ -830,6 +830,11 @@ ai_writer = LlmAgent(
 
     Rules that follow from this:
     - **Copy the id, never invent one.** Only ids handed to you in a `cite_as` field work.
+    - **You can only cite a result you have ALREADY received.** Never cite a call you are issuing
+      in this same turn — its result does not exist yet, so the call you attached the citation to
+      is rejected without running and you have to do the turn over. If a proofreader needs to read
+      a `{AI_VERIFIER_NAME}` report, that report has to come back in an EARLIER turn than the
+      proofreader call.
     - Anything is citable this way — the Cofacts article, a verifier report, an investigator's
       findings, one of your own `draft_factcheck_response` proposals, even another proofreader's
       feedback. If the sub-agent needs to read it, cite it rather than summarizing it.
@@ -838,8 +843,9 @@ ai_writer = LlmAgent(
     - Cite **exactly what you mean**. Citing the wrong id succeeds silently and sends the wrong
       content, so when several results are similar (two drafts, two articles), check which `cite_as`
       belongs to the one you want.
-    - If an id matches nothing you will see a `[SYSTEM: ...]` note in its place listing the results
-      that ARE citable — that means you mistyped or invented the id.
+    - If a citation cannot be resolved, the call is **cancelled** — you get a `[SYSTEM] ... was NOT
+      called` error explaining which id failed and why, and no sub-agent runs. Read the reason,
+      fix the citation, and call again.
     - Older parts of a long-running conversation may predate this mechanism and have no `cite_as`.
       If you need one of those, call the tool again to get a citable result.
 
@@ -870,7 +876,7 @@ ai_writer = LlmAgent(
        - Determine target audience: people who might forward this message or receive it
        - **Track editorial constraints**: whenever the user gives a direction about HOW the reply should be written — a wording to avoid (e.g. "don't introduce a technical term the original message never used"), a framing or angle to take (e.g. "explain it from an ordinary reader's perspective"), or a tone/length preference (e.g. "keep it empathetic, not accusatory") — record it in a visible bullet list and carry it forward for the WHOLE conversation; never silently drop one. You will re-print and re-check this list before drafting (Step 6).
 
-    3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message (cite the `get_single_cofacts_article` result in your request — see "Citing Tool Results Instead of Retyping Them" above)
+    3. **Political Perspective Check**: Get initial reactions from different political viewpoints on the suspicious message (cite the `get_single_cofacts_article` result in your request — see "Citing Tool Results Instead of Retyping Them" above; it must already have come back, so this is a later turn than Step 1)
 
     4. **Delegate Research**: Use the `{AI_INVESTIGATOR_NAME}` to research claims
        - Describe what you want to know; {AI_INVESTIGATOR_NAME} searches the web and reports findings with sources.
@@ -910,6 +916,7 @@ ai_writer = LlmAgent(
 
     7. **Proofreader Review**:
        - Cite the proposal you want reviewed by writing the `cite_as` from that `draft_factcheck_response` result in each proofreader's `request` — normally the one you just submitted, since that is the version under review. Do NOT retype or paraphrase the draft. Cite the `get_single_cofacts_article` result too, so they can judge the reply against the original message — see "Citing Tool Results Instead of Retyping Them" above.
+       - This is a turn of its own, containing only proofreader calls. Everything they cite (the draft, the message, any `{AI_VERIFIER_NAME}` report) is already back from an earlier turn; adding a research call to this turn and citing it here cancels every one of these proofreader calls.
        - Ask each proofreader: "Does this reply address your concerns? Is the tone neutral? Are the sources credible from your perspective?"
        - Based on their feedback, go back to Step 6 and submit a revised proposal, then review again. Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
        - Focus on persuading or kindly reminding people who share/receive such messages.
@@ -933,6 +940,11 @@ ai_writer = LlmAgent(
     When you fan out several proofreaders at once, **every one of them needs its own citations** —
     they cannot see each other's requests, so a citation in the first call does nothing for the rest.
 
+    Fanning them out in parallel is fine, but **only cite things you already have**. Do not put a
+    `{AI_VERIFIER_NAME}`/`{AI_INVESTIGATOR_NAME}` call in the same turn as proofreader calls that
+    cite it: research finishes in one turn, the proofreader fan-out happens in the next. Trying to
+    save that turn cancels every proofreader call in it.
+
     Your proofreader agents can provide valuable insights. You should specifically ask them to:
     - **Generate Questions**: "What questions would [political group] supporters ask? What confuses them or makes them angry?"
     - **Review Content**: Review the message or draft reply from their perspective.
@@ -946,6 +958,7 @@ ai_writer = LlmAgent(
     2. **Reviewing the Reply** (Before Drafting):
        - Cite both the article result and the `draft_factcheck_response` proposal under review. Cite
          the `{AI_VERIFIER_NAME}` reports too when the concern is whether the evidence holds up.
+         All of these must already be in hand from earlier turns — see the citation rules above.
        - Ask: "Does this reply answer your questions? Which doubts remain unresolved?"
 
     **CRITICAL**: Expect the proofreaders to tell YOU which questions are answered vs. unanswered. Use

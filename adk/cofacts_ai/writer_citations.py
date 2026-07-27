@@ -20,7 +20,9 @@ halves that must stay in step:
 - ``resolve_citations`` finds ``[^id]`` markers in an outgoing ``request``,
   looks each one up in the writer's OWN event history (via the public
   ``ReadonlyContext.session``) and hoists the referenced text to the top of the
-  request as a delimited block. The marker stays where the writer put it.
+  request as a delimited block. The marker stays where the writer put it. A
+  citation that cannot be resolved cancels the call rather than dispatching a
+  request with a hole in it.
 
 Hoisting rather than substituting is deliberate: a long rumor spliced into the
 middle of a sentence reads as an interruption, two adjacent markers expand into
@@ -33,7 +35,7 @@ shape was chosen over session state, artifacts and a prose-marker convention.
 
 import json
 import re
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.tools.base_tool import BaseTool
@@ -142,40 +144,59 @@ def attach_citation(
     return payload
 
 
-def _citable_blocks(tool_context: CallbackContext) -> dict:
-    """Every citable tool result so far, as {citation id: text}, in the order
-    the results appeared in the conversation.
+class _CitableIndex(NamedTuple):
+    """What one walk of the writer's event history found.
 
-    Chronological order is what lets a request read naturally without any
-    per-type ranking rule: the article is fetched first, research follows, the
-    draft comes last.
+    `blocks` is what can be cited; `called` and `responded` exist only so a
+    failure can say what actually happened to an id instead of "no such thing".
+    """
+
+    blocks: dict
+    called: set
+    responded: set
+
+
+def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
+    """Index the writer's event history by citation id.
+
+    `blocks` maps citation id to text, in the order the results appeared in the
+    conversation. Chronological order is what lets a request read naturally
+    without any per-type ranking rule: the article is fetched first, research
+    follows, the draft comes last.
 
     Ids are derived from the stored event, never read back from the response's
     own `cite_as`. That keeps sessions recorded before citations existed fully
     resolvable, and means untrusted payload content can never claim an id.
     """
     blocks: dict = {}
+    called: set = set()
+    responded: set = set()
     for event in tool_context.session.events:
         content = event.content
         if not content or not content.parts:
             continue
         for part in content.parts:
             fc = part.function_call
-            if fc and fc.name in _BODY_FROM_CALL:
+            if fc:
                 call_id = _citation_id(fc.name, fc.id)
-                call_text = (fc.args or {}).get("text")
-                if call_id and call_text and call_id not in blocks:
-                    blocks[call_id] = call_text
+                if call_id:
+                    called.add(call_id)
+                if fc.name in _BODY_FROM_CALL:
+                    call_text = (fc.args or {}).get("text")
+                    if call_id and call_text and call_id not in blocks:
+                        blocks[call_id] = call_text
                 continue
 
             fr = part.function_response
-            if not fr or fr.name in _BODY_FROM_CALL:
+            if not fr:
+                continue
+            cite_id = _citation_id(fr.name, fr.id)
+            if cite_id:
+                responded.add(cite_id)
+            if fr.name in _BODY_FROM_CALL or not cite_id or cite_id in blocks:
                 continue
             response = fr.response
             if not isinstance(response, dict) or "error" in response:
-                continue
-            cite_id = _citation_id(fr.name, fr.id)
-            if not cite_id or cite_id in blocks:
                 continue
             extract = _BODY_EXTRACTORS.get(fr.name)
             text = (
@@ -185,7 +206,7 @@ def _citable_blocks(tool_context: CallbackContext) -> dict:
             )
             if text:
                 blocks[cite_id] = text if isinstance(text, str) else str(text)
-    return blocks
+    return _CitableIndex(blocks, called, responded)
 
 
 def _render_block(cite_id: str, body: str) -> str:
@@ -210,11 +231,13 @@ def resolve_citations(
     docstring for why a stateless AgentTool call leaves a bare back-reference
     dangling, and why the text is hoisted rather than substituted in place.
 
-    An id that matches nothing is replaced with an explicit `[SYSTEM: ...]`
-    note listing what is actually available, so a mistake is visible in the
-    forwarded request instead of failing silently; the proofreaders' own
-    report-back protocol is the safety net if the writer forgets to cite
-    anything at all.
+    If ANY citation cannot be resolved, the call is **not made**: returning a
+    truthy value from a before_tool_callback makes ADK use it as the tool
+    response without invoking the tool, so the writer gets a correction instead
+    of a sub-agent reviewing content with a hole in it. Aborting on a single bad
+    citation is deliberate -- a proofreader handed the draft but not the
+    evidence produced exactly the dead review round this replaced, and it costs
+    four sub-agent calls to find out.
     """
     if tool.name not in _CITING_TOOL_NAMES:
         return None
@@ -222,32 +245,61 @@ def resolve_citations(
     if not isinstance(request, str) or "[^" not in request:
         return None
 
-    blocks = _citable_blocks(tool_context)
+    index = _citable_index(tool_context)
     cited = set()
+    problems = []
 
-    def _check(match):
+    for match in _CITATION_RE.finditer(request):
         cite_id = match.group(1)
-        if cite_id in blocks:
+        if cite_id in index.blocks:
             cited.add(cite_id)
-            return match.group()
-        available = ", ".join(blocks) if blocks else "none"
-        return (
-            f"[SYSTEM: {match.group()} matches no tool result in this conversation; "
-            f"citable results are: {available}]"
-        )
+        else:
+            problems.append(f"{match.group()} -- {_why_unresolvable(cite_id, index)}")
 
-    # One pass over the original request only. Hoisted text is never rescanned,
-    # so a citation-looking string inside a message or a draft stays literal.
-    new_request = _CITATION_RE.sub(_check, request)
+    if problems:
+        return {
+            "error": "unresolved_citation",
+            "message": (
+                f"[SYSTEM] {tool.name} was NOT called, because "
+                f"{'a citation' if len(problems) == 1 else 'some citations'} in your "
+                f"`request` could not be resolved: " + " | ".join(problems) + " "
+                "Fix the citation(s) and call it again."
+            ),
+        }
 
     if cited:
+        # Blocks are keyed in conversation order, so iterating the index (not
+        # the citations) yields 原文 -> 查證 -> 草稿 without a ranking rule, and
+        # an id cited twice still produces one block.
         preamble = "\n\n".join(
-            _render_block(cite_id, blocks[cite_id])
-            for cite_id in blocks
+            _render_block(cite_id, index.blocks[cite_id])
+            for cite_id in index.blocks
             if cite_id in cited
         )
-        new_request = f"{preamble}\n\n---\n\n{new_request}"
-
-    if new_request != request:
-        args["request"] = new_request
+        args["request"] = f"{preamble}\n\n---\n\n{request}"
     return None
+
+
+def _why_unresolvable(cite_id: str, index: _CitableIndex) -> str:
+    """Why one citation failed, in terms the writer can act on.
+
+    The first case is the one worth distinguishing: the writer sometimes fans
+    out a research call and the proofreaders that need to read it in the SAME
+    turn, then cites its sibling -- Gemini emits all the calls in one completion
+    so it already knows the id it just assigned. That result does not exist yet
+    when this callback runs, and telling the writer "no such id" would send it
+    hunting for a typo instead of splitting the turn.
+    """
+    if cite_id in index.called and cite_id not in index.responded:
+        return (
+            "that call has not returned yet, so there is nothing to quote. A citation can "
+            "only refer to a result you have ALREADY received; if you issued that call in "
+            "this same turn, wait for its result and cite it in a LATER turn"
+        )
+    if cite_id in index.responded:
+        return (
+            "that call returned an error or had no readable content, so there is nothing "
+            "to quote; re-run it and cite the new result"
+        )
+    available = ", ".join(index.blocks) if index.blocks else "none yet"
+    return f"no tool result has that id. Citable results: {available}"

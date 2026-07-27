@@ -149,6 +149,22 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * A sub-agent call that failed instead of answering — a timeout, or a call
+ * cancelled because its citations didn't resolve. The writer sees the same
+ * message and is expected to retry, so surfacing it explains the gap.
+ */
+function ToolErrorSection({ message }: { message: string }) {
+  return (
+    <section>
+      <SectionLabel>這次呼叫沒有成功</SectionLabel>
+      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 whitespace-pre-wrap">
+        {message}
+      </p>
+    </section>
+  )
+}
+
 function MarkdownSection({ content }: { content: string }) {
   return (
     <div className="prose prose-sm max-w-none prose-p:my-1.5 leading-relaxed text-sm text-gray-800">
@@ -201,12 +217,17 @@ function InvestigatorContent({
   response: AllTools['investigator']['resp'] | null
   toolCallId: string
 }) {
-  const content = response
-    ? 'content' in response
-      ? response.content
-      : response.result
-    : ''
-  const sources = response && 'content' in response ? response.sources : []
+  const errorMessage = response && 'error' in response ? response.message : null
+  const content =
+    response && !('error' in response)
+      ? 'content' in response
+        ? response.content
+        : response.result
+      : ''
+  const sources =
+    response && !('error' in response) && 'content' in response
+      ? response.sources
+      : []
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -216,6 +237,8 @@ function InvestigatorContent({
           <MarkdownSection content={args.request} />
         </section>
       )}
+
+      {errorMessage && <ToolErrorSection message={errorMessage} />}
 
       {content && (
         <section>
@@ -253,12 +276,17 @@ function VerifierContent({
   args: AllTools['verifier']['args']
   response: AllTools['verifier']['resp'] | null
 }) {
-  const content = response
-    ? 'content' in response
-      ? response.content
-      : response.result
-    : ''
-  const sources = response && 'content' in response ? response.sources : []
+  const errorMessage = response && 'error' in response ? response.message : null
+  const content =
+    response && !('error' in response)
+      ? 'content' in response
+        ? response.content
+        : response.result
+      : ''
+  const sources =
+    response && !('error' in response) && 'content' in response
+      ? response.sources
+      : []
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -268,6 +296,8 @@ function VerifierContent({
           <MarkdownSection content={args.request} />
         </section>
       )}
+
+      {errorMessage && <ToolErrorSection message={errorMessage} />}
 
       {content && (
         <section>
@@ -303,7 +333,8 @@ function ProofreaderContent({
   args: AllTools['proofreader_kmt']['args']
   response: AllTools['proofreader_kmt']['resp'] | null
 }) {
-  const result = response?.result ?? ''
+  const errorMessage = response && 'error' in response ? response.message : null
+  const result = response && !('error' in response) ? response.result : ''
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -313,6 +344,8 @@ function ProofreaderContent({
           <MarkdownSection content={args.request} />
         </section>
       )}
+
+      {errorMessage && <ToolErrorSection message={errorMessage} />}
 
       {result && (
         <section>

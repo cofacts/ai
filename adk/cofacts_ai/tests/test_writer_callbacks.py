@@ -312,6 +312,22 @@ class TestAfterToolProofreader:
             {"result": "這則訊息對民進黨支持者來說可能引發質疑 {not json"},
         )
 
+    async def test_a_cancelled_call_passes_through_unstamped(self):
+        # resolve_citations cancels a call by returning this from the
+        # before_tool_callback; ADK still runs after_tool on it, and an error
+        # payload must not come back wearing a citation of its own.
+        cancelled = {
+            "error": "unresolved_citation",
+            "message": "[SYSTEM] proofreader_kmt was NOT called, because ...",
+        }
+        result = await after_tool(
+            tool=make_tool(AI_PROOFREADER_KMT_NAME),
+            args={},
+            tool_context=make_tool_context(),
+            tool_response=cancelled,
+        )
+        assert result == cancelled
+
     async def test_nonempty_response_does_not_save_artifact(self):
         tool_context = make_tool_context()
         await after_tool(

@@ -37,10 +37,12 @@ tool-response types (`src/lib/adk.ts`) and the draft drawer (`src/lib/chatCache.
 Driving issue: [cofacts/ai#117](https://github.com/cofacts/ai/issues/117); implemented in
 [cofacts/ai#119](https://github.com/cofacts/ai/pull/119).
 
-This record was revised before merging: the first implementation used inline symbol substitution
-(`[[message]]` / `[[draft]]`), and a live trace showed that shape was wrong in three ways. The
-history is kept in "Considered Options" and "Decision Outcome" rather than split into a
-superseding record, because nothing ever shipped to production.
+This record was revised twice before merging, each time driven by a live trace: the first
+implementation used inline symbol substitution (`[[message]]` / `[[draft]]`), which trace
+`01d4bc4f` showed was the wrong operation; and citations originally reported an unresolvable id
+downstream, which trace `65a3975e` showed has to cancel the call instead. The history is kept in
+"Considered Options" and "Decision Outcome" rather than split into superseding records, because
+nothing ever shipped to production.
 
 ### Langfuse evidence
 
@@ -75,6 +77,23 @@ superseding record, because nothing ever shipped to production.
   reply under review. Analysis: a hand-maintained symbol vocabulary can only cover content we
   anticipated, and substitution is the wrong operation — the writer is _citing_, not
   _interpolating_.
+- [Trace `65a3975e`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/traces/65a3975e59ba3cdf2788b7a33cbd5fa7)
+  (2026-07-27) — the first live run of citations. It worked, and exposed one more failure mode.
+  `[^verifier-ygxikp]` reported "matches no tool result" even though that verifier call plainly
+  existed and the id was genuinely minted: the writer had issued **the verifier and all four
+  proofreaders in one turn** and cited its own sibling. Gemini emits all five calls in a single
+  completion, so it already knows the id it just assigned — but the sibling's _response_ does not
+  exist when the proofreader's `before_tool_callback` runs. Confirmed by the response parts for
+  `verifier:ygxikp2o` and the four proofreaders sitting in one `parts` array. Only the first
+  fan-out did this; later rounds cited results already in hand and resolved.
+
+  Cost: the request went out with a `[SYSTEM: …]` note where the claim inventory belonged, and all
+  four proofreaders correctly refused via the report-back protocol. The safety net worked, but it
+  fired after four sub-agent calls. Analysis: this is #117's original instinct — de-duplicating
+  across siblings — and it is the one thing citations cannot serve, so it has to be _rejected_,
+  not merely reported downstream. (Incidental finding: Gemini supplies its own call ids here, so
+  they are base36-ish rather than `adk-<uuid4>` hex. Minting and resolution derive from the same
+  field, so both shapes work.)
 
 ## Decision Drivers
 
@@ -245,9 +264,29 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
    on the very thing we are asking it to judge. `draft_factcheck_response` is the one tool read
    from its **call** arguments, so a proposal the validation gate **rejected** is still reviewable.
 
-5. **An unresolvable id becomes an explicit `[SYSTEM: …]` note** listing what _is_ citable, never
-   a silent drop — so a mistake is visible in the forwarded request and in the trace. Hoisted text
-   is never rescanned, so a citation-shaped string inside a rumor or a draft stays literal.
+5. **An unresolvable citation cancels the call.** `resolve_citations` returns
+   `{"error": "unresolved_citation", "message": …}`, and ADK runs a tool only `if
+function_response is None` (`flows/llm_flows/functions.py`), so a truthy return from a
+   `before_tool_callback` becomes the response and the sub-agent never runs. `after_tool` still
+   runs and leaves error payloads unstamped, so nothing else changes.
+
+   **Any** bad citation cancels the call, even when others resolved: a proofreader handed the draft
+   but not the evidence _answers anyway_, and the answer looks legitimate — the exact failure #117
+   is about. Failing loudly for the price of one retry beats four sub-agent calls and a dead round.
+
+   The message says which reason applies, from one pass over the event history: the call **has not
+   returned yet** (its id is among the calls but not the responses — the same-turn sibling case);
+   it **returned an error** (id among the responses but nothing citable); or **no result has that
+   id**, listing what does. The first is worth distinguishing precisely because "no such id" would
+   send the writer hunting for a typo instead of splitting the turn.
+
+   This is the same-turn constraint the parallel-delta ADK finding predicted, now observed for
+   event history rather than session state: **a citation can only address a result from an earlier
+   turn.** The writer's instruction states that rule, and Steps 3/7 say research finishes in one
+   turn and the proofreader fan-out happens in the next.
+
+   Hoisted text is never rescanned, so a citation-shaped string inside a rumor or a draft stays
+   literal.
 
 6. **`draft_factcheck_response` reframed from a one-shot final action into a re-callable draft
    proposal** (docstring, writer instruction, and success message only — **the validation logic
@@ -299,10 +338,15 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
   the sidebar payload, and because the event history is reached through a public ADK property.
 - Good, because the draft tool's validation gate stopped being pure friction and became the
   revision signal of the review loop.
-- Bad, because the mechanism is **opt-in**: the writer can omit a citation and still ship a
-  dangling reference. This is mitigated, not eliminated, by the report-back protocol (which also
-  catches unrelated drift) — the two are deliberately paired, and report-back must not be dropped
-  as redundant.
+- Good, because a _wrong_ citation is now cheap: the call is cancelled before any sub-agent runs,
+  and the writer gets a reason it can act on. Trace `65a3975e` cost four proofreader calls and a
+  review round to surface one bad id.
+- Bad, because the mechanism is still **opt-in**: the writer can omit a citation entirely and ship
+  a dangling reference in prose, which cancellation cannot catch. This is mitigated, not
+  eliminated, by the report-back protocol (which also catches unrelated drift) — the two are
+  deliberately paired, and report-back must not be dropped as redundant.
+- Bad, because cancellation depends on ADK's "run the tool only if the callback returned nothing"
+  contract. It is stable and documented, but it is load-bearing here rather than incidental.
 - Bad, because there is no automatic "latest" any more: citing an older draft after producing a
   newer one is possible, and it resolves silently. Recency is the mitigation — the fresh
   `cite_as` is the last thing the writer reads before the proofreader fan-out — plus an explicit
@@ -330,22 +374,28 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
   chronological block order regardless of citation order, one block for a doubly-cited id, the
   draft resolving from its **call** args so a gate-rejected proposal still works, a verifier
   report and a proofreader's feedback both citable, a compact-JSON fallback for unlisted tools, an
-  unknown id becoming a `[SYSTEM: …]` note listing what is citable, error responses never
-  resolving, hoisted content never rescanned, a forged closing tag escaped, and a
-  pre-citation-era response still resolving). One test round-trips `attach_citation` into
-  `resolve_citations` so the two halves cannot silently disagree.
+  hoisted content never rescanned, a forged closing tag escaped, and a pre-citation-era response
+  still resolving). One test round-trips `attach_citation` into `resolve_citations` so the two
+  halves cannot silently disagree. A separate class covers cancellation: a same-turn sibling
+  citation returns the "has not returned yet" error and leaves `args` untouched, an errored result
+  and an unknown id give their own reasons, every bad id is reported rather than just the first,
+  and one bad citation cancels the call even when others resolved.
 - `adk/cofacts_ai/tests/test_writer_callbacks.py` covers the `after_tool` routing: every response
-  shape emerges stamped, timeout errors emerge unstamped.
+  shape emerges stamped; timeout errors and a cancelled call emerge unstamped.
 - Frontend tests in `src/lib/__tests__/chatCache.test.ts` cover the auto-open gating (a rejected
   proposal never becomes `lastReplyDraftId`, and never clobbers a prior successful one).
 - CI: `ruff format`/`ruff check`/`ty` and pytest for `adk/`; ESLint/Prettier/`tsc` and vitest for
   the frontend.
 - An adversarial fresh-context review of the whole diff confirmed each claim above, including
   that `draft_factcheck_response`'s validation gate is logically byte-for-byte unchanged.
-- Still open: a live end-to-end run on a YouTube-link article, checking in the trace that the
-  writer cites the verifier report instead of re-narrating it, that all four proofreader requests
-  open with the same hoisted blocks, and that report-back fires when a citation is omitted. This
-  mechanism is being iterated trace-first; trace `01d4bc4f` is why the first shape was replaced.
+- Trace `65a3975e` confirmed the mechanism live: the writer cited the article, the investigator
+  findings and its drafts, and labelled each citation in its own prose ("Suspicious Message
+  (YouTube video): [^…] / Extracted Claims from Video: [^…] / Research Findings: [^…]"). It also
+  produced the same-turn failure that cancellation now rejects.
+- Still open: a re-run on the same article, checking that no `[SYSTEM: …]` note ever reaches a
+  sub-agent, that a same-turn citation is cancelled and the next turn's retry resolves, and that
+  no proofreader returns the 「我沒有收到完整的內容」 refusal. This mechanism is being iterated
+  trace-first: `01d4bc4f` replaced the first shape, `65a3975e` added cancellation.
 
 ## More Information
 

@@ -62,6 +62,14 @@ export type ToolSource = { title: string; url: string }
 type AdkFallbackResp = { result: string }
 
 /**
+ * A sub-agent call can also come back as a structured failure instead of a
+ * result: `after_tool` turns an empty/timed-out sub-agent response into one
+ * (`agent.py`), and `resolve_citations` returns one to cancel a call whose
+ * citations don't resolve (`writer_citations.py`).
+ */
+type AdkToolErrorResp = { error: string; message: string }
+
+/**
  * Citation fields the writer's `after_tool` callback stamps onto every tool
  * result (`adk/cofacts_ai/writer_citations.py`), so the writer can quote that
  * result verbatim to a stateless sub-agent by writing `cite_as` in its request.
@@ -95,6 +103,7 @@ export type AllTools = {
           sources: Array<ToolSource>
         }
       | AdkFallbackResp
+      | AdkToolErrorResp
   }
   verifier: {
     args: { request?: string }
@@ -103,14 +112,26 @@ export type AllTools = {
      * Falls back to `AdkFallbackResp` when Gemini omits grounding metadata
      * intermittently (the callback returns `None`, leaving raw LLM text).
      */
-    resp: { content: string; sources: Array<ToolSource> } | AdkFallbackResp
+    resp:
+      | { content: string; sources: Array<ToolSource> }
+      | AdkFallbackResp
+      | AdkToolErrorResp
   }
-  proofreader_kmt: { args: { request?: string }; resp: { result: string } }
-  proofreader_dpp: { args: { request?: string }; resp: { result: string } }
-  proofreader_tpp: { args: { request?: string }; resp: { result: string } }
+  proofreader_kmt: {
+    args: { request?: string }
+    resp: { result: string } | AdkToolErrorResp
+  }
+  proofreader_dpp: {
+    args: { request?: string }
+    resp: { result: string } | AdkToolErrorResp
+  }
+  proofreader_tpp: {
+    args: { request?: string }
+    resp: { result: string } | AdkToolErrorResp
+  }
   proofreader_minor_parties: {
     args: { request?: string }
-    resp: { result: string }
+    resp: { result: string } | AdkToolErrorResp
   }
   draft_factcheck_response: {
     args: {

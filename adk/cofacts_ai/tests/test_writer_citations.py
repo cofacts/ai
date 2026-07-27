@@ -235,39 +235,17 @@ class TestResolveCitations:
         )
         assert json.dumps(response, ensure_ascii=False) in args["request"]
 
-    def test_unknown_id_becomes_a_system_note_listing_what_is_citable(self):
+    def test_resolvable_citations_return_none_so_the_call_proceeds(self):
         events = [
             make_fn_response_event(
                 ARTICLE_TOOL, "adk-1a2b3c-xx", {"article": {"text": "全文"}}
             )
         ]
-        args = {"request": f"[^{DRAFT_TOOL}-000000] 請看"}
-        resolve_citations(
+        args = {"request": f"[^{ARTICLE_TOOL}-1a2b3c]"}
+        result = resolve_citations(
             make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
         )
-        assert args["request"] == (
-            f"[SYSTEM: [^{DRAFT_TOOL}-000000] matches no tool result in this "
-            f"conversation; citable results are: {ARTICLE_TOOL}-1a2b3c] 請看"
-        )
-
-    def test_citation_with_nothing_citable_yet_says_none(self):
-        args = {"request": f"[^{DRAFT_TOOL}-000000]"}
-        resolve_citations(
-            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context([])
-        )
-        assert "citable results are: none" in args["request"]
-
-    def test_error_responses_are_not_citable(self):
-        events = [
-            make_fn_response_event(
-                AI_VERIFIER_NAME, "adk-ab12cd-yy", {"error": "timeout"}
-            )
-        ]
-        args = {"request": f"[^{AI_VERIFIER_NAME}-ab12cd]"}
-        resolve_citations(
-            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
-        )
-        assert "matches no tool result" in args["request"]
+        assert result is None
 
     def test_blocks_are_chronological_regardless_of_citation_order(self):
         events = [
@@ -357,8 +335,100 @@ class TestResolveCitations:
         )
         events = [make_fn_response_event(AI_VERIFIER_NAME, call_id, minted)]
         args = {"request": minted["cite_as"]}
-        resolve_citations(
+        result = resolve_citations(
             make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
         )
+        assert result is None
         assert "查證結果" in args["request"]
-        assert "matches no tool result" not in args["request"]
+
+
+class TestUnresolvableCitationsCancelTheCall:
+    """A citation that cannot be resolved returns a response from the
+    before_tool_callback, which makes ADK skip the tool entirely
+    (flows/llm_flows/functions.py: the tool runs only `if function_response is
+    None`). Dispatching the call anyway is what produced the dead review round
+    in trace 65a3975e: four proofreaders read a request with a hole where the
+    claim inventory should have been, and all four refused.
+    """
+
+    def test_a_sibling_call_from_the_same_turn_says_it_has_not_returned_yet(self):
+        # The writer fanned out the verifier and the proofreaders together and
+        # cited the verifier -- Gemini emits all the calls in one completion, so
+        # it already knows the id. The call event is in history; the response is
+        # not, and never will be before this callback runs.
+        events = [
+            make_fn_call_event(
+                AI_VERIFIER_NAME, "adk-ygxikp-2o", {"request": "watch the video"}
+            )
+        ]
+        args = {"request": f"Extracted claims: [^{AI_VERIFIER_NAME}-ygxikp]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is not None
+        assert result["error"] == "unresolved_citation"
+        assert f"{AI_PROOFREADER_KMT_NAME} was NOT called" in result["message"]
+        assert "has not returned yet" in result["message"]
+        assert "LATER turn" in result["message"]
+        # The request must be left exactly as the writer wrote it.
+        assert args == {"request": f"Extracted claims: [^{AI_VERIFIER_NAME}-ygxikp]"}
+
+    def test_an_errored_result_says_there_is_nothing_to_quote(self):
+        events = [
+            make_fn_call_event(AI_VERIFIER_NAME, "adk-ab12cd-yy", {"request": "x"}),
+            make_fn_response_event(
+                AI_VERIFIER_NAME, "adk-ab12cd-yy", {"error": "timeout"}
+            ),
+        ]
+        args = {"request": f"[^{AI_VERIFIER_NAME}-ab12cd]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is not None
+        assert "returned an error" in result["message"]
+
+    def test_an_unknown_id_lists_what_is_citable(self):
+        events = [
+            make_fn_response_event(
+                ARTICLE_TOOL, "adk-1a2b3c-xx", {"article": {"text": "全文"}}
+            )
+        ]
+        args = {"request": f"[^{DRAFT_TOOL}-000000] 請看"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is not None
+        assert "no tool result has that id" in result["message"]
+        assert f"Citable results: {ARTICLE_TOOL}-1a2b3c" in result["message"]
+
+    def test_nothing_citable_yet_says_none_yet(self):
+        args = {"request": f"[^{DRAFT_TOOL}-000000]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context([])
+        )
+        assert result is not None
+        assert "Citable results: none yet" in result["message"]
+
+    def test_one_bad_citation_cancels_the_call_even_when_others_resolve(self):
+        # A proofreader given the draft but not the evidence is worse than one
+        # that was never called: it answers, and the answer looks legitimate.
+        events = [
+            make_fn_call_event(DRAFT_TOOL, "adk-7f3e21-zz", {"text": "草稿全文"}),
+        ]
+        request = f"[^{DRAFT_TOOL}-7f3e21] vs [^{AI_VERIFIER_NAME}-000000]"
+        args = {"request": request}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_DPP_NAME), args, make_tool_context(events)
+        )
+        assert result is not None
+        assert args == {"request": request}
+        assert "草稿全文" not in args["request"]
+
+    def test_every_bad_citation_is_reported_not_just_the_first(self):
+        args = {"request": f"[^{DRAFT_TOOL}-aaaaaa] and [^{AI_VERIFIER_NAME}-bbbbbb]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context([])
+        )
+        assert result is not None
+        assert f"[^{DRAFT_TOOL}-aaaaaa]" in result["message"]
+        assert f"[^{AI_VERIFIER_NAME}-bbbbbb]" in result["message"]
