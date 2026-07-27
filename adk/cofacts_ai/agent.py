@@ -730,7 +730,7 @@ _SYMBOL_EXPANSION_TOOL_NAMES = (
 # syntax would make ADK try to resolve "draft"/"message" as session state
 # while rendering that very instruction and crash before the writer ever runs.
 _DRAFT_SYMBOL_RE = re.compile(r"\[\[draft(?::v(\d+))?\]\]")
-_MESSAGE_SYMBOL_RE = re.compile(r"\[\[message\]\]")
+_MESSAGE_SYMBOL_RE = re.compile(r"\[\[message(?::([A-Za-z0-9_-]+))?\]\]")
 
 
 def _writer_draft_texts(tool_context: CallbackContext) -> list:
@@ -755,9 +755,16 @@ def _writer_draft_texts(tool_context: CallbackContext) -> list:
     return drafts
 
 
-def _writer_suspicious_message(tool_context: CallbackContext) -> Optional[str]:
-    """The suspicious message's text, from the writer's own
-    get_single_cofacts_article call this invocation (first match wins)."""
+def _writer_article_texts(tool_context: CallbackContext) -> dict:
+    """Every Cofacts article the writer has fetched, as {article_id: text},
+    ordered least- to most-recently fetched.
+
+    One conversation can cover more than one suspicious message: the user may
+    paste a second Cofacts URL to move on to another article, and the writer
+    may pull up a related article for comparison. Re-fetching an article moves
+    it to the end, so the last entry is always the most recent fetch.
+    """
+    articles: dict = {}
     for event in tool_context.session.events:
         content = event.content
         if not content or not content.parts:
@@ -765,11 +772,22 @@ def _writer_suspicious_message(tool_context: CallbackContext) -> Optional[str]:
         for part in content.parts:
             fr = part.function_response
             if fr and fr.name == _ARTICLE_TOOL_NAME:
-                article = (fr.response or {}).get("article") or {}
+                response = fr.response or {}
+                article = response.get("article") or {}
                 text = article.get("text")
                 if text:
-                    return text
-    return None
+                    # Real responses always carry article_id; the positional
+                    # fallback keeps bare [[message]] working if that ever
+                    # changes. "#" is outside the id pattern, so a fallback
+                    # key can never be addressed as [[message:...]].
+                    key = (
+                        response.get("article_id")
+                        or article.get("id")
+                        or f"#{len(articles)}"
+                    )
+                    articles.pop(key, None)
+                    articles[key] = text
+    return articles
 
 
 def expand_writer_symbols(
@@ -778,14 +796,19 @@ def expand_writer_symbols(
     """before_tool_callback for ai_writer.
 
     Lets the writer reference its own drafts and the suspicious message by
-    symbol -- `[[message]]`, `[[draft]]`, `[[draft:vN]]` -- in a sub-agent's
-    `request` instead of retyping or paraphrasing them ("(same as above)").
+    symbol -- `[[message]]`, `[[message:<articleId>]]`, `[[draft]]`,
+    `[[draft:vN]]` -- in a sub-agent's `request` instead of retyping or
+    paraphrasing them ("(same as above)").
     investigator/verifier/proofreaders are each an AgentTool: every call is a
     fresh, stateless single-message session that sees nothing but this one
     `request` string (agent.py:204), so a back-reference to a sibling call or
     an earlier turn has no referent there. This left every proofreader but
     the first with no draft to review whenever the writer fanned out parallel
     calls and abbreviated the rest (cofacts/ai#117).
+
+    Bare `[[draft]]`/`[[message]]` resolve to the most recent of each, since
+    that is the task at hand; the indexed forms address an older draft or a
+    specific article when a conversation covers more than one.
 
     Symbols are expanded here against the writer's OWN event history (a
     public API, ReadonlyContext.session) rather than session state, so the
@@ -805,6 +828,7 @@ def expand_writer_symbols(
         return None
 
     drafts = None
+    articles = None
 
     def _replace_draft(match):
         nonlocal drafts
@@ -824,10 +848,23 @@ def expand_writer_symbols(
         return drafts[index]
 
     def _replace_message(match):
-        message = _writer_suspicious_message(tool_context)
-        if message is None:
-            return "[SYSTEM: no get_single_cofacts_article result found to resolve [[message]]]"
-        return message
+        nonlocal articles
+        if articles is None:
+            articles = _writer_article_texts(tool_context)
+        if not articles:
+            return f"[SYSTEM: no get_single_cofacts_article result found to resolve {match.group()}]"
+        article_id = match.group(1)
+        if article_id is None:
+            # Most recently fetched article: a conversation can move on to
+            # another suspicious message, and the newest one is the task at
+            # hand -- same reasoning as inject_youtube_filedata above.
+            return next(reversed(articles.values()))
+        if article_id not in articles:
+            return (
+                f"[SYSTEM: article {article_id} was not fetched in this conversation, "
+                f"so {match.group()} cannot be resolved; available: {', '.join(articles)}]"
+            )
+        return articles[article_id]
 
     new_request = _DRAFT_SYMBOL_RE.sub(_replace_draft, request)
     new_request = _MESSAGE_SYMBOL_RE.sub(_replace_message, new_request)
@@ -895,13 +932,22 @@ ai_writer = LlmAgent(
     call, not your conversation, not each other's calls, not a previous call to the same agent. When
     you need one of them to see the suspicious message or your latest draft reply, write the symbol
     `[[message]]` or `[[draft]]` in your `request` instead of retyping or paraphrasing it — it is
-    replaced with the exact original text before the call is sent. Use `[[draft:v2]]` to reference a
-    specific earlier proposal (1-indexed, in submission order) instead of the latest one. Never write
-    "same as above" / "as discussed" / "（同上）" — none of these agents can see anything outside their
-    own single request, so there is nothing for that to refer to, and it leaves them with no draft to
-    review. If a symbol can't be resolved you'll see an explicit `[SYSTEM: ...]` note in its place —
-    that means the thing you referenced (e.g. a draft) doesn't exist yet at this point in the
-    conversation.
+    replaced with the exact original text before the call is sent. Never write "same as above" /
+    "as discussed" / "（同上）" — none of these agents can see anything outside their own single
+    request, so there is nothing for that to refer to, and it leaves them with no draft to review.
+
+    Both bare symbols mean "the most recent one": `[[draft]]` is your latest
+    `draft_factcheck_response` proposal, and `[[message]]` is the article from your most recent
+    `get_single_cofacts_article` call. To point at something older, say which one:
+    - `[[draft:v2]]` — a specific earlier proposal, 1-indexed in submission order.
+    - `[[message:<articleId>]]` — a specific Cofacts article, by the id you fetched it with.
+      **If this conversation covers more than one Cofacts article** (the user moved on to another
+      message, or you pulled up a related article for comparison), always use this explicit form
+      rather than bare `[[message]]`, so there is no doubt which message you mean.
+
+    If a symbol can't be resolved you'll see an explicit `[SYSTEM: ...]` note in its place — that
+    means the thing you referenced doesn't exist yet at this point in the conversation (for an
+    unknown article id, the note lists the ids you have actually fetched).
 
     ## Orchestration Process (Adapt Based on User Needs):
 

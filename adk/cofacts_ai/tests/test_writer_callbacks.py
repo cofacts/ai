@@ -476,7 +476,7 @@ class TestExpandWriterSymbols:
         events = [
             make_fn_response_event(
                 "get_single_cofacts_article",
-                {"article": {"text": "the suspicious message"}},
+                {"article_id": "art-1", "article": {"text": "the suspicious message"}},
             )
         ]
         args = {"request": "[[message]] -- what do you think?"}
@@ -484,6 +484,107 @@ class TestExpandWriterSymbols:
             make_tool(AI_INVESTIGATOR_NAME), args, make_symbol_tool_context(events)
         )
         assert args["request"] == "the suspicious message -- what do you think?"
+
+    def test_message_symbol_without_article_id_still_resolves(self):
+        # Defensive: real responses always carry article_id, but a shape change
+        # must not silently break the most common symbol.
+        events = [
+            make_fn_response_event(
+                "get_single_cofacts_article", {"article": {"text": "no id here"}}
+            )
+        ]
+        args = {"request": "[[message]]"}
+        expand_writer_symbols(
+            make_tool(AI_INVESTIGATOR_NAME), args, make_symbol_tool_context(events)
+        )
+        assert args["request"] == "no id here"
+
+    def test_bare_message_resolves_to_most_recently_fetched_article(self):
+        # A conversation can move on to a second suspicious message; bare
+        # [[message]] must follow the user, not pin to the first article.
+        events = [
+            make_fn_response_event(
+                "get_single_cofacts_article",
+                {"article_id": "art-1", "article": {"text": "first message"}},
+            ),
+            make_fn_response_event(
+                "get_single_cofacts_article",
+                {"article_id": "art-2", "article": {"text": "second message"}},
+            ),
+        ]
+        args = {"request": "[[message]]"}
+        expand_writer_symbols(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_symbol_tool_context(events)
+        )
+        assert args["request"] == "second message"
+
+    def test_message_symbol_can_address_a_specific_article_by_id(self):
+        events = [
+            make_fn_response_event(
+                "get_single_cofacts_article",
+                {"article_id": "art-1", "article": {"text": "first message"}},
+            ),
+            make_fn_response_event(
+                "get_single_cofacts_article",
+                {"article_id": "art-2", "article": {"text": "second message"}},
+            ),
+        ]
+        args = {"request": "compare [[message:art-1]] with [[message:art-2]]"}
+        expand_writer_symbols(
+            make_tool(AI_VERIFIER_NAME), args, make_symbol_tool_context(events)
+        )
+        assert args["request"] == "compare first message with second message"
+
+    def test_refetching_an_article_makes_it_the_most_recent(self):
+        events = [
+            make_fn_response_event(
+                "get_single_cofacts_article",
+                {"article_id": "art-1", "article": {"text": "first message"}},
+            ),
+            make_fn_response_event(
+                "get_single_cofacts_article",
+                {"article_id": "art-2", "article": {"text": "second message"}},
+            ),
+            make_fn_response_event(
+                "get_single_cofacts_article",
+                {"article_id": "art-1", "article": {"text": "first message"}},
+            ),
+        ]
+        args = {"request": "[[message]]"}
+        expand_writer_symbols(
+            make_tool(AI_PROOFREADER_DPP_NAME), args, make_symbol_tool_context(events)
+        )
+        assert args["request"] == "first message"
+
+    def test_unknown_article_id_yields_marker_listing_available_ids(self):
+        events = [
+            make_fn_response_event(
+                "get_single_cofacts_article",
+                {"article_id": "art-1", "article": {"text": "first message"}},
+            )
+        ]
+        args = {"request": "[[message:art-9]]"}
+        expand_writer_symbols(
+            make_tool(AI_PROOFREADER_TPP_NAME), args, make_symbol_tool_context(events)
+        )
+        assert "SYSTEM" in args["request"]
+        assert "art-1" in args["request"]  # tells the writer what it can use
+        assert "first message" not in args["request"]
+
+    def test_article_fetch_error_response_is_ignored(self):
+        # {"error": ..., "article_id": ...} has no article/text -- must not
+        # become a resolvable message.
+        events = [
+            make_fn_response_event(
+                "get_single_cofacts_article",
+                {"article_id": "art-1", "error": "Article not found"},
+            )
+        ]
+        args = {"request": "[[message]]"}
+        expand_writer_symbols(
+            make_tool(AI_VERIFIER_NAME), args, make_symbol_tool_context(events)
+        )
+        assert "SYSTEM" in args["request"]
 
     def test_message_symbol_missing_yields_explicit_marker(self):
         args = {"request": "[[message]]"}

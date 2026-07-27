@@ -67,8 +67,9 @@ before-model callbacks in `adk/cofacts_ai/media_filedata.py` and `agent.py`.
 
 Each `AgentTool` call is a **fresh, stateless, single-message session** — a sub-agent sees only
 that call's `request` string. So the writer references shared content by symbol
-(`[[message]]`, `[[draft]]`, `[[draft:vN]]`), expanded from the writer's own event history by a
-before-tool callback before the call is dispatched.
+(`[[message]]`, `[[message:<articleId>]]`, `[[draft]]`, `[[draft:vN]]` — bare means the most
+recent), expanded from the writer's own event history by a before-tool callback before the call
+is dispatched.
 → decisions:
 [source-integrity contract](decisions/20260515-agent-source-integrity-contract.md),
 [symbol references for stateless sub-agent calls](decisions/20260722-subagent-context-symbols.md),

@@ -160,12 +160,25 @@ As shipped in PR #119:
 
 1. **`expand_writer_symbols`, a `before_tool_callback` on `ai_writer`.** For calls to the six
    `AgentTool` sub-agents it rewrites `args['request']` in place and returns `None` so the call
-   proceeds: `[[message]]` → the article text from the writer's own
+   proceeds: `[[message]]` / `[[message:<articleId>]]` → the article text from the writer's own
    `get_single_cofacts_article` function-**response**; `[[draft]]` / `[[draft:vN]]` → the `text`
    argument of the latest / Nth `draft_factcheck_response` function-**call**, 1-indexed in
    submission order. Reading the _call_ arguments rather than the response means a proposal the
    validation gate **rejected** is still reviewable — useful, since reviewing prose before its
    citations are settled is legitimate.
+
+   **A bare symbol always resolves to the most recent of its kind.** One conversation can cover
+   more than one suspicious message — the user may paste a second Cofacts URL, and the writer may
+   pull up a related article for comparison — so pinning `[[message]]` to the _first_ article
+   fetched would silently review a new draft against an old message, the very failure class this
+   record exists to remove. "Latest wins" follows the same reasoning already documented for
+   `inject_youtube_filedata` ("the most recent message is the current task"), and keeps
+   `[[message]]` consistent with `[[draft]]`. Because "most recent" is still a guess about intent
+   when several articles are in play, `[[message:<articleId>]]` addresses one explicitly, and the
+   writer is instructed to prefer that form whenever a conversation covers more than one article;
+   an unknown id resolves to a marker that lists the ids actually fetched, so the writer can
+   correct itself.
+
 2. **Square brackets, deliberately, not curly braces.** These symbols are documented in the
    writer's own instruction, and ADK would parse `{draft}` there as a session-state reference and
    raise `KeyError` while rendering that very instruction. `[[…]]` sidesteps ADK's templating
@@ -232,7 +245,10 @@ As shipped in PR #119:
 
 - Unit tests in `adk/cofacts_ai/tests/test_writer_callbacks.py` cover `expand_writer_symbols`:
   latest-draft and `[[draft:vN]]` selection (asserting `v1` is the _first_ proposal), a
-  gate-rejected proposal still resolving, `[[message]]` from the article response, both symbols
+  gate-rejected proposal still resolving, `[[message]]` from the article response, multi-article
+  resolution (bare = most recent, `[[message:<id>]]` addressing a specific one, a re-fetch
+  becoming most recent, an unknown id listing what is available, an error response never
+  resolving), both symbols
   in one request, an unresolved symbol becoming a `[SYSTEM: …]` marker, the tool-name gate
   skipping non-sub-agent tools, and the proofreader `after_tool` branch (empty/`None` → retry
   dict; non-JSON prose → passthrough without parsing).
