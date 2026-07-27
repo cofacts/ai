@@ -295,26 +295,38 @@ function_response is None` (`flows/llm_flows/functions.py`), so a truthy return 
    Hoisted text is never rescanned, so a citation-shaped string inside a rumor or a draft stays
    literal.
 
-6. **`draft_factcheck_response` reframed from a one-shot final action into a re-callable draft
+6. **Which field is the body is decided by a key chain, not by the tool name.** `content` then
+   `result`, with `get_single_cofacts_article` overridden to `article.text` and a compact-JSON
+   fallback for tools that carry no prose at all. The chain is the point: the _same_ sub-agent
+   returns either shape — `ai_investigator`/`ai_verifier` normally give `{content, sources}`, but
+   whenever Gemini omits grounding metadata their after-model callback leaves the raw text alone
+   and it arrives as ADK's `{result: …}` wrapping (the `AdkFallbackResp` already documented in
+   `src/lib/adk.ts`). Keying on the tool name made a complete verification report uncitable and the
+   writer had no way out: it re-cited the same id five times over, 21 cancelled proofreader calls
+   (trace `cdfa394f`). A tool that carries prose but came back blank stays uncitable rather than
+   quoting its empty envelope, and the article override never falls back to the JSON, so a
+   proofreader is never handed the reply counts and other people's verdicts.
+
+7. **`draft_factcheck_response` reframed from a one-shot final action into a re-callable draft
    proposal** (docstring, writer instruction, and success message only — **the validation logic
    is unchanged**). Its Steps 6/7 became a propose → cite-and-review → revise loop. It keeps the
    pre-existing "call it alone, never in the same turn as another tool" rule, which now also
    guarantees a proposal is committed to the event history before any later citation resolves
    against it — the ordering constraint the parallel-delta finding demands, satisfied by a rule
    that already existed.
-7. **A report-back protocol in all four proofreader instructions**: every call is a fresh
+8. **A report-back protocol in all four proofreader instructions**: every call is a fresh
    conversation; if the request references something you cannot see, do not answer or guess —
    reply that you did not receive the full content and ask for it. All six sub-agent instructions
    also explain the `[^id]` / `<id>…</id>` pairing so a block is never mistaken for stray markup.
-8. **The dead "Control Flow — transfer back to the main AI Writer" block removed** from all four
+9. **The dead "Control Flow — transfer back to the main AI Writer" block removed** from all four
    proofreaders. An `AgentTool` child runs in an isolated runner with no `transfer_to_agent`
    tool, so the instruction was unreachable, and a model told to perform a transfer it cannot
    perform is a plausible source of the empty-output (`None`) traces.
-9. **Empty-response retry extended to proofreaders** in `after_tool`, mirroring
-   investigator/verifier. Proofreaders return plain prose and must **not** be run through
-   `json.loads`; the prose is preserved verbatim under `result`, which is how ADK would have
-   wrapped it anyway, plus the citation fields.
-10. **Frontend** — only a proposal that actually passes validation (`success === true`) becomes
+10. **Empty-response retry extended to proofreaders** in `after_tool`, mirroring
+    investigator/verifier. Proofreaders return plain prose and must **not** be run through
+    `json.loads`; the prose is preserved verbatim under `result`, which is how ADK would have
+    wrapped it anyway, plus the citation fields.
+11. **Frontend** — only a proposal that actually passes validation (`success === true`) becomes
     the draft auto-opened in the right drawer when a turn ends, so a rejected proposal no longer
     clobbers a good one. `cite_as` / `cite_hint` are added to every response type in
     `src/lib/adk.ts` as **optional** fields, because sessions recorded before this change have
@@ -399,10 +411,14 @@ function_response is None` (`flows/llm_flows/functions.py`), so a truthy return 
   findings and its drafts, and labelled each citation in its own prose ("Suspicious Message
   (YouTube video): [^…] / Extracted Claims from Video: [^…] / Research Findings: [^…]"). It also
   produced the same-turn failure that cancellation now rejects.
-- Still open: a re-run on the same article, checking that no `[SYSTEM: …]` note ever reaches a
-  sub-agent, that a same-turn citation is cancelled and the next turn's retry resolves, and that
-  no proofreader returns the 「我沒有收到完整的內容」 refusal. This mechanism is being iterated
-  trace-first: `01d4bc4f` replaced the first shape, `65a3975e` added cancellation.
+- Trace `cdfa394f` confirmed the turn rule held — no same-turn citation at all — and exposed the
+  body-extraction bug instead: 21 proofreader calls cancelled against one verifier report that
+  arrived under `result` rather than `content`.
+- Still open: a re-run checking that a fallback-shape verifier report is now citable, that no
+  proofreader returns the 「我沒有收到完整的內容」 refusal, and that a cancellation (if one happens
+  at all) is followed by a corrected retry rather than the same request again. This mechanism is
+  being iterated trace-first: `01d4bc4f` replaced the first shape, `65a3975e` added cancellation,
+  `cdfa394f` replaced the per-tool body extractor with a key chain.
 
 ## More Information
 

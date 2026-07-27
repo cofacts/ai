@@ -246,6 +246,90 @@ class TestResolveCitations:
         )
         assert "1. 影片宣稱…\n2. 逐字稿…" in args["request"]
 
+    def test_a_verifier_report_in_the_fallback_shape_is_citable(self):
+        # Regression, trace cdfa394f: when Gemini omits grounding metadata the
+        # verifier's after-model callback leaves the raw text alone, so the
+        # report arrives under `result` instead of `content` (the
+        # AdkFallbackResp shape documented in src/lib/adk.ts). Reading only
+        # `content` made a complete verification report uncitable, and the
+        # writer had no way out -- it kept re-citing an id that could never
+        # resolve.
+        events = [
+            make_fn_response_event(
+                AI_VERIFIER_NAME,
+                VERIFIER_CALL,
+                {"result": "以下為您提供 YouTube 影片的詳細內容報告：…"},
+            )
+        ]
+        args = {"request": f"依據 [^{AI_VERIFIER_NAME}-{VERIFIER_CALL}] 評估"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is None
+        assert "以下為您提供 YouTube 影片的詳細內容報告：…" in args["request"]
+
+    def test_an_investigator_report_in_the_fallback_shape_is_citable(self):
+        events = [
+            make_fn_response_event(
+                AI_INVESTIGATOR_NAME, SEARCH_CALL, {"result": "搜尋結果摘要"}
+            )
+        ]
+        args = {"request": f"[^{AI_INVESTIGATOR_NAME}-{SEARCH_CALL}]"}
+        result = resolve_citations(
+            make_tool(AI_VERIFIER_NAME), args, make_tool_context(events)
+        )
+        assert result is None
+        assert "搜尋結果摘要" in args["request"]
+
+    def test_a_blank_body_is_not_citable_so_the_call_is_cancelled(self):
+        events = [
+            make_fn_response_event(
+                AI_VERIFIER_NAME, VERIFIER_CALL, {"content": "   \n"}
+            )
+        ]
+        args = {"request": f"[^{AI_VERIFIER_NAME}-{VERIFIER_CALL}]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is not None
+
+    def test_an_article_with_no_text_never_falls_back_to_dumping_the_payload(self):
+        # The payload carries other people's fact-check verdicts and reply
+        # counts; a proofreader must not be primed with those, so a missing
+        # `article.text` cancels the call rather than quoting the JSON.
+        events = [
+            make_fn_response_event(
+                ARTICLE_TOOL,
+                ARTICLE_CALL,
+                {"article_id": "abc", "article": {"factCheckCount": 3}},
+            )
+        ]
+        args = {"request": f"[^{ARTICLE_TOOL}-{ARTICLE_CALL}]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is not None
+        assert "factCheckCount" not in json.dumps(result, ensure_ascii=False)
+
+    def test_the_json_fallback_leaves_out_our_own_citation_fields(self):
+        events = [
+            make_fn_response_event(
+                "search_cofacts_database",
+                SEARCH_CALL,
+                {
+                    "data": [{"id": "a1"}],
+                    "cite_as": f"[^search_cofacts_database-{SEARCH_CALL}]",
+                    "cite_hint": "To let a sub-agent read this result…",
+                },
+            )
+        ]
+        args = {"request": f"[^search_cofacts_database-{SEARCH_CALL}]"}
+        resolve_citations(
+            make_tool(AI_INVESTIGATOR_NAME), args, make_tool_context(events)
+        )
+        assert '{"data": [{"id": "a1"}]}' in args["request"]
+        assert "cite_hint" not in args["request"]
+
     def test_proofreader_feedback_is_citable(self):
         events = [
             make_fn_response_event(

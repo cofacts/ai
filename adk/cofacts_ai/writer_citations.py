@@ -74,27 +74,48 @@ _CITATION_RE = re.compile(r"\[\^([A-Za-z0-9_.-]+)\]")
 _BODY_FROM_CALL = frozenset({_DRAFT_TOOL_NAME})
 
 
-def _article_text(response: dict) -> Any:
-    # Only the message text. The rest of the payload -- existing fact-check
-    # responses, reply counts, popularity -- would prime a proofreader with
-    # other people's verdicts on the very thing we are asking it to judge.
-    return (response.get("article") or {}).get("text")
+# Response keys that can carry a tool result's prose, in priority order.
+#
+# Deliberately a chain rather than one key per tool: the SAME sub-agent returns
+# either shape. `ai_investigator`/`ai_verifier` normally return
+# {content, sources}, but whenever Gemini omits grounding metadata their
+# after-model callback leaves the raw text alone and it arrives as ADK's
+# {result: ...} wrapping instead (the `AdkFallbackResp` documented in
+# src/lib/adk.ts). Keying on the tool name made a complete verification report
+# uncitable for exactly that reason -- see trace cdfa394f. Proofreaders always
+# use `result`.
+_BODY_KEYS = ("content", "result")
+
+# Never part of the quoted body: our own citation bookkeeping.
+_CITATION_FIELDS = ("cite_as", "cite_hint")
 
 
-def _grounded_content(response: dict) -> Any:
-    return response.get("content")
-
-
-def _plain_result(response: dict) -> Any:
-    return response.get("result")
-
-
-_BODY_EXTRACTORS = {
-    _ARTICLE_TOOL_NAME: _article_text,
-    AI_INVESTIGATOR_NAME: _grounded_content,
-    AI_VERIFIER_NAME: _grounded_content,
-    **{name: _plain_result for name in AI_PROOFREADER_NAMES},
-}
+def _response_body(tool_name: Optional[str], response: dict) -> Any:
+    """The text of a tool result, as a sub-agent should read it."""
+    if tool_name == _ARTICLE_TOOL_NAME:
+        # Only the message text, and no JSON fallback if it is missing: the rest
+        # of the payload -- existing fact-check responses, reply counts,
+        # popularity -- would prime a proofreader with other people's verdicts
+        # on the very thing we are asking it to judge.
+        return (response.get("article") or {}).get("text")
+    carries_prose = False
+    for key in _BODY_KEYS:
+        if key in response:
+            carries_prose = True
+            value = response[key]
+            if isinstance(value, str) and value.strip():
+                return value
+    if carries_prose:
+        # A prose-carrying tool that came back blank. Quoting the empty envelope
+        # would look like content; leaving it uncitable cancels the call and
+        # tells the writer to re-run the tool, which is the real fix.
+        return None
+    # Some other tool's structured payload. Quoting it whole beats refusing to
+    # resolve a citation the writer was handed an id for.
+    return json.dumps(
+        {k: v for k, v in response.items() if k not in _CITATION_FIELDS},
+        ensure_ascii=False,
+    )
 
 
 # Cap on the call-id part of a citation id. Gemini supplies its own short
@@ -208,12 +229,7 @@ def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
             response = fr.response
             if not isinstance(response, dict) or "error" in response:
                 continue
-            extract = _BODY_EXTRACTORS.get(fr.name)
-            text = (
-                extract(response)
-                if extract
-                else json.dumps(response, ensure_ascii=False)
-            )
+            text = _response_body(fr.name, response)
             if text:
                 blocks[cite_id] = text if isinstance(text, str) else str(text)
     return _CitableIndex(blocks, called, responded)
@@ -273,7 +289,8 @@ def resolve_citations(
                 f"[SYSTEM] {tool.name} was NOT called, because "
                 f"{'a citation' if len(problems) == 1 else 'some citations'} in your "
                 f"`request` could not be resolved: " + " | ".join(problems) + " "
-                "Fix the citation(s) and call it again."
+                "Change the citation(s) first -- re-sending this same request "
+                "will be cancelled again."
             ),
         }
 
