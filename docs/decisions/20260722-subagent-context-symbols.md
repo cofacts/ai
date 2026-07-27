@@ -31,7 +31,8 @@ near-constant "1 full + 3 placeholders" shape.
 
 Scope: the ADK agent contract and orchestration — the `request` argument of every
 `AgentTool`-wrapped sub-agent (`ai_investigator`, `ai_verifier`, the four `ai_proofreader_*`),
-callbacks in `adk/cofacts_ai/agent.py`, the `draft_factcheck_response` contract in `tools.py` —
+callbacks in `adk/cofacts_ai/agent.py` and the new `writer_symbols.py`, the
+`draft_factcheck_response` contract in `tools.py` —
 plus the frontend that renders draft proposals (`src/lib/chatCache.ts`, `RightDrawer.tsx`).
 Driving issue: [cofacts/ai#117](https://github.com/cofacts/ai/issues/117); implemented in
 [cofacts/ai#119](https://github.com/cofacts/ai/pull/119).
@@ -158,7 +159,8 @@ The other options were rejected, or kept in a smaller role:
 
 As shipped in PR #119:
 
-1. **`expand_writer_symbols`, a `before_tool_callback` on `ai_writer`.** For calls to the six
+1. **`expand_writer_symbols`, a `before_tool_callback` on `ai_writer`** (in its own module,
+   `adk/cofacts_ai/writer_symbols.py`, following `media_filedata.py`). For calls to the six
    `AgentTool` sub-agents it rewrites `args['request']` in place and returns `None` so the call
    proceeds: `[[message]]` / `[[message:<articleId>]]` → the article text from the writer's own
    `get_single_cofacts_article` function-**response**; `[[draft]]` / `[[draft:vN]]` → the `text`
@@ -243,7 +245,7 @@ As shipped in PR #119:
 
 ## Confirmation
 
-- Unit tests in `adk/cofacts_ai/tests/test_writer_callbacks.py` cover `expand_writer_symbols`:
+- Unit tests in `adk/cofacts_ai/tests/test_writer_symbols.py` cover `expand_writer_symbols`:
   latest-draft and `[[draft:vN]]` selection (asserting `v1` is the _first_ proposal), a
   gate-rejected proposal still resolving, `[[message]]` from the article response, multi-article
   resolution (bare = most recent, `[[message:<id>]]` addressing a specific one, a re-fetch
