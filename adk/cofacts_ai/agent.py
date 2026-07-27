@@ -814,18 +814,18 @@ ai_writer = LlmAgent(
     it leaves them with nothing to work from.
 
     Instead, **cite the tool result you want them to read**. When a tool result comes back with a
-    `cite_as` field such as `[^{AI_VERIFIER_NAME}-ab12cd]`, writing that exact string anywhere in a
+    `cite_as` field such as `[^{AI_VERIFIER_NAME}-ygxikp2o]`, writing that exact string anywhere in a
     sub-agent's `request` makes the full text of that result appear at the top of the request, inside
     a block tagged with the same id:
 
     ```
-    <{AI_VERIFIER_NAME}-ab12cd>
+    <{AI_VERIFIER_NAME}-ygxikp2o>
     ...the verifier's full report, verbatim...
-    </{AI_VERIFIER_NAME}-ab12cd>
+    </{AI_VERIFIER_NAME}-ygxikp2o>
 
     ---
 
-    ...your request, still containing [^{AI_VERIFIER_NAME}-ab12cd] where you wrote it...
+    ...your request, still containing [^{AI_VERIFIER_NAME}-ygxikp2o] where you wrote it...
     ```
 
     Rules that follow from this:

@@ -97,23 +97,33 @@ _BODY_EXTRACTORS = {
 }
 
 
+# Cap on the call-id part of a citation id. Gemini supplies its own short
+# function-call ids (8 characters, e.g. `ygxikp2o`), which pass through whole.
+# The cap is for the other case: when the model supplies no id, ADK generates
+# `adk-<uuid4>` (`populate_client_function_call_id`), and a 32-hex-digit tail
+# would be 40 characters for the writer to copy without a mistake.
+_MAX_CALL_ID_CHARS = 8
+
+
 def _citation_id(
     tool_name: Optional[str], function_call_id: Optional[str]
 ) -> Optional[str]:
-    """The footnote id for one tool call, e.g. `verifier-ab12cd`.
+    """The footnote id for one tool call, e.g. `verifier-ygxikp2o`.
 
     Derived from the call id so that the call and its response -- which share
     that id -- address the same citation, and so that two calls issued in
     parallel cannot collide (counting them would).
 
-    The tool name is kept in front on purpose: a bare uuid tells the writer
-    nothing about what it points at, and citing the wrong id would resolve
-    *successfully* to the wrong content, which is far worse than not resolving.
+    The tool name is kept in front on purpose: an id on its own tells the
+    writer nothing about what it points at, and citing the wrong id would
+    resolve *successfully* to the wrong content, which is far worse than not
+    resolving. The `adk-` prefix is dropped and punctuation removed for the
+    same reason -- what is left is the part that actually distinguishes calls.
     """
     if not tool_name or not function_call_id:
         return None
     suffix = "".join(c for c in function_call_id.removeprefix("adk-") if c.isalnum())
-    return f"{tool_name}-{suffix[:6]}" if suffix else None
+    return f"{tool_name}-{suffix[:_MAX_CALL_ID_CHARS]}" if suffix else None
 
 
 def attach_citation(

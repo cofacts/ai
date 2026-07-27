@@ -67,7 +67,7 @@ before-model callbacks in `adk/cofacts_ai/media_filedata.py` and `agent.py`.
 
 Each `AgentTool` call is a **fresh, stateless, single-message session** — a sub-agent sees only
 that call's `request` string. So every tool result is stamped with a footnote id (`cite_as`, e.g.
-`[^verifier-ab12cd]`), and writing that id in a sub-agent's `request` hoists the result's full
+`[^verifier-ygxikp2o]`), and writing that id in a sub-agent's `request` hoists the result's full
 text to the top of the request as a block tagged with the same id — both halves in
 `adk/cofacts_ai/writer_citations.py`, one in an after-tool callback and one in a before-tool
 callback.

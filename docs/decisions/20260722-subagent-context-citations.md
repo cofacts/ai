@@ -91,9 +91,10 @@ nothing ever shipped to production.
   four proofreaders correctly refused via the report-back protocol. The safety net worked, but it
   fired after four sub-agent calls. Analysis: this is #117's original instinct — de-duplicating
   across siblings — and it is the one thing citations cannot serve, so it has to be _rejected_,
-  not merely reported downstream. (Incidental finding: Gemini supplies its own call ids here, so
-  they are base36-ish rather than `adk-<uuid4>` hex. Minting and resolution derive from the same
-  field, so both shapes work.)
+  not merely reported downstream. (Incidental finding: Gemini supplies its own call ids here — 8
+  base36-ish characters, not the `adk-<uuid4>` ADK generates only when the model omits one. Both
+  halves derive from the same field so either shape works, but the id-length cap was written for
+  the uuid case and had been discarding two characters of every real id; it is now 8.)
 
 ## Decision Drivers
 
@@ -218,13 +219,19 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
 `media_filedata.py`) — minting and resolution live together so the two halves cannot drift:
 
 1. **`attach_citation`, called from `after_tool` for every tool.** It stamps the response with
-   `cite_as` (the exact string to type, e.g. `[^verifier-ab12cd]`) and a one-line `cite_hint`.
-   The id is `f"{tool.name}-{first 6 alphanumerics of the call id}"` — **one formula, no per-tool
-   branching**. Three properties fall out of deriving it from the call id: calls issued in
-   parallel cannot collide (counting them would); the call and its response share the id, so a
-   citation can resolve to content on either side; and the tool name in front keeps it legible,
-   which matters because citing the wrong id resolves _successfully_ to the wrong content — a
-   silent failure, worse than not resolving. Error payloads are not stamped.
+   `cite_as` (the exact string to type, e.g. `[^verifier-ygxikp2o]`) and a one-line `cite_hint`.
+   The id is the tool name plus the call id, with the `adk-` prefix and any punctuation dropped and
+   the remainder capped at 8 characters — **one formula, no per-tool branching**. Three properties
+   fall out of deriving it from the call id: calls issued in parallel cannot collide (counting them
+   would); the call and its response share the id, so a citation can resolve to content on either
+   side; and the tool name in front keeps it legible, which matters because citing the wrong id
+   resolves _successfully_ to the wrong content — a silent failure, worse than not resolving.
+   Error payloads are not stamped.
+
+   Gemini issues its own 8-character call ids, which the cap therefore keeps whole. It exists for
+   ADK's fallback: when the model supplies no id, `populate_client_function_call_id` generates
+   `adk-<uuid4>`, and asking the writer to copy 40 characters invites exactly the mistakes the
+   `[SYSTEM: …]` path used to report.
 
    The id has to travel **inside the payload**: ADK strips its own `adk-…` ids from the history it
    sends to the model (`flows/llm_flows/contents.py`), so this is the writer's only chance to
@@ -242,7 +249,7 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
    which yields 原文 → 查證 → 草稿 in the normal flow without any type-ranking rule, and a result
    cited twice produces one block.
 
-3. **The citation id is the block's tag name** — `<verifier-ab12cd>…</verifier-ab12cd>`, no `ref`
+3. **The citation id is the block's tag name** — `<verifier-ygxikp2o>…</verifier-ygxikp2o>`, no `ref`
    attribute and no per-tool tag vocabulary to maintain. The marker and both delimiters are the
    same string, which is the strongest join available, and it makes the closing delimiter
    unguessable, so untrusted message text cannot break out of its own block (it is escaped as
