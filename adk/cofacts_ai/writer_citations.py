@@ -90,34 +90,6 @@ _BODY_KEYS = ("content", "result")
 _CITATION_FIELDS = ("cite_as", "cite_hint")
 
 
-def _response_body(tool_name: Optional[str], response: dict) -> Any:
-    """The text of a tool result, as a sub-agent should read it."""
-    if tool_name == _ARTICLE_TOOL_NAME:
-        # Only the message text, and no JSON fallback if it is missing: the rest
-        # of the payload -- existing fact-check responses, reply counts,
-        # popularity -- would prime a proofreader with other people's verdicts
-        # on the very thing we are asking it to judge.
-        return (response.get("article") or {}).get("text")
-    carries_prose = False
-    for key in _BODY_KEYS:
-        if key in response:
-            carries_prose = True
-            value = response[key]
-            if isinstance(value, str) and value.strip():
-                return value
-    if carries_prose:
-        # A prose-carrying tool that came back blank. Quoting the empty envelope
-        # would look like content; leaving it uncitable cancels the call and
-        # tells the writer to re-run the tool, which is the real fix.
-        return None
-    # Some other tool's structured payload. Quoting it whole beats refusing to
-    # resolve a citation the writer was handed an id for.
-    return json.dumps(
-        {k: v for k, v in response.items() if k not in _CITATION_FIELDS},
-        ensure_ascii=False,
-    )
-
-
 # Cap on the call-id part of a citation id. Gemini supplies its own short
 # function-call ids (8 characters, e.g. `ygxikp2o`), which pass through whole.
 # The cap is for the other case: when the model supplies no id, ADK generates
@@ -229,9 +201,35 @@ def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
             response = fr.response
             if not isinstance(response, dict) or "error" in response:
                 continue
-            text = _response_body(fr.name, response)
-            if text:
-                blocks[cite_id] = text if isinstance(text, str) else str(text)
+
+            if fr.name == _ARTICLE_TOOL_NAME:
+                # Only the message text, and no JSON fallback if it is missing:
+                # the rest of the payload -- existing fact-check responses, reply
+                # counts, popularity -- would prime a proofreader with other
+                # people's verdicts on the very thing we ask it to judge.
+                article_text = (response.get("article") or {}).get("text")
+                if isinstance(article_text, str) and article_text.strip():
+                    blocks[cite_id] = article_text
+                continue
+
+            for key in _BODY_KEYS:
+                value = response.get(key)
+                if isinstance(value, str) and value.strip():
+                    blocks[cite_id] = value
+                    break
+            else:
+                if any(key in response for key in _BODY_KEYS):
+                    # A prose-carrying tool that came back blank. Quoting the
+                    # empty envelope would look like content; leaving it
+                    # uncitable cancels the call and tells the writer to re-run
+                    # the tool, which is the real fix.
+                    continue
+                # Some other tool's structured payload. Quoting it whole beats
+                # refusing to resolve an id we handed out ourselves.
+                blocks[cite_id] = json.dumps(
+                    {k: v for k, v in response.items() if k not in _CITATION_FIELDS},
+                    ensure_ascii=False,
+                )
     return _CitableIndex(blocks, called, responded)
 
 
