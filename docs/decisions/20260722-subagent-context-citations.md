@@ -366,6 +366,13 @@ function_response is None` (`flows/llm_flows/functions.py`), so a truthy return 
   deliberately paired, and report-back must not be dropped as redundant.
 - Bad, because cancellation depends on ADK's "run the tool only if the callback returned nothing"
   contract. It is stable and documented, but it is load-bearing here rather than incidental.
+- Bad, because making the tag the id means the id reaches human-visible text. Sub-agents quote it
+  back as if it were an attribution — 「這份由 `verifier-89c09ud8` 提供的影片內容清單…」 in trace
+  `ff56919c` — and proofreader feedback is rendered in the right drawer. No draft has carried one
+  into a reply so far. Deliberately **not** fixed by prompting sub-agents to hide the id: the
+  citations are meant to become real citations in the UI, rendered and click-through to the tool
+  call they name, and at that point an id in the text is a rendering concern rather than a leak.
+  Deferred to that follow-up.
 - Bad, because there is no automatic "latest" any more: citing an older draft after producing a
   newer one is possible, and it resolves silently. Recency is the mitigation — the fresh
   `cite_as` is the last thing the writer reads before the proofreader fan-out — plus an explicit
