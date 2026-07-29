@@ -31,6 +31,7 @@ from cofacts_ai.agent_names import (
     AI_VERIFIER_NAME,
 )
 from cofacts_ai.agent import after_tool, handle_writer_tool_error
+from cofacts_ai.writer_citations import _citation_id
 
 
 def make_tool(name: str) -> BaseTool:
@@ -53,9 +54,17 @@ def make_tool_context(function_call_id: Optional[str] = "fc-1") -> CallbackConte
 
 def cited(tool_name: str, payload: dict, function_call_id: str = "fc-1") -> dict:
     """`payload` plus the citation fields after_tool stamps onto every
-    non-error tool result (see writer_citations.attach_citation)."""
-    suffix = "".join(c for c in function_call_id if c.isalnum())[:6]
-    marker = f"[^{tool_name}-{suffix}]"
+    non-error tool result (see writer_citations.attach_citation).
+
+    The id comes from production's own `_citation_id` on purpose. Re-deriving
+    the formula here once looked harmless -- it happened to agree while every
+    fixture id was short enough -- but it had already drifted from the `adk-`
+    stripping and the 8-character cap, so a longer id would have built a wrong
+    expectation rather than caught one. The formula itself is pinned by literal
+    assertions in test_writer_citations.py; these tests only need to agree with
+    it.
+    """
+    marker = f"[^{_citation_id(tool_name, function_call_id)}]"
     return {
         **payload,
         "cite_as": marker,
@@ -358,6 +367,31 @@ class TestAfterToolDispatch:
             "search_cofacts_database", {"result": '{"content": "x"}'}
         )
         cast(AsyncMock, tool_context.save_artifact).assert_not_awaited()
+
+    async def test_an_adk_generated_call_id_is_stamped_through_after_tool(self):
+        # The case the fixtures never reached: ADK's fallback id, which is long
+        # enough to be capped and carries the `adk-` prefix.
+        call_id = "adk-3f2a1b4c-9d8e-4f7a-b6c5-1e2d3f4a5b6c"
+        result = await after_tool(
+            tool=make_tool(AI_VERIFIER_NAME),
+            args={},
+            tool_context=make_tool_context(function_call_id=call_id),
+            tool_response=json.dumps({"content": "c", "sources": []}),
+        )
+        marker = f"[^{AI_VERIFIER_NAME}-3f2a1b4c]"
+        assert result == {
+            "content": "c",
+            "sources": [],
+            "cite_as": marker,
+            "cite_hint": (
+                f"To let a sub-agent read this result in full, write {marker} in its `request`."
+            ),
+        }
+        # ...and the helper agrees with production on that id, which is the
+        # whole point of covering this shape.
+        assert result == cited(
+            AI_VERIFIER_NAME, {"content": "c", "sources": []}, call_id
+        )
 
     async def test_a_blank_non_subagent_response_is_not_a_timeout(self):
         # The retry-hint table is also the gate for who gets empty-response
