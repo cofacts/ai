@@ -67,15 +67,24 @@ def cited(tool_name: str, payload: dict, function_call_id: str = "fc-1") -> dict
 
 # Timeout errors are deliberately NOT stamped -- these dicts are compared whole,
 # so an accidental citation on an error payload fails these tests.
-INVESTIGATOR_TIMEOUT_ERROR = {
-    "error": "timeout",
-    "message": f"[SYSTEM] {AI_INVESTIGATOR_NAME.capitalize()} returned empty. Possibly timeout. Retry with simpler/fewer queries.",
-}
+def timeout_error(tool_name: str, retry_hint: str) -> dict:
+    """One template for all six sub-agents; only the retry advice differs."""
+    return {
+        "error": "timeout",
+        "message": (
+            f"[SYSTEM] {tool_name} returned empty. "
+            f"Possibly a dropped call or timeout. {retry_hint}"
+        ),
+    }
 
-VERIFIER_TIMEOUT_ERROR = {
-    "error": "timeout",
-    "message": f"[SYSTEM] {AI_VERIFIER_NAME.capitalize()} returned empty. Possibly timeout. Retry with fewer URLs or claims.",
-}
+
+INVESTIGATOR_TIMEOUT_ERROR = timeout_error(
+    AI_INVESTIGATOR_NAME, "Retry with simpler/fewer queries."
+)
+
+VERIFIER_TIMEOUT_ERROR = timeout_error(
+    AI_VERIFIER_NAME, "Retry with fewer URLs or claims."
+)
 
 
 class TestAfterToolInvestigator:
@@ -268,10 +277,7 @@ class TestAfterToolProofreader:
                 tool_context=make_tool_context(),
                 tool_response="",
             )
-            assert result == {
-                "error": "timeout",
-                "message": f"[SYSTEM] {name} returned empty. Possibly a dropped call or timeout. Retry this proofreader.",
-            }
+            assert result == timeout_error(name, "Retry this proofreader.")
 
     async def test_whitespace_only_returns_timeout_error(self):
         result = await after_tool(
@@ -280,10 +286,9 @@ class TestAfterToolProofreader:
             tool_context=make_tool_context(),
             tool_response="  \n\t",
         )
-        assert result == {
-            "error": "timeout",
-            "message": f"[SYSTEM] {AI_PROOFREADER_KMT_NAME} returned empty. Possibly a dropped call or timeout. Retry this proofreader.",
-        }
+        assert result == timeout_error(
+            AI_PROOFREADER_KMT_NAME, "Retry this proofreader."
+        )
 
     async def test_none_returns_timeout_error(self):
         result = await after_tool(
@@ -292,10 +297,9 @@ class TestAfterToolProofreader:
             tool_context=make_tool_context(),
             tool_response=None,
         )
-        assert result == {
-            "error": "timeout",
-            "message": f"[SYSTEM] {AI_PROOFREADER_KMT_NAME} returned empty. Possibly a dropped call or timeout. Retry this proofreader.",
-        }
+        assert result == timeout_error(
+            AI_PROOFREADER_KMT_NAME, "Retry this proofreader."
+        )
 
     async def test_nonempty_plain_text_kept_whole_without_json_parsing(self):
         # Proofreaders return plain prose, not JSON -- must not be run through
@@ -354,6 +358,19 @@ class TestAfterToolDispatch:
             "search_cofacts_database", {"result": '{"content": "x"}'}
         )
         cast(AsyncMock, tool_context.save_artifact).assert_not_awaited()
+
+    async def test_a_blank_non_subagent_response_is_not_a_timeout(self):
+        # The retry-hint table is also the gate for who gets empty-response
+        # protection: only the six AgentTool sub-agents, whose empty output
+        # means a dropped call. A plain function tool returning "" is its own
+        # business.
+        result = await after_tool(
+            tool=make_tool("search_cofacts_database"),
+            args={},
+            tool_context=make_tool_context(),
+            tool_response="",
+        )
+        assert result == cited("search_cofacts_database", {"result": ""})
 
     async def test_a_dict_returning_tool_keeps_its_own_shape(self):
         result = await after_tool(

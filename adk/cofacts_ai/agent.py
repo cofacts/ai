@@ -656,81 +656,87 @@ async def after_tool(
     writer_citations.
     """
     normalized = await _normalized_response(tool, tool_context, tool_response)
-    return attach_citation(tool, normalized, tool_context)
+    # `is None` rather than a truthiness test: a sub-agent's payload can
+    # legitimately deserialize to something falsy, and only None means
+    # "unchanged" here.
+    return attach_citation(
+        tool, tool_response if normalized is None else normalized, tool_context
+    )
+
+
+# Empty output from an AgentTool sub-agent is a dropped call or a server-side
+# timeout -- probabilistic, so the only useful reply is "retry", with advice
+# specific to what that agent was doing.
+_EMPTY_RETRY_HINTS = {
+    AI_INVESTIGATOR_NAME: "Retry with simpler/fewer queries.",
+    AI_VERIFIER_NAME: "Retry with fewer URLs or claims.",
+    **{name: "Retry this proofreader." for name in AI_PROOFREADER_NAMES},
+}
 
 
 async def _normalized_response(
     tool: BaseTool,
     tool_context: CallbackContext,
     tool_response: Any,
-) -> Any:
+) -> Optional[Any]:
     """Post-processing for the six AgentTool-wrapped sub-agents.
+
+    Returns None when the response should be used as it came back -- including
+    for proofreaders, which return plain prose that must NOT be run through
+    json.loads, and for every tool that is not one of the six.
 
     investigator/verifier return their {content, sources} payload as a JSON
     string; deserialize it into a dict so the writer LLM receives structured
-    output. Proofreaders return plain text, not JSON -- for those we only
-    check for empty/None and otherwise leave the string alone. This must
-    happen in a callback because these are all AgentTools whose return value
-    we cannot otherwise post-process.
+    output. This must happen in a callback because these are all AgentTools
+    whose return value we cannot otherwise post-process.
 
     For investigator calls, also extracts and strips the `_search_widget_html`
     field that append_grounding_sources embeds in the JSON. The HTML is saved as
     a GCS artifact keyed by the tool-call id so the frontend can fetch and display
     the search-suggestion pills; it must not reach the LLM.
     """
-    if tool.name in AI_PROOFREADER_NAMES:
-        if tool_response is None or (
-            isinstance(tool_response, str) and not tool_response.strip()
-        ):
-            return {
-                "error": "timeout",
-                "message": f"[SYSTEM] {tool.name} returned empty. Possibly a dropped call or timeout. Retry this proofreader.",
-            }
-        return tool_response
-
-    if tool.name not in (AI_INVESTIGATOR_NAME, AI_VERIFIER_NAME):
-        return tool_response
-
-    if tool.name == AI_INVESTIGATOR_NAME:
-        if isinstance(tool_response, str):
-            try:
-                parsed = json.loads(tool_response)
-            except json.JSONDecodeError:
-                parsed = None
-            if isinstance(parsed, dict):
-                html = parsed.pop("_search_widget_html", None)
-                if html and tool_context.function_call_id:
-                    await tool_context.save_artifact(
-                        filename=f"search-widget-{tool_context.function_call_id}.html",
-                        artifact=genai_types.Part(
-                            inline_data=genai_types.Blob(
-                                mime_type="text/html", data=html.encode("utf-8")
-                            )
-                        ),
-                    )
-                return parsed
-        if tool_response is None or (
-            isinstance(tool_response, str) and not tool_response.strip()
-        ):
-            return {
-                "error": "timeout",
-                "message": f"[SYSTEM] {AI_INVESTIGATOR_NAME.capitalize()} returned empty. Possibly timeout. Retry with simpler/fewer queries.",
-            }
-        return tool_response
-
-    if tool_response is None or (
-        isinstance(tool_response, str) and not tool_response.strip()
+    retry_hint = _EMPTY_RETRY_HINTS.get(tool.name)
+    if retry_hint and (
+        tool_response is None
+        or (isinstance(tool_response, str) and not tool_response.strip())
     ):
         return {
             "error": "timeout",
-            "message": f"[SYSTEM] {AI_VERIFIER_NAME.capitalize()} returned empty. Possibly timeout. Retry with fewer URLs or claims.",
+            "message": (
+                f"[SYSTEM] {tool.name} returned empty. "
+                f"Possibly a dropped call or timeout. {retry_hint}"
+            ),
         }
+
     if not isinstance(tool_response, str):
-        return tool_response
-    try:
-        return json.loads(tool_response)
-    except json.JSONDecodeError:
-        return tool_response
+        return None
+
+    if tool.name == AI_INVESTIGATOR_NAME:
+        try:
+            parsed = json.loads(tool_response)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        html = parsed.pop("_search_widget_html", None)
+        if html and tool_context.function_call_id:
+            await tool_context.save_artifact(
+                filename=f"search-widget-{tool_context.function_call_id}.html",
+                artifact=genai_types.Part(
+                    inline_data=genai_types.Blob(
+                        mime_type="text/html", data=html.encode("utf-8")
+                    )
+                ),
+            )
+        return parsed
+
+    if tool.name == AI_VERIFIER_NAME:
+        try:
+            return json.loads(tool_response)
+        except json.JSONDecodeError:
+            return None
+
+    return None
 
 
 def handle_writer_tool_error(

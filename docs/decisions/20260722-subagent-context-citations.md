@@ -400,7 +400,8 @@ function_response is None` (`flows/llm_flows/functions.py`), so a truthy return 
   and an unknown id give their own reasons, every bad id is reported rather than just the first,
   and one bad citation cancels the call even when others resolved.
 - `adk/cofacts_ai/tests/test_writer_callbacks.py` covers the `after_tool` routing: every response
-  shape emerges stamped; timeout errors and a cancelled call emerge unstamped.
+  shape emerges stamped; timeout errors and a cancelled call emerge unstamped; and a blank response
+  from a plain function tool is not mistaken for a dropped sub-agent call.
 - Frontend tests in `src/lib/__tests__/chatCache.test.ts` cover the auto-open gating (a rejected
   proposal never becomes `lastReplyDraftId`, and never clobbers a prior successful one).
 - CI: `ruff format`/`ruff check`/`ty` and pytest for `adk/`; ESLint/Prettier/`tsc` and vitest for
