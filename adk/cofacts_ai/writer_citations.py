@@ -211,11 +211,15 @@ def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
             if not isinstance(response, dict) or "error" in response:
                 continue
             # The id the writer was handed, read back rather than recomputed --
-            # see the docstring. Read liberally, and deliberately NOT checked
-            # against `_CITATION_RE`: that grammar can change just as the id
-            # formula can, and an id stored under an older one is still the exact
-            # string the writer copies out of the payload. Validating against
-            # today's grammar would reintroduce the version coupling this avoids.
+            # see the docstring. `cite_as` stores the whole marker while blocks
+            # are keyed by the bare id, so the wrapper has to come off; the point
+            # is to do that WITHOUT also deciding whether the shape is acceptable.
+            # `_CITATION_RE.fullmatch(...).group(1)` would extract the same id
+            # from a marker written today, but turn one written under any other
+            # grammar into a discard -- and that grammar can change just as the id
+            # formula can, which is the coupling reading `cite_as` back exists to
+            # avoid. So: strip the wrapper if it is there, keep the string either
+            # way.
             #
             # Nothing unsafe can come of honouring it. `attach_citation`
             # overwrites `cite_as` on every payload it stamps, error payloads are
