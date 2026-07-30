@@ -201,6 +201,8 @@ field the OTel attribute set drops:
 ```python
 # LangfuseTracingPlugin.after_model_callback
 um = llm_response.usage_metadata
+if um is None:
+    return  # a streamed partial — Gemini reports usage only at terminal points
 prompt, cached = um.prompt_token_count or 0, um.cached_content_token_count or 0
 get_client().update_current_generation(
     model=<the agent's model id>,                                            # cause 2
@@ -246,12 +248,23 @@ must be split rather than added, or cached tokens get double-counted.
   so `update_current_generation` targets the right observation. If it does not, the fallback is to
   set `langfuse.observation.model` / `langfuse.observation.usage_details` on the current span
   directly. **This must be verified during implementation, not assumed.**
-- Bad, because the root agent runs **streamed**, and if ADK invokes `after_model_callback` once per
-  partial response there, the callback must use only the final aggregated `usage_metadata` — Gemini
-  reports usage cumulatively per chunk, so writing on every call would multiply the count. Today
-  there is no such double counting to undo (the 290 truncated spans are distinct sequential turns:
-  0/96 multi-null traces share an identical `input`), so this is a risk the fix introduces, not one
-  it inherits. Assert the `sum(priced keys) == total` invariant on a streamed turn specifically.
+- Bad, because on the streamed root agent the callback fires **once per chunk**, not once per call.
+  `base_llm_flow.py:1169-1182` invokes `_handle_after_model_callback` inside
+  `async for llm_response in agen`, and in SSE mode that generator yields every partial plus a final
+  aggregated response. The `if um is None: return` guard above is therefore **load-bearing, not
+  defensive**: Gemini reports usage only at terminal points, so `usage_metadata` is `None` on the
+  partials and the guard is what makes the callback fire effectively once. Without it the callback
+  raises `AttributeError` on the first chunk of every streamed turn.
+
+  Note this is _not_ a double-counting risk, contrary to the obvious worry. Two independent reasons:
+  usage is not carried per chunk in the first place, and `update_current_generation` **overwrites**
+  `usage_details` rather than accumulating, so repeated calls are last-write-wins. The residual hazard
+  is the inverse — **clobbering** a good value with an empty one. `StreamingResponseAggregator.close()`
+  (`utils/streaming_utils.py`) returns the aggregated response carrying `self._usage_metadata`, but it
+  can also return `None` when there are no parts, in which case no terminal response is yielded at
+  all. The guard covers that too, by leaving whatever the last usage-bearing response wrote. Assert
+  the `sum(priced keys) == total` invariant on a streamed turn specifically.
+
 - Bad, because it cannot repair history: July stays wrong, and any fix is judged only on data
   ingested after deploy.
 - Neutral, because emitting `output_reasoning` ourselves makes the outcome of the cause-3 upstream
