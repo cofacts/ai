@@ -167,21 +167,24 @@ def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
     without any per-type ranking rule: the article is fetched first, research
     follows, the draft comes last.
 
-    Ids are derived from the stored event rather than read back from the
-    response's own `cite_as`, because `draft_factcheck_response` is cited for the
-    text in its function CALL arguments while `cite_as` is stamped on its
-    RESPONSE: keying on the payload would still need the shared part id to pair
-    the two, so it removes no dependency and adds a step. It also closes the last
-    gap where a sub-agent could smuggle a `cite_as` of its own choosing through
-    the fallback path (`attach_citation` overwrites the field, but only on
-    payloads it stamps).
+    A finished result is keyed by the `cite_as` its own payload carries, read
+    back rather than recomputed, because that string is exactly what the writer
+    was handed and will copy. Recomputing it would desynchronize the moment the
+    id formula changes: a session resumed across such a change would have the
+    writer citing strings that the new formula no longer produces.
 
-    The cost is that changing the id formula desynchronizes it from `cite_as`
-    values already stamped in a live session: the writer copies the old string
-    and it resolves against nothing. Recoverable -- the cancellation message
-    lists the ids that ARE citable -- but a formula change is not free.
+    `called` and `responded`, which exist only for diagnosing a failure, are
+    keyed by the *derived* id instead. They have to be: a call that has not
+    returned yet carries no `cite_as` at all, so the derived id is the only name
+    it has -- and it is necessarily a name the current formula produced, which is
+    also the shape the writer would construct if it tried to cite its own
+    in-flight sibling. The two schemes never need to agree because they cover
+    disjoint populations: payload ids name what came back, derived ids name what
+    has not.
     """
     blocks: dict = {}
+    # Part id -> function_call, so a response can reach its own call arguments.
+    calls: dict = {}
     called: set = set()
     responded: set = set()
     for event in tool_context.session.events:
@@ -191,25 +194,45 @@ def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
         for part in content.parts:
             fc = part.function_call
             if fc:
-                call_id = _citation_id(fc.name, fc.id)
-                if call_id:
-                    called.add(call_id)
-                if fc.name in _BODY_FROM_CALL:
-                    call_text = (fc.args or {}).get("text")
-                    if call_id and call_text and call_id not in blocks:
-                        blocks[call_id] = call_text
+                if fc.id:
+                    calls[fc.id] = fc
+                pending_id = _citation_id(fc.name, fc.id)
+                if pending_id:
+                    called.add(pending_id)
                 continue
 
             fr = part.function_response
             if not fr:
                 continue
-            cite_id = _citation_id(fr.name, fr.id)
-            if cite_id:
-                responded.add(cite_id)
-            if fr.name in _BODY_FROM_CALL or not cite_id or cite_id in blocks:
-                continue
+            derived_id = _citation_id(fr.name, fr.id)
+            if derived_id:
+                responded.add(derived_id)
             response = fr.response
             if not isinstance(response, dict) or "error" in response:
+                continue
+            # The id the writer was handed, matched against the marker grammar so
+            # a payload cannot smuggle an arbitrary string in as a key. Falls back
+            # to the derived id for results predating citations, which the writer
+            # has no way to cite anyway -- it is the draft path that needs the
+            # fallback, when a proposal was stamped but its own response is what
+            # carries the id.
+            stored = response.get("cite_as")
+            stored_match = (
+                _CITATION_RE.fullmatch(stored) if isinstance(stored, str) else None
+            )
+            cite_id = stored_match.group(1) if stored_match else derived_id
+            if not cite_id or cite_id in blocks:
+                continue
+
+            if fr.name in _BODY_FROM_CALL:
+                # The proposal text lives in the CALL arguments, so that a draft
+                # the validation gate REJECTED is still reviewable. Reached from
+                # the response side so a proposal only becomes citable once it
+                # has actually come back, same as everything else.
+                call = calls.get(fr.id)
+                call_text = ((call.args or {}) if call else {}).get("text")
+                if isinstance(call_text, str) and call_text.strip():
+                    blocks[cite_id] = call_text
                 continue
 
             if fr.name == _ARTICLE_TOOL_NAME:

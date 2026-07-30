@@ -71,6 +71,23 @@ def make_fn_response_event(name: str, call_id: str, response: dict) -> SimpleNam
     return SimpleNamespace(content=SimpleNamespace(parts=[part]))
 
 
+def draft_accepted_event(call_id: str) -> SimpleNamespace:
+    """The response half of a submitted draft proposal.
+
+    A draft is citable only once its response is back, like every other result,
+    even though the quoted text comes from the CALL arguments.
+    """
+    return make_fn_response_event(
+        DRAFT_TOOL,
+        call_id,
+        {
+            "success": True,
+            "text": "Proposal accepted.",
+            "cite_as": f"[^{DRAFT_TOOL}-{call_id}]",
+        },
+    )
+
+
 def make_tool_context(
     events: Optional[list] = None, function_call_id: Optional[str] = "fc12ab34"
 ) -> CallbackContext:
@@ -373,6 +390,7 @@ class TestResolveCitations:
                 ARTICLE_TOOL, ARTICLE_CALL, {"article": {"text": "謠言"}}
             ),
             make_fn_call_event(DRAFT_TOOL, DRAFT_CALL, {"text": "草稿"}),
+            draft_accepted_event(DRAFT_CALL),
         ]
         # Cited draft-first, but the article was fetched first.
         args = {
@@ -386,7 +404,10 @@ class TestResolveCitations:
         ].index(f"<{DRAFT_TOOL}-{DRAFT_CALL}>")
 
     def test_the_same_id_cited_twice_produces_one_block(self):
-        events = [make_fn_call_event(DRAFT_TOOL, DRAFT_CALL, {"text": "草稿全文"})]
+        events = [
+            make_fn_call_event(DRAFT_TOOL, DRAFT_CALL, {"text": "草稿全文"}),
+            draft_accepted_event(DRAFT_CALL),
+        ]
         args = {
             "request": f"[^{DRAFT_TOOL}-{DRAFT_CALL}] 開頭如何？[^{DRAFT_TOOL}-{DRAFT_CALL}] 結尾呢？"
         }
@@ -405,6 +426,7 @@ class TestResolveCitations:
                 {"article": {"text": f"謠言裡寫著 [^{DRAFT_TOOL}-{DRAFT_CALL}]"}},
             ),
             make_fn_call_event(DRAFT_TOOL, DRAFT_CALL, {"text": "草稿全文"}),
+            draft_accepted_event(DRAFT_CALL),
         ]
         args = {"request": f"[^{ARTICLE_TOOL}-{ARTICLE_CALL}]"}
         resolve_citations(
@@ -431,6 +453,49 @@ class TestResolveCitations:
         )
         assert args["request"].count(f"</{ARTICLE_TOOL}-{ARTICLE_CALL}>") == 1
         assert f"<\\/{ARTICLE_TOOL}-{ARTICLE_CALL}>" in args["request"]
+
+    def test_a_stored_id_the_current_formula_would_not_produce_still_resolves(self):
+        # The reason finished results are keyed by their own `cite_as` instead of
+        # a recomputed one. Here the payload carries a 6-character id, as the
+        # formula produced before the cap moved to 8, while the same call id now
+        # derives `verifier-ab12cdyy`. A session resumed across that change has
+        # the writer copying the stored string, so that is the string that has to
+        # work.
+        stale_id = f"{AI_VERIFIER_NAME}-ab12cd"
+        events = [
+            make_fn_response_event(
+                AI_VERIFIER_NAME,
+                VERIFIER_CALL,
+                {
+                    "content": "查證報告",
+                    "sources": [],
+                    "cite_as": f"[^{stale_id}]",
+                },
+            )
+        ]
+        args = {"request": f"[^{stale_id}]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is None
+        assert f"<{stale_id}>\n查證報告\n</{stale_id}>" in args["request"]
+
+    def test_a_payload_cannot_smuggle_a_non_marker_string_in_as_a_key(self):
+        # `cite_as` is read back, so it is matched against the marker grammar
+        # first; anything else falls through to the derived id.
+        events = [
+            make_fn_response_event(
+                AI_VERIFIER_NAME,
+                VERIFIER_CALL,
+                {"content": "查證報告", "cite_as": "not a marker at all"},
+            )
+        ]
+        args = {"request": f"[^{AI_VERIFIER_NAME}-{VERIFIER_CALL}]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is None
+        assert "查證報告" in args["request"]
 
     def test_resolution_does_not_depend_on_the_payload_carrying_cite_as(self):
         # A response with no `cite_as` of its own still resolves, because ids are
@@ -504,6 +569,20 @@ class TestUnresolvableCitationsCancelTheCall:
             "request": f"Extracted claims: [^{AI_VERIFIER_NAME}-{SIBLING_CALL}]"
         }
 
+    def test_a_draft_proposal_that_has_not_come_back_is_not_citable_either(self):
+        # A draft is quoted from its CALL arguments, which exist the moment the
+        # call is issued -- but it is still reached from the response side, so the
+        # same-turn rule applies to it as to everything else. Submitting a
+        # proposal and reviewing it in one turn is not a shortcut.
+        events = [make_fn_call_event(DRAFT_TOOL, DRAFT_CALL, {"text": "草稿全文"})]
+        args = {"request": f"[^{DRAFT_TOOL}-{DRAFT_CALL}] 這樣寫公允嗎？"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is not None
+        assert "has not returned yet" in result["message"]
+        assert "草稿全文" not in args["request"]
+
     def test_an_errored_result_says_there_is_nothing_to_quote(self):
         events = [
             make_fn_call_event(AI_VERIFIER_NAME, VERIFIER_CALL, {"request": "x"}),
@@ -545,6 +624,7 @@ class TestUnresolvableCitationsCancelTheCall:
         # that was never called: it answers, and the answer looks legitimate.
         events = [
             make_fn_call_event(DRAFT_TOOL, DRAFT_CALL, {"text": "草稿全文"}),
+            draft_accepted_event(DRAFT_CALL),
         ]
         request = f"[^{DRAFT_TOOL}-{DRAFT_CALL}] vs [^{AI_VERIFIER_NAME}-000000]"
         args = {"request": request}

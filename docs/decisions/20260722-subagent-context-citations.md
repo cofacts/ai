@@ -249,6 +249,17 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
    which yields 原文 → 查證 → 草稿 in the normal flow without any type-ranking rule, and a result
    cited twice produces one block.
 
+   **A finished result is keyed by the `cite_as` in its own payload, read back rather than
+   recomputed** — that string is exactly what the writer was handed and will copy, so recomputing
+   it would break the moment the id formula changes: a session resumed across such a change would
+   have the writer citing strings the new formula no longer produces. (`cite_as` is matched against
+   the marker grammar first, so a payload cannot smuggle in an arbitrary key.) The sets used to
+   _diagnose_ a failure are keyed by the derived id instead, and must be: a call that has not
+   returned carries no `cite_as`, so the derived id is its only name — and it is necessarily the
+   shape the current formula produces, which is also what the writer would construct if it tried to
+   cite an in-flight sibling. The two schemes never have to agree, because they name disjoint
+   things: payload ids name what came back, derived ids name what has not.
+
 3. **The citation id is the block's tag name** — `<verifier-ygxikp2o>…</verifier-ygxikp2o>`, no `ref`
    attribute and no per-tool tag vocabulary to maintain. The marker and both delimiters are the
    same string, which is the strongest join available, and it makes the closing delimiter
@@ -269,7 +280,9 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
    article-specific entry matters: dumping the whole `get_single_cofacts_article` payload would
    hand a proofreader the existing fact-check responses and reply counts — other people's verdicts
    on the very thing we are asking it to judge. `draft_factcheck_response` is the one tool read
-   from its **call** arguments, so a proposal the validation gate **rejected** is still reviewable.
+   from its **call** arguments, so a proposal the validation gate **rejected** is still reviewable;
+   it is still reached from the response side, so a proposal becomes citable only once it has come
+   back, and submitting and reviewing it in one turn is not a shortcut.
 
 5. **An unresolvable citation cancels the call.** `resolve_citations` returns
    `{"error": "unresolved_citation", "message": …}`, and ADK runs a tool only `if
@@ -400,9 +413,10 @@ function_response is None` (`flows/llm_flows/functions.py`), so a truthy return 
   chronological block order regardless of citation order, one block for a doubly-cited id, the
   draft resolving from its **call** args so a gate-rejected proposal still works, a verifier
   report and a proofreader's feedback both citable, a compact-JSON fallback for unlisted tools, an
-  hoisted content never rescanned, a forged closing tag escaped, and resolution not depending on
-  the payload carrying a `cite_as` of its own). One test round-trips `attach_citation` into
-  `resolve_citations` so the two halves cannot silently disagree. A separate class covers cancellation: a same-turn sibling
+  hoisted content never rescanned, a forged closing tag escaped, a stored id the current formula
+  would no longer produce still resolving, a payload unable to smuggle a non-marker string in as a
+  key, and resolution working with no `cite_as` in the payload at all). One test round-trips
+  `attach_citation` into `resolve_citations` so the two halves cannot silently disagree. A separate class covers cancellation: a same-turn sibling
   citation returns the "has not returned yet" error and leaves `args` untouched, an errored result
   and an unknown id give their own reasons, every bad id is reported rather than just the first,
   and one bad citation cancels the call even when others resolved.
