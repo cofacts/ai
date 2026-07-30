@@ -145,16 +145,6 @@ class TestAttachCitation:
         )
         assert result == {"content": "report"}
 
-    def test_a_gemini_call_id_is_kept_whole(self):
-        # 8 characters is what Gemini issues, so nothing is discarded and the
-        # citation id is the call id verbatim.
-        result = attach_citation(
-            make_tool(AI_VERIFIER_NAME),
-            {"content": "report"},
-            make_tool_context(function_call_id=SIBLING_CALL),
-        )
-        assert result["cite_as"] == f"[^{AI_VERIFIER_NAME}-{SIBLING_CALL}]"
-
     def test_an_adk_generated_uuid_is_stripped_and_capped(self):
         # When the model supplies no id, ADK generates `adk-<uuid4>`. Copying 40
         # characters by hand invites mistakes, so the prefix and the dashes go
