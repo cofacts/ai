@@ -150,6 +150,43 @@ was passed through unrecognised, so cache tokens went unpriced and a production 
 cost by **~30%**. It was fixed by adding the spellings to the resolver chain. That precedent matters
 for how we split the work below.
 
+### We are on the official integration path
+
+Nothing above is the consequence of a misconfiguration on our side, and a future reader should not
+start from that assumption. Langfuse's
+[Google ADK guide](https://langfuse.com/integrations/frameworks/google-adk) recommends exactly what
+`adk/instrumentation.py` does — `pip install openinference-instrumentation-google-adk`, then
+`GoogleADKInstrumentor().instrument()` with the three `LANGFUSE_*` env vars. It presents no
+alternative and labels nothing else recommended. The gaps are in that path, not in our use of it.
+
+What differs is the regime it was validated in. The guide's example is a notebook: one agent, one
+run, non-streaming, success measured by "spans appear in the UI". Ours is a long-lived FastAPI
+service running a streamed multi-agent tree where the number that matters is a dollar figure. Three
+consequences follow, and each maps onto a cause above:
+
+- **openinference rewires ADK rather than observing it.** At `instrument()` it does
+  `setattr(base_llm_flow, "tracer", self._tracer)`, monkeypatches `trace_call_llm` and
+  `trace_tool_call`, and neuters the `runners` / `base_agent` / `telemetry.tracing` tracers with a
+  `_PassthroughTracer`. So the `call_llm` span is created by openinference's tracer while ADK's
+  `trace_call_llm` still writes to it through the `span` **parameter** and openinference writes
+  through **`get_current_span()`** — two writers holding two different references to "the span". That
+  is the structural fragility behind cause 2; it does not require anyone to have configured anything
+  wrongly.
+- **A tracer-provider race a notebook cannot have.** `get_fast_api_app()` calls
+  `set_tracer_provider()` itself, and OTel refuses to override an already-set provider — first caller
+  wins. `adk/main.py` therefore instruments _before_ building the app, deliberately and with a
+  comment. The guide never surfaces this hazard because there is no app in a notebook.
+- **Token usage, cost, and `StreamingMode.SSE` are not mentioned in the guide at all.** Cost
+  correctness was never in its scope, which is a sufficient explanation for why a ~2x error could sit
+  in the recommended path unremarked.
+
+One inversion worth recording, because it argues against the tempting "just use ADK's native OTel
+export instead" reaction: ADK's own `trace_call_llm` sets only `gen_ai.usage.input_tokens` and
+`gen_ai.usage.output_tokens` — **no total**. It is openinference's `llm.token_count.total` that made
+`total != input + output` visible and cause 1 discoverable at all. A cleaner native-OTel setup would
+have hidden ~$10.9/month with no signal to find it by. The path we are on is buggy but observable,
+which is the better of the two failure modes.
+
 ## Decision Drivers
 
 - Cost per feature and per user has to be trustworthy in Langfuse, or we cannot see a runaway agent
@@ -185,6 +222,8 @@ for how we split the work below.
   Langfuse lets user-defined models override managed ones, so define `gemini-3-flash-preview` etc.
   with prices for `completion_details.reasoning` and `prompt_details.audio` — the keys the
   instrumentor actually emits.
+- **Drop openinference and export ADK's native OTel spans to Langfuse's OTLP endpoint.** Removes the
+  monkeypatching and the two-writer arrangement behind cause 2 entirely.
 - **Own the mapping in `LangfuseTracingPlugin`,** reading `llm_response.usage_metadata` in an
   `after_model_callback` and overwriting the current generation's model and `usage_details`.
 
@@ -357,6 +396,21 @@ separate Langfuse project — owns most of it.
 - Good, in one narrow role worth keeping: pre-registering a definition for a model id **before**
   deploying it, as a safety net for when the instance's managed model list lags Google.
 
+### Drop openinference for ADK's native OTel export
+
+- Good, because it removes the monkeypatching and the span-parameter-versus-`get_current_span()`
+  split, which is the structural cause of the truncated spans.
+- Good, because ADK sets `gen_ai.request.model` unconditionally, so the model name would never go
+  missing.
+- Bad, because ADK sets only `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` — **no
+  total**, no reasoning, no cached, no tool-use. Cause 1 would become **undetectable**: without
+  `llm.token_count.total` there is nothing to compare against, and ~$10.9/month would go missing with
+  no signal at all. Strictly worse than a visible bug.
+- Bad, because it abandons the officially recommended path, so we would own every future integration
+  question ourselves.
+- Neutral, because it is orthogonal to the chosen fix: our plugin reads `usage_metadata` directly and
+  would keep working under either exporter.
+
 ### Own the mapping in `LangfuseTracingPlugin`
 
 - Good, because it fixes causes 1, 2, 3 and 5 in one place, from authoritative data.
@@ -410,6 +464,9 @@ separate Langfuse project — owns most of it.
     usage keys match price keys _exactly_; buckets are mutually exclusive; `total` is "not a bucket
     itself but spans all buckets and equals their sum"; user-defined models take priority over
     managed ones; cost is computed at ingestion with **no backfill**.
+  - Langfuse's [Google ADK integration guide](https://langfuse.com/integrations/frameworks/google-adk) —
+    the recommended path, which is the one we are on. Note what it does _not_ cover: token usage,
+    cost, and streaming.
   - [langfuse#13571](https://github.com/langfuse/langfuse/issues/13571) (closed by #13572) — the
     prior art for cause 3. Langfuse's `extractGenericGenAiUsageDetails` is an allowlist of key
     spellings, not a generic absorber; canonical OpenInference `prompt_details.cache_read` went
