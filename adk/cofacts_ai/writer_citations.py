@@ -59,12 +59,15 @@ _CITING_TOOL_NAMES = (
     *AI_PROOFREADER_NAMES,
 )
 
-# GitHub-flavored-markdown footnote markers. The bracket-caret form reads as a
-# citation rather than a placeholder, which is what this mechanism actually
-# does -- and unlike a curly-brace syntax it cannot collide with ADK's own
-# instruction templating (`inject_session_state` treats any run of `{`/`}` as a
-# state variable and raises KeyError for an unknown one, which would crash
-# while rendering the very instruction that documents the syntax).
+# Markdown's footnote marker, borrowed because that is what these are. Used to
+# pull the bare citation id out of the wrapper in both places one appears: the
+# writer's outgoing `request`, and the `cite_as` stored on a tool response.
+#
+# Keep it about the WRAPPER only -- it deliberately says nothing about what an id
+# looks like inside, no tool-name prefix and no length. That is what lets the id
+# format change without invalidating ids already stored in older sessions, and
+# what makes the two uses equivalent: an id this rejects is one the request scan
+# could never have found either.
 _CITATION_RE = re.compile(r"\[\^([A-Za-z0-9_.-]+)\]")
 
 # Tools whose citable text lives in the function CALL arguments rather than in
@@ -210,24 +213,9 @@ def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
             response = fr.response
             if not isinstance(response, dict) or "error" in response:
                 continue
-            # The id the writer was handed, read back rather than recomputed --
-            # see the docstring. `cite_as` holds the whole marker while blocks are
-            # keyed by the bare id, so the same regex that finds markers in a
-            # request unwraps this one: one definition of the marker shape, rather
-            # than a second copy of `[^` and `]` that would go on stripping the old
-            # wrapper if the shape ever changed.
-            #
-            # Using it as a filter costs nothing, because it is the SAME filter the
-            # request side applies. A `cite_as` this does not match is one the
-            # marker scan could never have found either, so the writer could not
-            # have cited it whatever we keyed it under. Both ends move together by
-            # construction; the grammar only has to stay loose enough to describe
-            # the wrapper and not the id inside it, which is why `_CITATION_RE`
-            # says nothing about the tool-name prefix or the id's length.
-            #
-            # The fallback covers events predating citations. Inert in practice:
-            # the writer was never handed an id for those and cannot see part ids,
-            # so it has nothing to cite them by.
+            # Unwrap the bare id the writer was handed, rather than recomputing it
+            # -- see the docstring. The fallback covers events predating
+            # citations, which the writer has no id for anyway.
             stored = response.get("cite_as")
             unwrapped = (
                 _CITATION_RE.fullmatch(stored.strip())
