@@ -7,6 +7,7 @@ this format is itself a record — the 2026-07-23 entry below.
 
 | Date       | Decision                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------ |
+| 2026-07-30 | [Map Gemini token usage ourselves in the ADK plugin](20260730-langfuse-usage-mapping.md)               |
 | 2026-07-23 | [Use Markdown Any Decision Records (MADR)](20260723-use-markdown-any-decision-records.md)              |
 | 2026-06-06 | [Multimodal media perception on Vertex AI](20260606-multimodal-perception-vertex-ai.md)                |
 | 2026-06-03 | [Propagate the auth token to ADK via header + ContextVar](20260603-auth-token-contextvar.md)           |
@@ -37,7 +38,8 @@ Significant decisions still embedded in PRs and code comments, not yet written u
 
 - **Observability** — Langfuse instrumentation ([#8](https://github.com/cofacts/ai/pull/8)),
   correct session grouping ([#56](https://github.com/cofacts/ai/pull/56)), per-environment
-  traces ([#115](https://github.com/cofacts/ai/pull/115)).
+  traces ([#115](https://github.com/cofacts/ai/pull/115)). Cost attribution on top of these is
+  already recorded — see [`20260730-langfuse-usage-mapping`](20260730-langfuse-usage-mapping.md).
 - **Frontend** — the `parts[]` message model + SSE state machine
   ([#21](https://github.com/cofacts/ai/pull/21)); openapi-fetch + server functions
   ([#18](https://github.com/cofacts/ai/pull/18)).
