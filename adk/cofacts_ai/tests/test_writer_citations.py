@@ -60,13 +60,29 @@ def make_fn_call_event(name: str, call_id: str, args: dict) -> SimpleNamespace:
     return SimpleNamespace(content=SimpleNamespace(parts=[part]))
 
 
-def make_fn_response_event(name: str, call_id: str, response: dict) -> SimpleNamespace:
+def make_fn_response_event(
+    name: str, call_id: str, response: dict, *, stamped: bool = True
+) -> SimpleNamespace:
     """Fake ADK Event bearing one function_response part. ADK gives the
     response the same id as its call, which is what lets one citation id
-    address either side."""
+    address either side.
+
+    The payload is put through the real `attach_citation` by default, exactly as
+    after_tool does in production, so the stored `cite_as` that resolution keys on
+    is there and is derived by the code under test rather than hand-written here.
+    Pass `stamped=False` for a payload today's code could not have produced: one
+    recorded before citations existed, or one carrying an id from an older
+    formula (production always overwrites `cite_as`, so a stale one can only come
+    from an earlier deploy).
+    """
+    payload = dict(response)
+    if stamped:
+        payload = attach_citation(
+            make_tool(name), payload, make_tool_context(function_call_id=call_id)
+        )
     part = SimpleNamespace(
         function_call=None,
-        function_response=SimpleNamespace(name=name, id=call_id, response=response),
+        function_response=SimpleNamespace(name=name, id=call_id, response=payload),
     )
     return SimpleNamespace(content=SimpleNamespace(parts=[part]))
 
@@ -78,13 +94,7 @@ def draft_accepted_event(call_id: str) -> SimpleNamespace:
     even though the quoted text comes from the CALL arguments.
     """
     return make_fn_response_event(
-        DRAFT_TOOL,
-        call_id,
-        {
-            "success": True,
-            "text": "Proposal accepted.",
-            "cite_as": f"[^{DRAFT_TOOL}-{call_id}]",
-        },
+        DRAFT_TOOL, call_id, {"success": True, "text": "Proposal accepted."}
     )
 
 
@@ -332,11 +342,7 @@ class TestResolveCitations:
             make_fn_response_event(
                 "search_cofacts_database",
                 SEARCH_CALL,
-                {
-                    "data": [{"id": "a1"}],
-                    "cite_as": f"[^search_cofacts_database-{SEARCH_CALL}]",
-                    "cite_hint": "To let a sub-agent read this result…",
-                },
+                {"data": [{"id": "a1"}]},
             )
         ]
         args = {"request": f"[^search_cofacts_database-{SEARCH_CALL}]"}
@@ -470,6 +476,7 @@ class TestResolveCitations:
                     "sources": [],
                     "cite_as": f"[^{stale_id}]",
                 },
+                stamped=False,
             )
         ]
         args = {"request": f"[^{stale_id}]"}
@@ -489,6 +496,7 @@ class TestResolveCitations:
                 AI_VERIFIER_NAME,
                 VERIFIER_CALL,
                 {"content": "查證報告", "cite_as": "not a marker at all"},
+                stamped=False,
             )
         ]
         args = {"request": f"[^{AI_VERIFIER_NAME}-{VERIFIER_CALL}]"}
@@ -504,6 +512,7 @@ class TestResolveCitations:
                 AI_VERIFIER_NAME,
                 VERIFIER_CALL,
                 {"content": "查證報告", "cite_as": "   "},
+                stamped=False,
             )
         ]
         args = {"request": f"[^{AI_VERIFIER_NAME}-{VERIFIER_CALL}]"}
@@ -525,6 +534,7 @@ class TestResolveCitations:
                 AI_VERIFIER_NAME,
                 VERIFIER_CALL,
                 {"content": "舊的查證報告", "sources": []},
+                stamped=False,
             )
         ]
         args = {"request": f"[^{AI_VERIFIER_NAME}-{VERIFIER_CALL}]"}
@@ -543,7 +553,9 @@ class TestResolveCitations:
             {"content": "查證結果"},
             make_tool_context(function_call_id=call_id),
         )
-        events = [make_fn_response_event(AI_VERIFIER_NAME, call_id, minted)]
+        events = [
+            make_fn_response_event(AI_VERIFIER_NAME, call_id, minted, stamped=False)
+        ]
         args = {"request": minted["cite_as"]}
         result = resolve_citations(
             make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
