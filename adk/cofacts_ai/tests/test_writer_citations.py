@@ -158,21 +158,6 @@ class TestAttachCitation:
         )
         assert result["cite_as"] == f"[^{AI_VERIFIER_NAME}-3f2a1b4c]"
 
-    def test_parallel_calls_to_the_same_tool_get_distinct_ids(self):
-        # Two verifier calls issued in one turn: counting them would collide,
-        # deriving from the call id cannot.
-        first = attach_citation(
-            make_tool(AI_VERIFIER_NAME),
-            {"content": "a"},
-            make_tool_context(function_call_id="aaaaaa11"),
-        )
-        second = attach_citation(
-            make_tool(AI_VERIFIER_NAME),
-            {"content": "b"},
-            make_tool_context(function_call_id="bbbbbb22"),
-        )
-        assert first["cite_as"] != second["cite_as"]
-
 
 class TestResolveCitations:
     def test_unrelated_tool_name_is_skipped_even_with_a_citation_present(self):
@@ -238,6 +223,42 @@ class TestResolveCitations:
             in (args["request"])
         )
         assert "not verifier-confirmed" not in args["request"]
+
+    def test_two_results_from_the_same_tool_stay_distinct(self):
+        # Where distinct ids actually matter: two verifier reports in one
+        # conversation, both cited, each resolving to its own text. A scheme that
+        # collided -- numbering calls per tool, say -- would quietly serve one
+        # report under both ids, and the writer would never see that it had asked
+        # about the wrong one.
+        events = [
+            make_fn_response_event(
+                AI_VERIFIER_NAME,
+                VERIFIER_CALL,
+                {
+                    "content": "第一份查證報告",
+                    "cite_as": f"[^{AI_VERIFIER_NAME}-{VERIFIER_CALL}]",
+                },
+            ),
+            make_fn_response_event(
+                AI_VERIFIER_NAME,
+                SIBLING_CALL,
+                {
+                    "content": "第二份查證報告",
+                    "cite_as": f"[^{AI_VERIFIER_NAME}-{SIBLING_CALL}]",
+                },
+            ),
+        ]
+        first, second = (
+            f"{AI_VERIFIER_NAME}-{VERIFIER_CALL}",
+            f"{AI_VERIFIER_NAME}-{SIBLING_CALL}",
+        )
+        args = {"request": f"比較 [^{first}] 與 [^{second}]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is None
+        assert f"<{first}>\n第一份查證報告\n</{first}>" in args["request"]
+        assert f"<{second}>\n第二份查證報告\n</{second}>" in args["request"]
 
     def test_verifier_report_is_citable(self):
         events = [
