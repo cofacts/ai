@@ -400,9 +400,9 @@ function_response is None` (`flows/llm_flows/functions.py`), so a truthy return 
   chronological block order regardless of citation order, one block for a doubly-cited id, the
   draft resolving from its **call** args so a gate-rejected proposal still works, a verifier
   report and a proofreader's feedback both citable, a compact-JSON fallback for unlisted tools, an
-  hoisted content never rescanned, a forged closing tag escaped, and a pre-citation-era response
-  still resolving). One test round-trips `attach_citation` into `resolve_citations` so the two
-  halves cannot silently disagree. A separate class covers cancellation: a same-turn sibling
+  hoisted content never rescanned, a forged closing tag escaped, and resolution not depending on
+  the payload carrying a `cite_as` of its own). One test round-trips `attach_citation` into
+  `resolve_citations` so the two halves cannot silently disagree. A separate class covers cancellation: a same-turn sibling
   citation returns the "has not returned yet" error and leaves `args` untouched, an errored result
   and an unknown id give their own reasons, every bad id is reported rather than just the first,
   and one bad citation cancels the call even when others resolved.

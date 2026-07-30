@@ -432,10 +432,13 @@ class TestResolveCitations:
         assert args["request"].count(f"</{ARTICLE_TOOL}-{ARTICLE_CALL}>") == 1
         assert f"<\\/{ARTICLE_TOOL}-{ARTICLE_CALL}>" in args["request"]
 
-    def test_a_result_recorded_before_citations_existed_still_resolves(self):
-        # Backward compatibility: sessions persisted before this change have no
-        # cite_as in the payload. Ids are derived from the event, not read back
-        # from the response, so those results stay citable.
+    def test_resolution_does_not_depend_on_the_payload_carrying_cite_as(self):
+        # A response with no `cite_as` of its own still resolves, because ids are
+        # derived from the stored event. That is what lets the draft path work
+        # (its text is in the CALL args, which never carry cite_as) and closes
+        # the gap where a payload could name its own id. Note it does NOT make
+        # pre-citation sessions usefully citable: the writer was never handed an
+        # id for those and cannot see part ids, so it has nothing to copy.
         events = [
             make_fn_response_event(
                 AI_VERIFIER_NAME,

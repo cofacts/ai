@@ -167,9 +167,19 @@ def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
     without any per-type ranking rule: the article is fetched first, research
     follows, the draft comes last.
 
-    Ids are derived from the stored event, never read back from the response's
-    own `cite_as`. That keeps sessions recorded before citations existed fully
-    resolvable, and means untrusted payload content can never claim an id.
+    Ids are derived from the stored event rather than read back from the
+    response's own `cite_as`, because `draft_factcheck_response` is cited for the
+    text in its function CALL arguments while `cite_as` is stamped on its
+    RESPONSE: keying on the payload would still need the shared part id to pair
+    the two, so it removes no dependency and adds a step. It also closes the last
+    gap where a sub-agent could smuggle a `cite_as` of its own choosing through
+    the fallback path (`attach_citation` overwrites the field, but only on
+    payloads it stamps).
+
+    The cost is that changing the id formula desynchronizes it from `cite_as`
+    values already stamped in a live session: the writer copies the old string
+    and it resolves against nothing. Recoverable -- the cancellation message
+    lists the ids that ARE citable -- but a formula change is not free.
     """
     blocks: dict = {}
     called: set = set()
