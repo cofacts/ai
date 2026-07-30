@@ -210,17 +210,28 @@ def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
             response = fr.response
             if not isinstance(response, dict) or "error" in response:
                 continue
-            # The id the writer was handed, matched against the marker grammar so
-            # a payload cannot smuggle an arbitrary string in as a key. Falls back
-            # to the derived id for results predating citations, which the writer
-            # has no way to cite anyway -- it is the draft path that needs the
-            # fallback, when a proposal was stamped but its own response is what
-            # carries the id.
+            # The id the writer was handed, read back rather than recomputed --
+            # see the docstring. Read liberally, and deliberately NOT checked
+            # against `_CITATION_RE`: that grammar can change just as the id
+            # formula can, and an id stored under an older one is still the exact
+            # string the writer copies out of the payload. Validating against
+            # today's grammar would reintroduce the version coupling this avoids.
+            #
+            # Nothing unsafe can come of honouring it. `attach_citation`
+            # overwrites `cite_as` on every payload it stamps, error payloads are
+            # skipped above, and a block is tagged with the id the writer actually
+            # cited -- which came out of the marker scan, so its character set is
+            # already bounded.
+            #
+            # The fallback covers events predating citations. Inert in practice:
+            # the writer was never handed an id for those and cannot see part ids,
+            # so it has nothing to cite them by.
             stored = response.get("cite_as")
-            stored_match = (
-                _CITATION_RE.fullmatch(stored) if isinstance(stored, str) else None
+            cite_id = (
+                stored.strip().removeprefix("[^").removesuffix("]")
+                if isinstance(stored, str) and stored.strip()
+                else derived_id
             )
-            cite_id = stored_match.group(1) if stored_match else derived_id
             if not cite_id or cite_id in blocks:
                 continue
 

@@ -480,14 +480,31 @@ class TestResolveCitations:
         assert result is None
         assert f"<{stale_id}>\n查證報告\n</{stale_id}>" in args["request"]
 
-    def test_a_payload_cannot_smuggle_a_non_marker_string_in_as_a_key(self):
-        # `cite_as` is read back, so it is matched against the marker grammar
-        # first; anything else falls through to the derived id.
+    def test_a_stored_id_is_honoured_whatever_shape_it_has(self):
+        # `cite_as` is not checked against today's marker grammar -- that grammar
+        # can change too, and the stored string is what the writer copies. Here it
+        # holds a bare id with no `[^...]` wrapper, a shape the current code never
+        # writes; it still keys the block.
         events = [
             make_fn_response_event(
                 AI_VERIFIER_NAME,
                 VERIFIER_CALL,
-                {"content": "查證報告", "cite_as": "not a marker at all"},
+                {"content": "查證報告", "cite_as": "legacy.id"},
+            )
+        ]
+        args = {"request": "[^legacy.id]"}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is None
+        assert "<legacy.id>\n查證報告\n</legacy.id>" in args["request"]
+
+    def test_a_blank_stored_id_falls_back_to_the_derived_one(self):
+        events = [
+            make_fn_response_event(
+                AI_VERIFIER_NAME,
+                VERIFIER_CALL,
+                {"content": "查證報告", "cite_as": "   "},
             )
         ]
         args = {"request": f"[^{AI_VERIFIER_NAME}-{VERIFIER_CALL}]"}

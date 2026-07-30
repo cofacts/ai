@@ -252,8 +252,11 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
    **A finished result is keyed by the `cite_as` in its own payload, read back rather than
    recomputed** — that string is exactly what the writer was handed and will copy, so recomputing
    it would break the moment the id formula changes: a session resumed across such a change would
-   have the writer citing strings the new formula no longer produces. (`cite_as` is matched against
-   the marker grammar first, so a payload cannot smuggle in an arbitrary key.) The sets used to
+   have the writer citing strings the new formula no longer produces. It is read **liberally** and
+   deliberately not validated against the current marker grammar, since that grammar can change for
+   the same reasons the formula can — and nothing unsafe follows from honouring it, because a block
+   is tagged with the id the writer actually cited, which came out of the marker scan and is
+   therefore already bounded. The sets used to
    _diagnose_ a failure are keyed by the derived id instead, and must be: a call that has not
    returned carries no `cite_as`, so the derived id is its only name — and it is necessarily the
    shape the current formula produces, which is also what the writer would construct if it tried to
@@ -414,8 +417,9 @@ function_response is None` (`flows/llm_flows/functions.py`), so a truthy return 
   draft resolving from its **call** args so a gate-rejected proposal still works, a verifier
   report and a proofreader's feedback both citable, a compact-JSON fallback for unlisted tools, an
   hoisted content never rescanned, a forged closing tag escaped, a stored id the current formula
-  would no longer produce still resolving, a payload unable to smuggle a non-marker string in as a
-  key, and resolution working with no `cite_as` in the payload at all). One test round-trips
+  would no longer produce still resolving, a stored id honoured whatever shape it has, a blank one
+  falling back to the derived id, and resolution working with no `cite_as` in the payload at all).
+  One test round-trips
   `attach_citation` into `resolve_citations` so the two halves cannot silently disagree. A separate class covers cancellation: a same-turn sibling
   citation returns the "has not returned yet" error and leaves `args` untouched, an errored result
   and an unknown id give their own reasons, every bad id is reported rather than just the first,
