@@ -309,18 +309,6 @@ class TestResolveCitations:
         assert result is None
         assert "搜尋結果摘要" in args["request"]
 
-    def test_a_blank_body_is_not_citable_so_the_call_is_cancelled(self):
-        events = [
-            make_fn_response_event(
-                AI_VERIFIER_NAME, VERIFIER_CALL, {"content": "   \n"}
-            )
-        ]
-        args = {"request": f"[^{AI_VERIFIER_NAME}-{VERIFIER_CALL}]"}
-        result = resolve_citations(
-            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
-        )
-        assert result is not None
-
     def test_an_article_with_no_text_never_falls_back_to_dumping_the_payload(self):
         # The payload carries other people's fact-check verdicts and reply
         # counts; a proofreader must not be primed with those, so a missing
@@ -610,6 +598,26 @@ class TestUnresolvableCitationsCancelTheCall:
         assert result is not None
         assert "has not returned yet" in result["message"]
         assert "草稿全文" not in args["request"]
+
+    def test_a_result_that_came_back_blank_is_not_quoted_as_an_empty_block(self):
+        # Reaches the same reason as an errored result by a different route: the
+        # payload is well formed and passes the error guard, but its prose key is
+        # whitespace. Quoting the envelope would hand the proofreader something
+        # that looks like content, so the call is cancelled instead.
+        request = f"[^{AI_VERIFIER_NAME}-{VERIFIER_CALL}]"
+        events = [
+            make_fn_response_event(
+                AI_VERIFIER_NAME, VERIFIER_CALL, {"content": "   \n"}
+            )
+        ]
+        args = {"request": request}
+        result = resolve_citations(
+            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
+        )
+        assert result is not None
+        assert result["error"] == "unresolved_citation"
+        assert "had no readable content" in result["message"]
+        assert args == {"request": request}
 
     def test_an_errored_result_says_there_is_nothing_to_quote(self):
         events = [
