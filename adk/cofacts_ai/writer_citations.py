@@ -211,31 +211,30 @@ def _citable_index(tool_context: CallbackContext) -> _CitableIndex:
             if not isinstance(response, dict) or "error" in response:
                 continue
             # The id the writer was handed, read back rather than recomputed --
-            # see the docstring. `cite_as` stores the whole marker while blocks
-            # are keyed by the bare id, so the wrapper has to come off; the point
-            # is to do that WITHOUT also deciding whether the shape is acceptable.
-            # `_CITATION_RE.fullmatch(...).group(1)` would extract the same id
-            # from a marker written today, but turn one written under any other
-            # grammar into a discard -- and that grammar can change just as the id
-            # formula can, which is the coupling reading `cite_as` back exists to
-            # avoid. So: strip the wrapper if it is there, keep the string either
-            # way.
+            # see the docstring. `cite_as` holds the whole marker while blocks are
+            # keyed by the bare id, so the same regex that finds markers in a
+            # request unwraps this one: one definition of the marker shape, rather
+            # than a second copy of `[^` and `]` that would go on stripping the old
+            # wrapper if the shape ever changed.
             #
-            # Nothing unsafe can come of honouring it. `attach_citation`
-            # overwrites `cite_as` on every payload it stamps, error payloads are
-            # skipped above, and a block is tagged with the id the writer actually
-            # cited -- which came out of the marker scan, so its character set is
-            # already bounded.
+            # Using it as a filter costs nothing, because it is the SAME filter the
+            # request side applies. A `cite_as` this does not match is one the
+            # marker scan could never have found either, so the writer could not
+            # have cited it whatever we keyed it under. Both ends move together by
+            # construction; the grammar only has to stay loose enough to describe
+            # the wrapper and not the id inside it, which is why `_CITATION_RE`
+            # says nothing about the tool-name prefix or the id's length.
             #
             # The fallback covers events predating citations. Inert in practice:
             # the writer was never handed an id for those and cannot see part ids,
             # so it has nothing to cite them by.
             stored = response.get("cite_as")
-            cite_id = (
-                stored.strip().removeprefix("[^").removesuffix("]")
-                if isinstance(stored, str) and stored.strip()
-                else derived_id
+            unwrapped = (
+                _CITATION_RE.fullmatch(stored.strip())
+                if isinstance(stored, str)
+                else None
             )
+            cite_id = unwrapped.group(1) if unwrapped else derived_id
             if not cite_id or cite_id in blocks:
                 continue
 
