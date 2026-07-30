@@ -56,9 +56,28 @@ an `openinference-instrumentation-google-adk` upgrade that might silently undo i
   singles out **the one agent whose responses are streamed**. `src/routes/api/run-sse.ts` sends
   `streaming: true`, while `AgentTool` runs sub-agents non-streaming — and no null span carries a
   `gen_ai.response.finish_reasons` at all (against `["stop"]` on 94% of named spans), which is what a
-  partial/streamed response looks like. **Confirming that ADK's streaming path is the trigger still
-  needs the instrumentor source or a live repro** — but the proposed fix does not depend on it, since
-  we set the model name ourselves either way.
+  partial/streamed response looks like.
+
+  Reading the installed sources narrows the mechanism to one specific divergence. openinference
+  patches `base_llm_flow.trace_call_llm` (`openinference/instrumentation/google_adk/__init__.py:76-86`)
+  and its `_TraceCallLlm` wrapper calls the original first (`_wrappers.py:204`), then writes its own
+  attributes to `get_current_span()` (`:207`). ADK's `trace_call_llm`
+  (`google/adk/telemetry/tracing.py:265-347`) instead writes to the `span` **passed to it** by
+  `_call_llm_with_tracing`, and its very first statement is an unconditional
+  `span.set_attribute('gen_ai.system', 'gcp.vertex.agent')`.
+
+  On the writer's `call_llm` spans, the openinference attributes are present and **every** ADK
+  attribute is absent — and absent from the whole trace, not merely relocated. Dumping all 23
+  observations of one affected trace shows each sub-agent `call_llm` carrying both sets, while the
+  writer's three carry only openinference's. Since the wrapper cannot have run without also running
+  ADK's function, the two must be writing to **different span objects**: openinference to the
+  recording `call_llm` span we see, ADK to something that is discarding writes. That also explains the
+  attribute split exactly — the openinference attributes that survive are precisely the ones it sets
+  outside its `if llm_request:` branch (`openinference.span.kind`, `output.mime_type`,
+  `llm.token_count.*`), while `llm.model_name`, `llm.provider` and `input.value` all sit inside it.
+
+  **Pinning the exact line needs a debugger on a live streamed turn, not more log archaeology** — but
+  the proposed fix does not depend on it, since we set the model name ourselves either way.
 
   Ruled out for these spans: **user interruption.** cofacts.ai can abort a response mid-stream
   (`ChatInput` stop → `AbortController` in `src/lib/chatCache.ts` → `request.signal` forwarded to
