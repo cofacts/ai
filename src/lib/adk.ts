@@ -62,12 +62,13 @@ export type ToolSource = { title: string; url: string }
 type AdkFallbackResp = { result: string }
 
 /**
- * A sub-agent call can also come back as a structured failure instead of a
- * result: `after_tool` turns an empty/timed-out sub-agent response into one
- * (`agent.py`), and `resolve_citations` returns one to cancel a call whose
- * citations don't resolve (`writer_citations.py`).
+ * A structured failure returned in place of a result. Ours, not ADK's, unlike
+ * `AdkFallbackResp` above: `after_tool` and `handle_writer_tool_error` build one
+ * from an empty/timed-out/raising sub-agent call (`agent.py`), and
+ * `resolve_citations` returns one to cancel a call whose citations don't resolve
+ * (`writer_citations.py`).
  */
-type AdkToolErrorResp = { error: string; message: string }
+type ToolErrorResp = { error: string; message: string }
 
 /**
  * Citation fields the writer's `after_tool` callback stamps onto every tool
@@ -103,7 +104,7 @@ export type AllTools = {
           sources: Array<ToolSource>
         }
       | AdkFallbackResp
-      | AdkToolErrorResp
+      | ToolErrorResp
   }
   verifier: {
     args: { request?: string }
@@ -115,23 +116,23 @@ export type AllTools = {
     resp:
       | { content: string; sources: Array<ToolSource> }
       | AdkFallbackResp
-      | AdkToolErrorResp
+      | ToolErrorResp
   }
   proofreader_kmt: {
     args: { request?: string }
-    resp: { result: string } | AdkToolErrorResp
+    resp: { result: string } | ToolErrorResp
   }
   proofreader_dpp: {
     args: { request?: string }
-    resp: { result: string } | AdkToolErrorResp
+    resp: { result: string } | ToolErrorResp
   }
   proofreader_tpp: {
     args: { request?: string }
-    resp: { result: string } | AdkToolErrorResp
+    resp: { result: string } | ToolErrorResp
   }
   proofreader_minor_parties: {
     args: { request?: string }
-    resp: { result: string } | AdkToolErrorResp
+    resp: { result: string } | ToolErrorResp
   }
   draft_factcheck_response: {
     args: {
