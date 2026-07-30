@@ -68,6 +68,47 @@ Aggregated, grouping unpriced tokens by `gen_ai.agent.name` localizes cause 1 pr
 **77.6% of July generations have `total != input + output`.** June shows the same shape (85.1%), so
 this is not a one-month artifact.
 
+### Why configuration cannot fix this
+
+The obvious first instinct is that this is a Langfuse pricing-table problem — set the prices up
+correctly and the numbers come right. It is worth writing down why that is false for the two largest
+causes, because it is the question anyone will ask first, and because a plausible-sounding claim
+circulates that `toolUsePromptTokenCount` is "automatically aggregated into the input usage type" by
+Langfuse's SDKs and OTel instrumentation. It is not, and there are three independent reasons:
+
+1. **The number never reaches Langfuse.** The complete attribute set of the `05b367a8` span above is
+   24 attributes; the missing 2,943,390 tokens appear in **none** of them. The only numeric token
+   attributes present are `gen_ai.usage.input_tokens` (1287), `gen_ai.usage.output_tokens` (729),
+   `llm.token_count.prompt` (1287), `llm.token_count.completion` (10692),
+   `llm.token_count.completion_details.reasoning` (9963) and `llm.token_count.total` (2955369). The
+   tool-use count survives only as an arithmetic residue inside `total`. Nothing downstream can
+   aggregate a value it never received.
+2. **The OpenInference vocabulary has no slot for it.** Its
+   [semantic conventions](https://arize-ai.github.io/openinference/spec/semantic_conventions.html)
+   define exactly eight `llm.token_count.*` attributes — `prompt`, `completion`, `total`,
+   `completion_details.reasoning`, `completion_details.audio`, `prompt_details.cache_read`,
+   `prompt_details.cache_write`, `prompt_details.audio`. **There is no tool-use attribute.** So this
+   is not the instrumentor forgetting to emit a field; the vocabulary it targets has nowhere to put
+   one. Fixing this upstream requires a spec change first, then a library change.
+3. **`total` is reserved, so it cannot be priced as a workaround.** Langfuse's docs define it as
+   "not a bucket itself but spans all buckets and equals their sum" — a derived aggregate, not a
+   priceable bucket. Buckets are assumed mutually exclusive with `total == sum(buckets)`, and our
+   spans violate that invariant on 77.6% of generations. A pricing table assigns prices to buckets;
+   it cannot invent a bucket that was never sent.
+
+Two related dead ends, for the record. `usageDetailPattern` in a pricing tier's conditions (e.g.
+`{"operator": "gt", "value": 200000, "usageDetailPattern": "(input|prompt|cached)"}`) selects which
+_already-present_ keys count toward a tier threshold — it does not extract or create usage keys.
+And cause 2 is unreachable by construction: model definitions match by regex against the model name,
+and there is no model name, so no pattern can ever apply.
+
+Langfuse's ingestion is likewise not a generic absorber — it is an allowlist of known key spellings
+(`extractGenericGenAiUsageDetails`). [langfuse#13571](https://github.com/langfuse/langfuse/issues/13571)
+is the same bug shape as our cause 3, on canonical OpenInference names: `prompt_details.cache_read`
+was passed through unrecognised, so cache tokens went unpriced and a production account under-reported
+cost by **~30%**. It was fixed by adding the spellings to the resolver chain. That precedent matters
+for how we split the work below.
+
 ## Decision Drivers
 
 - Cost per feature and per user has to be trustworthy in Langfuse, or we cannot see a runaway agent
@@ -83,29 +124,54 @@ this is not a one-month artifact.
 - Prefer a fix that needs no per-model Langfuse configuration, since model ids churn (four Gemini
   families appeared on this bill in one month) and a config step that must be repeated per model
   will be forgotten.
+- The causes sit at **different layers**, so one blanket answer is wrong. Cause 3 is a Langfuse-side
+  allowlist gap on a name that already exists in the OpenInference spec, with a merged fix precedent.
+  Cause 1 needs a new attribute in the spec before any library can carry it. Cause 2 is a bug in a
+  library we do not control. Only the last two need to be worked around locally.
 
 ## Considered Options
 
-- **Rely on the instrumentor; file the gaps upstream.** Report the missing
-  `toolUsePromptTokenCount` attribute and the truncated spans to
-  [openinference](https://github.com/Arize-ai/openinference) and wait.
+- **File the reasoning-key gap upstream with Langfuse (cause 3 only).** `completion_details.reasoning`
+  is already a canonical OpenInference name that Langfuse passes through without normalizing to
+  `output_reasoning`. Ask for the spelling to be added to the resolver chain, exactly as
+  [#13571](https://github.com/langfuse/langfuse/issues/13571) → #13572 did for
+  `prompt_details.cache_read`.
+- **File the tool-use gap upstream and wait (cause 1).** Requires a new `llm.token_count.*` attribute
+  in the [OpenInference spec](https://arize-ai.github.io/openinference/spec/semantic_conventions.html),
+  then an `openinference-instrumentation-google-adk` release emitting it, then Langfuse recognising
+  it — a three-party sequence.
 - **Add project-level custom model definitions that price the instrumentor's own key names.**
-  Langfuse lets user-defined models override managed ones, so define
-  `gemini-3-flash-preview` etc. with prices for `completion_details.reasoning` and
-  `prompt_details.audio` — the keys the instrumentor actually emits.
+  Langfuse lets user-defined models override managed ones, so define `gemini-3-flash-preview` etc.
+  with prices for `completion_details.reasoning` and `prompt_details.audio` — the keys the
+  instrumentor actually emits.
 - **Own the mapping in `LangfuseTracingPlugin`,** reading `llm_response.usage_metadata` in an
   `after_model_callback` and overwriting the current generation's model and `usage_details`.
 
 ## Decision Outcome
 
-Chosen option: **own the mapping in `LangfuseTracingPlugin`** — it is the only option that addresses
-all three causes, and the other two cannot.
+Chosen option: **own the mapping in `LangfuseTracingPlugin`**, and **also file the reasoning-key gap
+upstream** — the two are complementary, not alternatives.
 
-Pricing the instrumentor's key names (option 2) fixes thinking tokens and nothing else: for cause 1
-there is **no key to price**, because the tool-use tokens exist only inside `total`, and for cause 2
-there is **no model name to match**, so no definition can ever apply. Waiting on upstream (option 1)
-leaves ~$25/month mis-attributed indefinitely, and every day of delay is unrecoverable because
-Langfuse never backfills cost.
+Own the mapping, because it is the only option that reaches causes 1, 2 and 5. Custom model
+definitions cannot: for cause 1 there is **no key to price** (the tool-use tokens exist only inside
+the reserved `total`), for cause 2 there is **no model name to match**, and for cause 5 the
+`input_cached_tokens` bucket is never sent at all — you cannot discount a bucket you do not receive.
+Waiting on upstream for cause 1 means waiting on a spec change, a library release and a Langfuse
+release in sequence, while ~$18/month stays mis-attributed and every day of delay is unrecoverable
+because Langfuse never backfills.
+
+File cause 3 upstream anyway, because it is a genuinely different situation: the name already exists
+in the spec, Langfuse simply does not normalize it, and #13571 shows that class of report getting
+merged quickly. Our shim will emit `output_reasoning` and stop depending on the outcome either way,
+so this costs us one issue and benefits everyone using ADK with Langfuse.
+
+Deliberately **not** chosen for the main fix: custom model definitions. Beyond being unable to reach
+causes 1, 2 and 5, a user-defined definition appears to _replace_ rather than merge with the managed
+one (the docs say only that user definitions "take priority", which needs testing before relying on
+it), so it would mean hand-maintaining a ~20-key price map per model id, forever, re-done on every
+Google reprice. One narrow use does survive, and is worth keeping: **pre-registering a definition for
+a model id before deploying it**, as a safety net against exactly the `gemini-3.5-flash` silent-$0
+above, where this self-hosted instance's managed model list lagged Google's release.
 
 The proposed shape — `usage_metadata` is the authoritative `google.genai` object, carrying every
 field the OTel attribute set drops:
@@ -160,8 +226,12 @@ must be split rather than added, or cached tokens get double-counted.
   directly. **This must be verified during implementation, not assumed.**
 - Bad, because it cannot repair history: July stays wrong, and any fix is judged only on data
   ingested after deploy.
-- Neutral, because it leaves the underlying instrumentor bugs unreported. Filing them upstream is
-  still worth doing; it is just not a substitute.
+- Neutral, because emitting `output_reasoning` ourselves makes the outcome of the cause-3 upstream
+  issue irrelevant to us — good for independence, but it also removes our incentive to chase it. File
+  it anyway; it is a one-sided fix that helps everyone else on ADK plus Langfuse.
+- Neutral, because the tool-use and span-truncation bugs stay unreported unless someone files them.
+  Worth doing, but on a three-party timeline (spec, then library, then Langfuse), so it can never be
+  the thing we wait for.
 
 ## Confirmation
 
@@ -196,21 +266,36 @@ separate Langfuse project — owns most of it.
 
 ## Pros and Cons of the Options
 
-### Rely on the instrumentor; file upstream
+### File the reasoning-key gap upstream with Langfuse (cause 3)
 
-- Good, because the fix would land where it belongs and benefit every ADK user.
-- Good, because we carry no extra code.
-- Bad, because ~$25/month stays mis-attributed on an unknown timeline.
-- Bad, because Langfuse never backfills cost, so every day of waiting is permanent.
+- Good, because the name is already canonical in the OpenInference spec — Langfuse just needs to
+  normalize `completion_details.reasoning` to `output_reasoning`, a one-sided change with a merged
+  precedent in #13571 → #13572.
+- Good, because it benefits every ADK-plus-Langfuse user and costs us one issue.
+- Neutral, because our own shim makes us independent of the outcome either way.
+- Bad, because it reaches only ~$5.8 of the ~$25.5 gap, and only after a release.
+
+### File the tool-use gap upstream and wait (cause 1)
+
+- Good, because this is genuinely the right long-term home for it.
+- Bad, because it is a **three-party sequence**: a new attribute in the OpenInference spec, then an
+  instrumentor release emitting it, then Langfuse recognising the name. Any one of the three stalling
+  stalls the whole thing.
+- Bad, because ~$10.9/month keeps mis-attributing meanwhile, unrecoverably.
 
 ### Custom model definitions pricing the instrumentor's key names
 
 - Good, because it is pure configuration — no code, no upgrade risk.
 - Good, because it would correctly price thinking tokens and `prompt_details.audio`.
-- Bad, because it **cannot fix cause 1** — tool-use tokens live only in `total`, and pricing `total`
-  would double-count everything else in it.
-- Bad, because it **cannot fix cause 2** — with no model name, no definition ever matches.
-- Bad, because it needs a hand-maintained definition per model id, indefinitely.
+- Bad, because it **cannot fix cause 1** — the tool-use tokens live only in `total`, which Langfuse
+  defines as a derived sum rather than a priceable bucket.
+- Bad, because it **cannot fix cause 2** — with no model name, no `matchPattern` ever matches.
+- Bad, because it **cannot fix cause 5** — `input_cached_tokens` is never sent, and an absent bucket
+  cannot be discounted.
+- Bad, because it needs a hand-maintained ~20-key price map per model id, indefinitely, re-done on
+  every Google reprice — a user definition appears to replace rather than merge with the managed one.
+- Good, in one narrow role worth keeping: pre-registering a definition for a model id **before**
+  deploying it, as a safety net for when the instance's managed model list lags Google.
 
 ### Own the mapping in `LangfuseTracingPlugin`
 
@@ -244,13 +329,28 @@ separate Langfuse project — owns most of it.
     current cause, but both services can silently drop buffered spans on redeploy.
   - `adk/cofacts_ai/session_title.py:80-91` calls a raw `genai.Client()` outside
     `GoogleADKInstrumentor`, so session-title generation is billed but untraced.
-- **External references.** Gemini's
-  [`UsageMetadata`](https://ai.google.dev/api/generate-content#UsageMetadata) — confirms
-  `toolUsePromptTokenCount` is separate from `promptTokenCount`, and that `cachedContentTokenCount`
-  is a subset of it. Langfuse's
-  [token and cost tracking](https://langfuse.com/docs/observability/features/token-and-cost-tracking) —
-  confirms exact key matching, user-defined models overriding managed ones, cost computed at
-  ingestion, and no backfill.
+- **External references**, in the order the argument uses them:
+  - Gemini [`UsageMetadata`](https://ai.google.dev/api/generate-content#UsageMetadata) —
+    `toolUsePromptTokenCount` is separate from `promptTokenCount` and counted in `totalTokenCount`;
+    `cachedContentTokenCount` is a _subset_ of `promptTokenCount` (hence `prompt - cached`).
+  - [OpenInference semantic conventions](https://arize-ai.github.io/openinference/spec/semantic_conventions.html) —
+    the eight `llm.token_count.*` attributes, with **no tool-use attribute**. This is the spec-level
+    gap behind cause 1, and the reason a library-only fix is not possible.
+  - Langfuse
+    [token and cost tracking](https://langfuse.com/docs/observability/features/token-and-cost-tracking) —
+    usage keys match price keys _exactly_; buckets are mutually exclusive; `total` is "not a bucket
+    itself but spans all buckets and equals their sum"; user-defined models take priority over
+    managed ones; cost is computed at ingestion with **no backfill**.
+  - [langfuse#13571](https://github.com/langfuse/langfuse/issues/13571) (closed by #13572) — the
+    prior art for cause 3. Langfuse's `extractGenericGenAiUsageDetails` is an allowlist of key
+    spellings, not a generic absorber; canonical OpenInference `prompt_details.cache_read` went
+    unrecognised and under-reported a production account's cost by ~30%. Fixed by adding the
+    spellings to the resolver chain.
+  - Beware second-hand summaries here. A widely-surfaced claim holds that
+    `tool_use_prompt_token_count` is "automatically aggregated into the input usage type" when using
+    Langfuse's SDKs or OTel instrumentation. The three reasons above show it is not, and the sources
+    such summaries cite are themselves bug reports of this very symptom. Verify against the spec and
+    against a real span's attribute set, as the evidence section does.
 - This continues the observability thread listed under "To backfill" in
   [`index.md`](index.md): Langfuse instrumentation ([#8](https://github.com/cofacts/ai/pull/8)),
   session grouping ([#56](https://github.com/cofacts/ai/pull/56)), per-environment traces
