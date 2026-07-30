@@ -46,8 +46,30 @@ an `openinference-instrumentation-google-adk` upgrade that might silently undo i
   (`llm.model_name`, `gen_ai.request.model`, `gen_ai.agent.name`, `input.value`, `session.id`).
   Langfuse resolves the model from `gen_ai.request.model` or `llm.model_name`; with both absent
   there is nothing to match a price against. 290 of 1,735 July generations (16.7%), spread across
-  the whole month, 4%–50% per day. **The upstream trigger inside the instrumentor is not yet
-  identified** — the proposed fix deliberately does not depend on knowing it.
+  the whole month, 4%–50% per day.
+
+  **These are the root agent's own turns.** Every one of the 290 is a child of an
+  `agent_run [writer]` AGENT span, and in an affected trace the writer's sub-agents — running
+  concurrently, inside the same trace — are instrumented perfectly, with `["stop"]` finish reasons
+  and correct model names. The split is per-invocation: 95 traces where the writer is truncated
+  throughout, 105 where it is named throughout, 15 mixed. So this is not random attribute loss; it
+  singles out **the one agent whose responses are streamed**. `src/routes/api/run-sse.ts` sends
+  `streaming: true`, while `AgentTool` runs sub-agents non-streaming — and no null span carries a
+  `gen_ai.response.finish_reasons` at all (against `["stop"]` on 94% of named spans), which is what a
+  partial/streamed response looks like. **Confirming that ADK's streaming path is the trigger still
+  needs the instrumentor source or a live repro** — but the proposed fix does not depend on it, since
+  we set the model name ourselves either way.
+
+  Ruled out for these spans: **user interruption.** cofacts.ai can abort a response mid-stream
+  (`ChatInput` stop → `AbortController` in `src/lib/chatCache.ts` → `request.signal` forwarded to
+  ADK's `/run_sse`, with nothing in `adk/` catching the resulting `CancelledError`), which is a
+  plausible-looking cause and would fit "truncated". It does not survive the data: 24 of 25 affected
+  traces have a final answer — a _higher_ rate than clean traces (19/25) — none carry `ERROR` level
+  or a status message, and the null spans within a trace run strictly back-to-back with `input`
+  growing to roughly the previous span's `total` (0/96 traces have them ending within 1s of each
+  other, and 0/96 share an identical `input`). That is a sequential agent loop that ran to
+  completion, not concurrent calls cut off at one instant.
+
 - [`gemini-3.5-flash` at $0 — `33b84a45`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/traces/33b84a45d25399a3a8475c1c08dc65cc) —
   all 30 `gemini-3.5-flash` generations (Jul 12–15) have `modelId = null` and $0, even though a
   correct managed definition ($1.50/$9.00 per Mtok) exists on the instance now. Cost is computed
@@ -224,6 +246,12 @@ must be split rather than added, or cached tokens get double-counted.
   so `update_current_generation` targets the right observation. If it does not, the fallback is to
   set `langfuse.observation.model` / `langfuse.observation.usage_details` on the current span
   directly. **This must be verified during implementation, not assumed.**
+- Bad, because the root agent runs **streamed**, and if ADK invokes `after_model_callback` once per
+  partial response there, the callback must use only the final aggregated `usage_metadata` — Gemini
+  reports usage cumulatively per chunk, so writing on every call would multiply the count. Today
+  there is no such double counting to undo (the 290 truncated spans are distinct sequential turns:
+  0/96 multi-null traces share an identical `input`), so this is a risk the fix introduces, not one
+  it inherits. Assert the `sum(priced keys) == total` invariant on a streamed turn specifically.
 - Bad, because it cannot repair history: July stays wrong, and any fix is judged only on data
   ingested after deploy.
 - Neutral, because emitting `output_reasoning` ourselves makes the outcome of the cause-3 upstream
@@ -329,6 +357,15 @@ separate Langfuse project — owns most of it.
     current cause, but both services can silently drop buffered spans on redeploy.
   - `adk/cofacts_ai/session_title.py:80-91` calls a raw `genai.Client()` outside
     `GoogleADKInstrumentor`, so session-title generation is billed but untraced.
+  - Confirm the streaming trigger behind cause 2 with a live repro: run one fact-check through
+    `/run_sse` and one through a non-streaming call, and compare whether the writer's `call_llm`
+    spans carry `llm.model_name` and a finish reason. If streaming is confirmed, that is worth an
+    openinference issue in its own right — it silently un-instruments the root agent of every
+    streamed ADK deployment, which is a far broader problem than our cost gap.
+  - Client aborts are unguarded end to end (`request.signal` → `CancelledError` inside ADK's Runner,
+    nothing in `adk/` catching it). Not the cause of any truncated span we found, but it does mean an
+    aborted run's spans depend entirely on ADK's internal cancellation handling. Worth a deliberate
+    look rather than leaving it to chance.
 - **External references**, in the order the argument uses them:
   - Gemini [`UsageMetadata`](https://ai.google.dev/api/generate-content#UsageMetadata) —
     `toolUsePromptTokenCount` is separate from `promptTokenCount` and counted in `totalTokenCount`;
