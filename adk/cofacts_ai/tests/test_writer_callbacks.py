@@ -1,12 +1,17 @@
 """Unit tests for ai_writer's callbacks: `after_tool` and
 `handle_writer_tool_error`.
 
-`after_tool` post-processes investigator/verifier responses -- most
-importantly the empty/None/whitespace timeout-error protection, since a
+`after_tool` post-processes investigator/verifier/proofreader responses --
+most importantly the empty/None/whitespace timeout-error protection, since a
 real server-side timeout is probabilistic and can't be reproduced
-deterministically over the network. `handle_writer_tool_error` converts
-any exception a writer tool raises into a structured error dict. Both are
-exercised purely through mocked tool/tool_context/tool_response inputs.
+deterministically over the network -- and then stamps every tool result with
+its citation id. `handle_writer_tool_error` converts any exception a writer
+tool raises into a structured error dict. Both are exercised purely through
+mocked tool/tool_context/tool_response inputs.
+
+Citation minting and resolution themselves live in
+`cofacts_ai/writer_citations.py` and are covered by `test_writer_citations.py`;
+here we only check that `after_tool` routes every response through them.
 """
 
 import json
@@ -17,8 +22,16 @@ from unittest.mock import AsyncMock
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.tools.base_tool import BaseTool
 
-from cofacts_ai.agent_names import AI_INVESTIGATOR_NAME, AI_VERIFIER_NAME
+from cofacts_ai.agent_names import (
+    AI_INVESTIGATOR_NAME,
+    AI_PROOFREADER_DPP_NAME,
+    AI_PROOFREADER_KMT_NAME,
+    AI_PROOFREADER_NAMES,
+    AI_PROOFREADER_TPP_NAME,
+    AI_VERIFIER_NAME,
+)
 from cofacts_ai.agent import after_tool, handle_writer_tool_error
+from cofacts_ai.writer_citations import _citation_id
 
 
 def make_tool(name: str) -> BaseTool:
@@ -39,15 +52,48 @@ def make_tool_context(function_call_id: Optional[str] = "fc-1") -> CallbackConte
     return cast(CallbackContext, ctx)
 
 
-INVESTIGATOR_TIMEOUT_ERROR = {
-    "error": "timeout",
-    "message": f"[SYSTEM] {AI_INVESTIGATOR_NAME.capitalize()} returned empty. Possibly timeout. Retry with simpler/fewer queries.",
-}
+def cited(tool_name: str, payload: dict, function_call_id: str = "fc-1") -> dict:
+    """`payload` plus the citation fields after_tool stamps onto every
+    non-error tool result (see writer_citations.attach_citation).
 
-VERIFIER_TIMEOUT_ERROR = {
-    "error": "timeout",
-    "message": f"[SYSTEM] {AI_VERIFIER_NAME.capitalize()} returned empty. Possibly timeout. Retry with fewer URLs or claims.",
-}
+    The id comes from production's own `_citation_id` on purpose. Re-deriving
+    the formula here once looked harmless -- it happened to agree while every
+    fixture id was short enough -- but it had already drifted from the `adk-`
+    stripping and the 8-character cap, so a longer id would have built a wrong
+    expectation rather than caught one. The formula itself is pinned by literal
+    assertions in test_writer_citations.py; these tests only need to agree with
+    it.
+    """
+    marker = f"[^{_citation_id(tool_name, function_call_id)}]"
+    return {
+        **payload,
+        "cite_as": marker,
+        "cite_hint": (
+            f"To let a sub-agent read this result in full, write {marker} in its `request`."
+        ),
+    }
+
+
+# Timeout errors are deliberately NOT stamped -- these dicts are compared whole,
+# so an accidental citation on an error payload fails these tests.
+def timeout_error(tool_name: str, retry_hint: str) -> dict:
+    """One template for all six sub-agents; only the retry advice differs."""
+    return {
+        "error": "timeout",
+        "message": (
+            f"[SYSTEM] {tool_name} returned empty. "
+            f"Possibly a dropped call or timeout. {retry_hint}"
+        ),
+    }
+
+
+INVESTIGATOR_TIMEOUT_ERROR = timeout_error(
+    AI_INVESTIGATOR_NAME, "Retry with simpler/fewer queries."
+)
+
+VERIFIER_TIMEOUT_ERROR = timeout_error(
+    AI_VERIFIER_NAME, "Retry with fewer URLs or claims."
+)
 
 
 class TestAfterToolInvestigator:
@@ -89,7 +135,7 @@ class TestAfterToolInvestigator:
             tool_response=payload,
         )
 
-        assert result == {"content": "x", "sources": []}
+        assert result == cited(AI_INVESTIGATOR_NAME, {"content": "x", "sources": []})
         cast(AsyncMock, tool_context.save_artifact).assert_not_awaited()
 
     async def test_valid_json_with_widget_html_saves_artifact_and_strips_it(self):
@@ -109,7 +155,9 @@ class TestAfterToolInvestigator:
             tool_response=payload,
         )
 
-        assert result == {"content": "x", "sources": []}
+        assert result == cited(
+            AI_INVESTIGATOR_NAME, {"content": "x", "sources": []}, "fc-42"
+        )
         save_artifact = cast(AsyncMock, tool_context.save_artifact)
         save_artifact.assert_awaited_once()
         _, kwargs = save_artifact.call_args
@@ -146,7 +194,7 @@ class TestAfterToolInvestigator:
             tool_context=make_tool_context(),
             tool_response="not json {{",
         )
-        assert result == "not json {{"
+        assert result == cited(AI_INVESTIGATOR_NAME, {"result": "not json {{"})
 
     async def test_valid_json_but_not_a_dict_passthrough(self):
         result = await after_tool(
@@ -155,7 +203,7 @@ class TestAfterToolInvestigator:
             tool_context=make_tool_context(),
             tool_response="[1, 2, 3]",
         )
-        assert result == "[1, 2, 3]"
+        assert result == cited(AI_INVESTIGATOR_NAME, {"result": "[1, 2, 3]"})
 
     async def test_non_string_non_none_response_passthrough(self):
         already_a_dict = {"already": "a dict"}
@@ -166,6 +214,7 @@ class TestAfterToolInvestigator:
             tool_response=already_a_dict,
         )
         assert result is already_a_dict
+        assert result == cited(AI_INVESTIGATOR_NAME, {"already": "a dict"})
 
 
 class TestAfterToolVerifier:
@@ -204,29 +253,109 @@ class TestAfterToolVerifier:
             tool_context=make_tool_context(),
             tool_response=payload,
         )
-        assert result == {"content": "c", "sources": [{"title": "t", "url": "u"}]}
+        assert result == cited(
+            AI_VERIFIER_NAME,
+            {"content": "c", "sources": [{"title": "t", "url": "u"}]},
+        )
 
-    async def test_invalid_json_returns_none(self):
+    async def test_invalid_json_keeps_the_raw_text(self):
         result = await after_tool(
             tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response="{not valid json",
         )
-        assert result is None
+        assert result == cited(AI_VERIFIER_NAME, {"result": "{not valid json"})
 
-    async def test_non_string_response_returns_none(self):
+    async def test_non_string_response_keeps_the_raw_value(self):
         result = await after_tool(
             tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=make_tool_context(),
             tool_response=[1, 2, 3],
         )
-        assert result is None
+        assert result == cited(AI_VERIFIER_NAME, {"result": [1, 2, 3]})
+
+
+class TestAfterToolProofreader:
+    async def test_empty_string_returns_timeout_error_for_every_proofreader(self):
+        for name in AI_PROOFREADER_NAMES:
+            result = await after_tool(
+                tool=make_tool(name),
+                args={},
+                tool_context=make_tool_context(),
+                tool_response="",
+            )
+            assert result == timeout_error(name, "Retry this proofreader.")
+
+    async def test_whitespace_only_returns_timeout_error(self):
+        result = await after_tool(
+            tool=make_tool(AI_PROOFREADER_KMT_NAME),
+            args={},
+            tool_context=make_tool_context(),
+            tool_response="  \n\t",
+        )
+        assert result == timeout_error(
+            AI_PROOFREADER_KMT_NAME, "Retry this proofreader."
+        )
+
+    async def test_none_returns_timeout_error(self):
+        result = await after_tool(
+            tool=make_tool(AI_PROOFREADER_KMT_NAME),
+            args={},
+            tool_context=make_tool_context(),
+            tool_response=None,
+        )
+        assert result == timeout_error(
+            AI_PROOFREADER_KMT_NAME, "Retry this proofreader."
+        )
+
+    async def test_nonempty_plain_text_kept_whole_without_json_parsing(self):
+        # Proofreaders return plain prose, not JSON -- must not be run through
+        # json.loads (unlike investigator/verifier). The prose is preserved
+        # verbatim under `result`, which is how ADK would have wrapped it.
+        result = await after_tool(
+            tool=make_tool(AI_PROOFREADER_DPP_NAME),
+            args={},
+            tool_context=make_tool_context(),
+            tool_response="這則訊息對民進黨支持者來說可能引發質疑 {not json",
+        )
+        assert result == cited(
+            AI_PROOFREADER_DPP_NAME,
+            {"result": "這則訊息對民進黨支持者來說可能引發質疑 {not json"},
+        )
+
+    async def test_a_cancelled_call_passes_through_unstamped(self):
+        # resolve_citations cancels a call by returning this from the
+        # before_tool_callback; ADK still runs after_tool on it, and an error
+        # payload must not come back wearing a citation of its own.
+        cancelled = {
+            "error": "unresolved_citation",
+            "message": "[SYSTEM] proofreader_kmt was NOT called, because ...",
+        }
+        result = await after_tool(
+            tool=make_tool(AI_PROOFREADER_KMT_NAME),
+            args={},
+            tool_context=make_tool_context(),
+            tool_response=cancelled,
+        )
+        assert result == cancelled
+
+    async def test_nonempty_response_does_not_save_artifact(self):
+        tool_context = make_tool_context()
+        await after_tool(
+            tool=make_tool(AI_PROOFREADER_TPP_NAME),
+            args={},
+            tool_context=tool_context,
+            tool_response="some proofreader feedback",
+        )
+        cast(AsyncMock, tool_context.save_artifact).assert_not_awaited()
 
 
 class TestAfterToolDispatch:
-    async def test_unrelated_tool_name_returns_none_immediately(self):
+    async def test_non_subagent_tool_skips_post_processing_but_is_still_cited(self):
+        # No JSON parsing, no artifact handling for a plain function tool --
+        # but the writer still needs an id to quote the result to a sub-agent.
         tool_context = make_tool_context()
         result = await after_tool(
             tool=make_tool("search_cofacts_database"),
@@ -234,8 +363,60 @@ class TestAfterToolDispatch:
             tool_context=tool_context,
             tool_response=json.dumps({"content": "x"}),
         )
-        assert result is None
+        assert result == cited(
+            "search_cofacts_database", {"result": '{"content": "x"}'}
+        )
         cast(AsyncMock, tool_context.save_artifact).assert_not_awaited()
+
+    async def test_an_adk_generated_call_id_is_stamped_through_after_tool(self):
+        # The case the fixtures never reached: ADK's fallback id, which is long
+        # enough to be capped and carries the `adk-` prefix.
+        call_id = "adk-3f2a1b4c-9d8e-4f7a-b6c5-1e2d3f4a5b6c"
+        result = await after_tool(
+            tool=make_tool(AI_VERIFIER_NAME),
+            args={},
+            tool_context=make_tool_context(function_call_id=call_id),
+            tool_response=json.dumps({"content": "c", "sources": []}),
+        )
+        marker = f"[^{AI_VERIFIER_NAME}-3f2a1b4c]"
+        assert result == {
+            "content": "c",
+            "sources": [],
+            "cite_as": marker,
+            "cite_hint": (
+                f"To let a sub-agent read this result in full, write {marker} in its `request`."
+            ),
+        }
+        # ...and the helper agrees with production on that id, which is the
+        # whole point of covering this shape.
+        assert result == cited(
+            AI_VERIFIER_NAME, {"content": "c", "sources": []}, call_id
+        )
+
+    async def test_a_blank_non_subagent_response_is_not_a_timeout(self):
+        # The retry-hint table is also the gate for who gets empty-response
+        # protection: only the six AgentTool sub-agents, whose empty output
+        # means a dropped call. A plain function tool returning "" is its own
+        # business.
+        result = await after_tool(
+            tool=make_tool("search_cofacts_database"),
+            args={},
+            tool_context=make_tool_context(),
+            tool_response="",
+        )
+        assert result == cited("search_cofacts_database", {"result": ""})
+
+    async def test_a_dict_returning_tool_keeps_its_own_shape(self):
+        result = await after_tool(
+            tool=make_tool("get_single_cofacts_article"),
+            args={},
+            tool_context=make_tool_context(),
+            tool_response={"article_id": "abc", "article": {"text": "全文"}},
+        )
+        assert result == cited(
+            "get_single_cofacts_article",
+            {"article_id": "abc", "article": {"text": "全文"}},
+        )
 
 
 class TestHandleWriterToolError:

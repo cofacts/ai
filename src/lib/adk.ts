@@ -62,6 +62,28 @@ export type ToolSource = { title: string; url: string }
 type AdkFallbackResp = { result: string }
 
 /**
+ * A structured failure returned in place of a result. Ours, not ADK's, unlike
+ * `AdkFallbackResp` above: `after_tool` and `handle_writer_tool_error` build one
+ * from an empty/timed-out/raising sub-agent call (`agent.py`), and
+ * `resolve_citations` returns one to cancel a call whose citations don't resolve
+ * (`writer_citations.py`).
+ */
+type ToolErrorResp = { error: string; message: string }
+
+/**
+ * Citation fields the writer's `after_tool` callback stamps onto every tool
+ * result (`adk/cofacts_ai/writer_citations.py`), so the writer can quote that
+ * result verbatim to a stateless sub-agent by writing `cite_as` in its request.
+ *
+ * Optional on purpose: sessions recorded before citations existed have neither
+ * field, and error payloads are never stamped.
+ */
+export type ToolCitation = {
+  cite_as?: string
+  cite_hint?: string
+}
+
+/**
  * Map of all cofacts_ai tool names to their `args` / `resp` shapes.
  *
  * **IMPORTANT:** Keep in strict sync with `adk/cofacts_ai/tools.py` and `agent.py`.
@@ -82,6 +104,7 @@ export type AllTools = {
           sources: Array<ToolSource>
         }
       | AdkFallbackResp
+      | ToolErrorResp
   }
   verifier: {
     args: { request?: string }
@@ -90,14 +113,26 @@ export type AllTools = {
      * Falls back to `AdkFallbackResp` when Gemini omits grounding metadata
      * intermittently (the callback returns `None`, leaving raw LLM text).
      */
-    resp: { content: string; sources: Array<ToolSource> } | AdkFallbackResp
+    resp:
+      | { content: string; sources: Array<ToolSource> }
+      | AdkFallbackResp
+      | ToolErrorResp
   }
-  proofreader_kmt: { args: { request?: string }; resp: { result: string } }
-  proofreader_dpp: { args: { request?: string }; resp: { result: string } }
-  proofreader_tpp: { args: { request?: string }; resp: { result: string } }
+  proofreader_kmt: {
+    args: { request?: string }
+    resp: { result: string } | ToolErrorResp
+  }
+  proofreader_dpp: {
+    args: { request?: string }
+    resp: { result: string } | ToolErrorResp
+  }
+  proofreader_tpp: {
+    args: { request?: string }
+    resp: { result: string } | ToolErrorResp
+  }
   proofreader_minor_parties: {
     args: { request?: string }
-    resp: { result: string }
+    resp: { result: string } | ToolErrorResp
   }
   draft_factcheck_response: {
     args: {
@@ -190,7 +225,7 @@ export type FunctionResponseOutput =
   | {
       [K in keyof AllTools]: AdkResponseBase & {
         name: K
-        response: AllTools[K]['resp']
+        response: AllTools[K]['resp'] & ToolCitation
       }
     }[keyof AllTools]
   | components['schemas']['FunctionResponse-Output']
@@ -201,6 +236,6 @@ export type ToolInvocation = {
     id: string
     name: K
     args: AllTools[K]['args']
-    resp: AllTools[K]['resp'] | null
+    resp: (AllTools[K]['resp'] & ToolCitation) | null
   }
 }[keyof AllTools]

@@ -295,19 +295,27 @@ export function applyEventToState(
           args: (args ?? {}) as ToolInvocation['args'],
           resp: toolInvocations[id]?.resp ?? null,
         } as ToolInvocation
-        if (name === 'draft_factcheck_response') {
-          lastReplyDraftId = id
-        }
       }
     }
     if (part.functionResponse) {
       const key = part.functionResponse.id ?? part.functionResponse.name
       if (key && toolInvocations[key]) {
+        const response = (part.functionResponse.response ??
+          null) as ToolInvocation['resp']
         toolInvocations[key] = {
           ...toolInvocations[key],
-          resp: (part.functionResponse.response ??
-            null) as ToolInvocation['resp'],
+          resp: response,
         } as ToolInvocation
+        // Only pop the drawer for a SUCCESSFUL proposal: draft_factcheck_response
+        // is re-callable (cofacts/ai#117), so a gate-rejected call (missing
+        // sources, unconfirmed claims, etc.) must not overwrite a prior good
+        // draft as "the" one auto-shown when the turn ends.
+        if (
+          toolInvocations[key].name === 'draft_factcheck_response' &&
+          (response as { success?: boolean } | null)?.success === true
+        ) {
+          lastReplyDraftId = key
+        }
       }
     }
   }
