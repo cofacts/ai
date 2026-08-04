@@ -149,9 +149,24 @@ jobs:
           SERVICE_ACCOUNT_EMAIL: ${{ secrets.SERVICE_ACCOUNT_EMAIL }}
           GC_PROJECT_ID: ${{ secrets.GC_PROJECT_ID }}
           COFACTS_API_URL: ${{ secrets.COFACTS_API_URL }}
+          # Where the url-resolver sidecar runs puppeteer's browser. Leave the
+          # repo variable unset for in-container chromium; set it to `cloudflare`
+          # to use Cloudflare Browser Rendering (needs the two secrets below).
+          # Unset substitutes to an empty string, which url-resolver reads as
+          # `local` — so this is inert until the variable is set.
+          BROWSER_BACKEND: ${{ vars.URL_RESOLVER_BROWSER_BACKEND }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${LANGFUSE_TRACING_ENVIRONMENT} ${DATABASE_URL} ${GCS_ARTIFACT_BUCKET} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL}' < service.template.yaml > service.yaml
-          cat service.yaml
+          # The allowlist is load-bearing: envsubst substitutes only the names
+          # listed here and passes every other ${...} through verbatim, so a
+          # placeholder missing from this list reaches Cloud Run as literal text.
+          # Listed-but-unset names become the empty string, which is the safe
+          # default the template is written around.
+          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${LANGFUSE_TRACING_ENVIRONMENT} ${DATABASE_URL} ${GCS_ARTIFACT_BUCKET} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL} ${BROWSER_BACKEND} ${CLOUDFLARE_ACCOUNT_ID} ${CLOUDFLARE_API_TOKEN}' < service.template.yaml > service.yaml
+          # Deliberately not dumping service.yaml here: envsubst has just inlined
+          # DATABASE_URL, the Langfuse secret key and the Cloudflare API token
+          # into it. `gcloud run services replace` reports its own errors.
 
       - name: Deploy to Cloud Run
         run: |
