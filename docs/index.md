@@ -39,11 +39,13 @@ flowchart LR
   One-time setup: `pnpm install`, then `pnpm install:agent` (`uv sync`), plus
   `gcloud auth application-default login` for Vertex AI. Two env files: root `.env`
   (browser/BFF) and `adk/cofacts_ai/.env` (agent).
-- **Prod:** a single **Cloud Run** service with three containers — `ingress` (frontend/BFF),
-  `backend` (ADK), and `cloudsql-proxy` — defined by `service.template.yaml` and deployed by
-  `.github/workflows/deploy.yml`. Containers talk over `localhost`.
+- **Prod:** a single **Cloud Run** service with four containers — `ingress` (frontend/BFF),
+  `backend` (ADK), `cloudsql-proxy`, and `url-resolver` — defined by `service.template.yaml`
+  and deployed by `.github/workflows/deploy.yml`. Containers talk over `localhost`, which is
+  also what keeps the unauthenticated `url-resolver` gRPC endpoint off the network.
   → decisions: [Cloud Run multi-container deploy](decisions/20260303-cloud-run-multi-container-deploy.md),
-  [Postgres session persistence](decisions/20260506-postgres-session-persistence.md).
+  [Postgres session persistence](decisions/20260506-postgres-session-persistence.md),
+  [verifier page pre-fetch](decisions/20260722-url-resolver-verifier-prefetch.md).
 
 ## The ADK multi-agent system
 
