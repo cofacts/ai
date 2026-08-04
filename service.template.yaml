@@ -126,11 +126,32 @@ spec:
             # flight — so this is sized with headroom over the ~150 MiB idle
             # footprint rather than trimmed to it. If it still OOMs, lower
             # SCRAPE_MAX_CONCURRENCY before raising the limit.
+            #
+            # This sizing follows the *local* browser path even when
+            # BROWSER_BACKEND is `cloudflare` and no chromium ever starts here.
+            # The backend is a repo variable that can revert to local at any
+            # moment, and a container trimmed to the Cloudflare footprint would
+            # OOM the instance the moment someone flips it back. Trim these only
+            # once the local fallback is retired for good.
             cpu: "1000m"
             memory: "2048Mi"
         env:
         - name: PORT
           value: "4000"
+        # Where puppeteer's browser runs. Unset renders as "" here, which
+        # url-resolver reads as `local` (`process.env.BROWSER_BACKEND || 'local'`),
+        # so an unconfigured deploy keeps launching chromium inside this
+        # container. Set the URL_RESOLVER_BROWSER_BACKEND repo variable to
+        # `cloudflare` to move it to Cloudflare Browser Rendering instead; clear
+        # the variable to roll back.
+        - name: BROWSER_BACKEND
+          value: "${BROWSER_BACKEND}"
+        # Only read when BROWSER_BACKEND is `cloudflare`; inert otherwise. The
+        # token needs the account-level "Browser Rendering: Edit" scope.
+        - name: CLOUDFLARE_ACCOUNT_ID
+          value: "${CLOUDFLARE_ACCOUNT_ID}"
+        - name: CLOUDFLARE_API_TOKEN
+          value: "${CLOUDFLARE_API_TOKEN}"
         startupProbe:
           # The gRPC server binds immediately; chromium launches in the
           # background right after. A TCP probe therefore only proves the RPC

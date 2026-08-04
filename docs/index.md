@@ -43,6 +43,9 @@ flowchart LR
   `backend` (ADK), `cloudsql-proxy`, and `url-resolver` — defined by `service.template.yaml`
   and deployed by `.github/workflows/deploy.yml`. Containers talk over `localhost`, which is
   also what keeps the unauthenticated `url-resolver` gRPC endpoint off the network.
+  `url-resolver`'s headless browser runs either inside its own container or on Cloudflare
+  Browser Rendering, selected by the `URL_RESOLVER_BROWSER_BACKEND` repo variable
+  (unset = in-container chromium).
   → decisions: [Cloud Run multi-container deploy](decisions/20260303-cloud-run-multi-container-deploy.md),
   [Postgres session persistence](decisions/20260506-postgres-session-persistence.md),
   [verifier page pre-fetch](decisions/20260722-url-resolver-verifier-prefetch.md).
