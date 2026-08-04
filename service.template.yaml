@@ -11,7 +11,7 @@ spec:
     metadata:
       annotations:
         run.googleapis.com/execution-environment: gen2
-        run.googleapis.com/container-dependencies: '{"ingress":["backend"],"backend":["cloudsql-proxy"]}'
+        run.googleapis.com/container-dependencies: '{"ingress":["backend"],"backend":["cloudsql-proxy","url-resolver"]}'
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "3"
     spec:
@@ -75,6 +75,11 @@ spec:
           value: "${GCS_ARTIFACT_BUCKET}"
         - name: COFACTS_API_URL
           value: "${COFACTS_API_URL}"
+        # url-resolver runs as a sidecar in this same instance (see below), so
+        # the verifier's page pre-fetch talks to it over localhost instead of
+        # the docker-compose service name the client defaults to.
+        - name: URL_RESOLVER_ADDRESS
+          value: "localhost:4000"
         startupProbe:
           tcpSocket:
             port: 8000
@@ -97,6 +102,43 @@ spec:
         startupProbe:
           tcpSocket:
             port: 5432
+          initialDelaySeconds: 2
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+      # Headless-browser page fetcher behind the verifier's URL pre-fetch. It
+      # speaks insecure gRPC with no auth, so it is never exposed as its own
+      # service: as a sidecar it is reachable only over this instance's
+      # localhost, the same containment the docker-compose deployment gets from
+      # its private network (rumors-deploy `docker-compose.sample.yml`).
+      - name: url-resolver
+        # Public Docker Hub image, published by cofacts/url-resolver on release
+        # tags (`:latest`) and master pushes (`:dev`). Cloud Run caches public
+        # Docker Hub images for up to an hour, so a freshly pushed `:latest` can
+        # take that long to appear in a new revision.
+        image: docker.io/cofacts/url-resolver:latest
+        resources:
+          limits:
+            # Chromium is what sizes this container: one browser process tree
+            # plus up to SCRAPE_MAX_CONCURRENCY (default 3) live pages. Cloud
+            # Run terminates the whole instance when any single container
+            # exceeds its memory limit — which would kill an agent turn in
+            # flight — so this is sized with headroom over the ~150 MiB idle
+            # footprint rather than trimmed to it. If it still OOMs, lower
+            # SCRAPE_MAX_CONCURRENCY before raising the limit.
+            cpu: "1000m"
+            memory: "2048Mi"
+        env:
+        - name: PORT
+          value: "4000"
+        startupProbe:
+          # The gRPC server binds immediately; chromium launches in the
+          # background right after. A TCP probe therefore only proves the RPC
+          # endpoint is up, not that a browser is ready — the client already
+          # treats an unreachable/failing resolver as "no signal" and falls
+          # back to `url_context`, so that is the right amount of gating here.
+          tcpSocket:
+            port: 4000
           initialDelaySeconds: 2
           timeoutSeconds: 5
           periodSeconds: 10
