@@ -21,3 +21,6 @@ cofacts.ai_ui_mockup
 .claude
 .gemini/
 gha-creds-*.json
+
+# storybook
+storybook-static
