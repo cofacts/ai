@@ -4,6 +4,17 @@ import { SearchSuggestions } from './SearchSuggestions'
 import type { ChatMessage } from '@/lib/adk'
 import { cn } from '@/lib/utils'
 
+/**
+ * Runtime agent names (`name=` in `adk/cofacts_ai/agent.py`) to what the user
+ * sees. Anything unlisted falls back to the generic label, which is what the
+ * writer — the agent users spend most of a fact-check with — deliberately uses.
+ */
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  receptionist: 'Cofacts 小幫手',
+  investigator: 'AI Investigator',
+  verifier: 'AI Verifier',
+}
+
 interface AgentMessageProps {
   message: ChatMessage
   showAvatar?: boolean
@@ -28,11 +39,7 @@ export function AgentMessage({
             </span>
           </div>
           <span className="text-sm font-semibold text-gray-900">
-            {message.author === 'investigator'
-              ? 'AI Investigator'
-              : message.author === 'verifier'
-                ? 'AI Verifier'
-                : 'Cofacts AI Agent'}
+            {AGENT_DISPLAY_NAMES[message.author ?? ''] ?? 'Cofacts AI Agent'}
           </span>
         </div>
       )}

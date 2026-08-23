@@ -38,6 +38,7 @@ from .agent_names import (
     AI_PROOFREADER_MINOR_PARTIES_NAME,
     AI_PROOFREADER_NAMES,
     AI_PROOFREADER_TPP_NAME,
+    AI_RECEPTIONIST_NAME,
     AI_VERIFIER_NAME,
     AI_WRITER_NAME,
 )
@@ -45,13 +46,16 @@ from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
+from .receptionist import RECEPTIONIST_INSTRUCTION
 from .session_title import generate_session_title
 from .tools import (
     draft_factcheck_response,
     get_single_cofacts_article,
+    request_fact_check,
     resolve_vertex_redirect,
     search_cofacts_database,
     search_image_web,
+    search_suspicious_messages,
 )
 from .writer_citations import attach_citation, resolve_citations
 
@@ -67,7 +71,15 @@ SESSION_LAST_EVENT_TIME_KEY = "lastEventTime"
 
 
 async def update_last_event_time(callback_context: CallbackContext) -> None:
-    """Records the current time in session state after each ai_writer agent turn."""
+    """Records the current time in session state after an agent turn.
+
+    Mounted on BOTH ai_receptionist and ai_writer, not on the root alone. ADK
+    only runs an agent's after_agent_callback when that agent actually ran
+    (BaseAgent.run_async), and once the receptionist has transferred, later
+    turns resume straight at the writer with the root never running
+    (Runner._find_agent_to_run) -- so a root-only callback would silently stop
+    updating for the whole rest of a fact-check.
+    """
     callback_context.state[SESSION_LAST_EVENT_TIME_KEY] = time.time()
 
 
@@ -745,10 +757,12 @@ def handle_writer_tool_error(
     tool_context: Any,
     error: Exception,
 ) -> Optional[dict]:
-    """on_tool_error_callback for ai_writer.
+    """on_tool_error_callback for ai_writer and ai_receptionist.
 
-    Catches any exception thrown by a tool so the writer turn does not crash.
-    Returns a structured error dict the writer can read and react to.
+    Catches any exception thrown by a tool so the agent turn does not crash.
+    Returns a structured error dict the agent can read and react to. Nothing in
+    it is writer-specific; the name is kept for the sessions and tests that
+    already refer to it.
     """
     return {
         "error": type(error).__name__,
@@ -783,7 +797,9 @@ ai_writer = LlmAgent(
     before_tool_callback=resolve_citations,
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,
-    after_agent_callback=[update_last_event_time, generate_session_title],
+    # generate_session_title is NOT here: it only ever runs on the first turn,
+    # and the first turn always starts at the root. See its docstring.
+    after_agent_callback=[update_last_event_time],
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
 
@@ -804,12 +820,39 @@ ai_writer = LlmAgent(
 
     ## Getting Started:
 
-    Users should ALWAYS provide a Cofacts suspicious message URL (https://cofacts.tw/article/<articleId>) to start the conversation.
+    You do not take messages in off the street: `{AI_RECEPTIONIST_NAME}` runs the front desk and
+    hands you a conversation once there is a Cofacts article to work on
+    (https://cofacts.tw/article/<articleId>).
 
-    If the user doesn't provide a Cofacts URL or seems unsure how to use this system:
-    - Ask them to provide a specific Cofacts article URL (https://cofacts.tw/article/<articleId>)
-    - Explain that you need the URL to access message details, popularity data, and existing responses
-    - Guide them to browse https://cofacts.tw/ to find messages that need fact-checking
+    **Your first action after taking over is ALWAYS `get_single_cofacts_article` for that article
+    id — even when `{AI_RECEPTIONIST_NAME}` already looked it up.** You are not seeing its tool
+    results the way it saw them: ADK replays another agent's work to you as flattened plain text,
+    so an article it fetched arrives as a paraphrase of a payload, its media is NOT attached to
+    your context, and there is no `cite_as` on it for you to quote to a sub-agent. Fetching it
+    yourself is what gives you the real thing.
+
+    If you somehow end up without an article id — the user opened straight into you and is asking
+    about a message that is not in Cofacts yet — do NOT demand a cofacts.tw URL and do not start
+    checking a bare pasted message. Transfer to `{AI_RECEPTIONIST_NAME}`, which knows how to search
+    for it and take a report.
+
+    ## Handing a Conversation Back to `{AI_RECEPTIONIST_NAME}`:
+
+    A session is a workspace, not one message. Users who finish one message often send another —
+    frequently a variant — and keeping that in this session is what lets you reuse the
+    `{AI_VERIFIER_NAME}` reports and `{AI_INVESTIGATOR_NAME}` findings you already have. But a new
+    message may not be in Cofacts at all, and you have no way to report one. When that happens,
+    call `transfer_to_agent` with `{AI_RECEPTIONIST_NAME}`.
+
+    **Decide by what the user MEANS, never by whether a link is a cofacts.tw link.** Non-Cofacts
+    URLs are overwhelmingly evidence, not new reports — treating a pattern as the trigger would
+    shovel the user's own sources into the reporting flow:
+
+    | What the user is saying | What you do |
+    | --- | --- |
+    | "here's another suspicious message I received" | transfer to `{AI_RECEPTIONIST_NAME}` |
+    | "here's a source / the original post, take a look" | stay, and verify it as usual |
+    | you genuinely cannot tell | **ask one question.** Do not guess, and do not transfer on a hunch |
 
     ## Citing Tool Results Instead of Retyping Them:
 
@@ -1008,8 +1051,52 @@ ai_writer = LlmAgent(
     ],
 )
 
+# Front desk — the root agent, with ai_writer as its only sub_agent.
+#
+# Why a second agent rather than more rules in ai_writer: the writer's prompt is
+# long and trace-tuned around "the user already has a cofacts.tw article URL",
+# and folding reporting intake plus the support-desk traffic an open text box
+# attracts into it risked the fact-checking pipeline we already have working.
+#
+# Why sub_agents (transfer) rather than AgentTool: an AgentTool call is a
+# stateless single-message session, which would cost ai_writer its multi-turn
+# conversation entirely.
+#
+# `disallow_transfer_to_parent` is left at its default False on BOTH agents, and
+# that single default buys two separate things:
+#   - the writer can hand a NEW suspicious message back here, instead of the
+#     user having to open another session and lose the research context;
+#   - Runner._find_agent_to_run resumes later turns straight at the writer
+#     (it only returns a sub-agent that is transferable all the way up), so a
+#     fact-check does not pay for a receptionist turn on every message.
+# Setting it True would silently cost both.
+#
+# No after_tool/resolve_citations here on purpose: the citation machinery exists
+# for stateless AgentTool sub-agents, and this agent has none.
+ai_receptionist = LlmAgent(
+    name=AI_RECEPTIONIST_NAME,
+    # Classifying intent and taking a report needs neither a frontier model nor
+    # deep thinking, and this agent sits in front of every single message.
+    model="gemini-3.1-flash-lite",
+    description="Cofacts front desk: works out whether a visitor wants to report a suspicious message, fact-check one, or something else entirely, and routes them.",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.LOW
+        )
+    ),
+    on_tool_error_callback=handle_writer_tool_error,
+    after_agent_callback=[update_last_event_time, generate_session_title],
+    instruction=RECEPTIONIST_INSTRUCTION,
+    sub_agents=[ai_writer],
+    tools=[
+        search_suspicious_messages,
+        get_single_cofacts_article,
+        request_fact_check,
+    ],
+)
+
 app = App(
     name="cofacts_ai",
-    root_agent=ai_writer,
+    root_agent=ai_receptionist,
     plugins=[LangfuseTracingPlugin(), SaveFilesAsArtifactsPlugin()],
 )

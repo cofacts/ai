@@ -16,6 +16,16 @@ interface ChatInputProps {
   disabled?: boolean
   placeholder?: string
   sessionId?: string
+  /**
+   * Seed text for an empty composer — used by the share entry point on `/` to
+   * drop in what the user shared from another app.
+   *
+   * A draft the user typed themselves always wins: `drafts` survives navigation
+   * within the session, so someone who started writing and then came back must
+   * not have their words replaced by the shared payload. Read once on mount
+   * like the draft it stands in for, so typing over it is never undone.
+   */
+  initialValue?: string
 }
 
 export function ChatInput({
@@ -25,8 +35,11 @@ export function ChatInput({
   disabled,
   placeholder = '詢問後續問題或要求修改...',
   sessionId = '', // ChatInput without sessionId will connect to empty sessionId
+  initialValue = '',
 }: ChatInputProps) {
-  const [value, setValue] = useState(() => drafts.get(sessionId) ?? '')
+  const [value, setValue] = useState(
+    () => drafts.get(sessionId) ?? initialValue,
+  )
   const [files, setFiles] = useState<Array<File>>([])
   const [isDragging, setIsDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)

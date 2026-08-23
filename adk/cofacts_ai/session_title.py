@@ -4,7 +4,6 @@ import logging
 from google import genai
 from google.genai import types as genai_types
 
-from .agent_names import AI_WRITER_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +27,27 @@ def _get_client():
 
 
 async def generate_session_title(callback_context) -> None:
-    """Generates a session title after the first writer turn."""
+    """Generates a session title after the first agent turn.
+
+    Mounted on ai_receptionist (the root) ONLY, unlike update_last_event_time
+    which has to be on both agents. The asymmetry is deliberate: this callback
+    does its work on the first turn and never again, and the first turn always
+    runs at the root, because Runner._find_agent_to_run only resumes at a
+    sub-agent when there are prior events to find it in. Adding it to ai_writer
+    as well would just fire it twice on a turn that transfers -- the writer runs
+    nested inside the root, so both after_agent_callbacks run for the same user
+    message -- and cost a second LLM call to overwrite the first title.
+
+    Note that state already carries a `title`: the frontend writes the user's
+    truncated first message as a placeholder at session creation, so its
+    presence says nothing about whether a real title was generated. The
+    first-turn check below is what makes this run once.
+    """
     if _count_user_events(callback_context.session.events) != 1:
         return None
 
     user_text = _content_text(callback_context.user_content)
-    result_text = _last_writer_text(callback_context.session.events)
+    result_text = _last_agent_text(callback_context.session.events)
     if not user_text and not result_text:
         return None
 
@@ -56,9 +70,16 @@ def _count_user_events(events) -> int:
     return sum(1 for event in events if event.author == "user")
 
 
-def _last_writer_text(events) -> str:
+def _last_agent_text(events) -> str:
+    """The most recent non-user reply, whichever agent wrote it.
+
+    Any agent, not just the writer: a session can end its first turn at the
+    receptionist alone (a support-desk question, or a reporting flow still
+    waiting on the user to pick a message), and keying on the writer would leave
+    those sessions titled from the user's message only.
+    """
     for event in reversed(events):
-        if event.author != AI_WRITER_NAME:
+        if event.author == "user":
             continue
         text = _content_text(event.content)
         if text:
@@ -100,10 +121,7 @@ def _build_prompt(user_text: str, result_text: str) -> str:
         f"User's first message:\n{_truncate_prompt_text(user_text)}"
     )
     if result_text:
-        prompt += (
-            f"\n\n{AI_WRITER_NAME.capitalize()}'s first result:\n"
-            f"{_truncate_prompt_text(result_text)}"
-        )
+        prompt += f"\n\nAssistant's first reply:\n{_truncate_prompt_text(result_text)}"
     return prompt
 
 

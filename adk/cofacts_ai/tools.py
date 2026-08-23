@@ -386,6 +386,183 @@ async def get_single_cofacts_article(
         }
 
 
+# Trimmed text length for search results. The receptionist only needs enough
+# for the user to recognise which message is theirs; the full text arrives with
+# get_single_cofacts_article once they pick one.
+_SEARCH_RESULT_TEXT_LIMIT = 150
+
+
+async def search_suspicious_messages(
+    query: str,
+    limit: int = 5,
+) -> Dict[str, Any]:
+    """
+    Search Cofacts for suspicious messages similar to what the user pasted.
+
+    Use this to find out whether a message has already been reported, so the
+    user can pick the one they mean instead of reporting a duplicate. Present
+    the results as a short numbered list and let the user choose; then call
+    get_single_cofacts_article for the one they picked.
+
+    Deliberately returns far less per article than search_cofacts_database: no
+    existing fact-check replies, no popularity stats, no related articles. Two
+    reasons. Choosing from a list only needs enough text to recognise the
+    message, and — because everything this agent does is replayed to the writer
+    as flattened plain text once control transfers — a full article payload per
+    hit would be pasted into the writer's context verbatim.
+
+    Args:
+        query: The suspicious message text, or the URL the user pasted.
+        limit: How many candidates to return (default 5).
+
+    Returns:
+        {"data": {"totalCount": int, "results": [
+            {id, text, articleType, createdAt, factCheckCount, communityDemandCount}
+        ]}} — `factCheckCount` of 0 means nobody has fact-checked it yet, which
+        is the branch where you offer request_fact_check. Or {"error": ...}.
+    """
+    try:
+        graphql_query = """
+        query SearchSuspiciousMessages($filter: ListArticleFilter!, $first: Int!) {
+          ListArticles(
+            filter: $filter
+            orderBy: [{ _score: DESC }]
+            first: $first
+          ) {
+            totalCount
+            edges {
+              node {
+                id
+                text
+                articleType
+                createdAt
+                factCheckCount: replyCount
+                communityDemandCount: replyRequestCount
+              }
+            }
+          }
+        }
+        """
+
+        result = await _execute_cofacts_graphql(
+            query=graphql_query,
+            variables={
+                "filter": {"moreLikeThis": {"like": query, "minimumShouldMatch": "0"}},
+                "first": limit,
+            },
+            operation_name="search suspicious messages",
+            auth_token=cofacts_token_var.get(),
+        )
+
+        if "error" in result:
+            return result
+
+        list_articles = result["data"]["ListArticles"]
+        results = []
+        for edge in list_articles.get("edges") or []:
+            node = dict(edge.get("node") or {})
+            text = node.get("text") or ""
+            if len(text) > _SEARCH_RESULT_TEXT_LIMIT:
+                node["text"] = text[:_SEARCH_RESULT_TEXT_LIMIT] + "..."
+            results.append(node)
+
+        return {
+            "data": {
+                "totalCount": list_articles.get("totalCount", 0),
+                "results": results,
+            }
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to search suspicious messages: {str(e)}",
+        }
+
+
+async def request_fact_check(
+    article_id: str,
+    reason: str,
+) -> Dict[str, Any]:
+    """
+    Add the user's +1 to an existing Cofacts message that has no fact-check yet.
+
+    This is how cofacts.ai feeds Cofacts' main popularity signal
+    (`replyRequestCount`): it records that one more real person wants this
+    message checked, and `reason` tells the volunteer who eventually picks it up
+    why the user found it suspicious — a field that is almost always empty for
+    LINE-bot reports, so it is worth actually asking for.
+
+    Call this only after the user has picked a specific message from
+    search_suspicious_messages AND that message has no fact-check response yet
+    (factCheckCount == 0). For a message that already has responses, walk the
+    user through the existing answer instead — do not call this.
+
+    Ask the user "why did this look suspicious to you?" and pass their own words
+    as `reason`. Do not invent one, and do not put personally identifying
+    information (names, phone numbers, addresses, order numbers) in it.
+
+    This is create-or-*update*, scoped to the logged-in user: the same person
+    +1-ing the same message twice updates their existing request rather than
+    inflating the count, so a repeat call is safe but pointless.
+
+    Args:
+        article_id: The Cofacts article ID the user picked.
+        reason: Why the user thinks the message is suspicious, in their words.
+
+    Returns:
+        {"success": True, "article_id": ..., "communityDemandCount": int} — the
+        count already includes this request. Or {"error": ...}.
+    """
+    auth_token = cofacts_token_var.get()
+    if not auth_token:
+        return {
+            "error": "not_authenticated",
+            "message": (
+                "[SYSTEM] Cannot record a fact-check request without a signed-in "
+                "user. Ask the user to sign in and try again."
+            ),
+        }
+
+    try:
+        graphql_query = """
+        mutation RequestFactCheck($articleId: String!, $reason: String) {
+          CreateOrUpdateReplyRequest(articleId: $articleId, reason: $reason) {
+            id
+            replyRequestCount
+          }
+        }
+        """
+
+        result = await _execute_cofacts_graphql(
+            query=graphql_query,
+            variables={"articleId": article_id, "reason": reason},
+            operation_name="request fact-check",
+            auth_token=auth_token,
+        )
+
+        if "error" in result:
+            return result
+
+        article = result["data"]["CreateOrUpdateReplyRequest"]
+        if not article:
+            return {
+                "error": "Article not found",
+                "article_id": article_id,
+            }
+
+        return {
+            "success": True,
+            "article_id": article.get("id", article_id),
+            "communityDemandCount": article.get("replyRequestCount"),
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to request fact-check: {str(e)}",
+            "article_id": article_id,
+        }
+
+
 async def submit_cofacts_reply(
     article_id: str, reply_type: str, text: str, reference: str
 ) -> Dict[str, Any]:
