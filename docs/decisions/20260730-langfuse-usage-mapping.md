@@ -1,5 +1,5 @@
 ---
-status: 'proposed'
+status: 'accepted'
 date: 2026-07-30
 decision-makers: [MrOrz]
 consulted:
@@ -324,9 +324,10 @@ must be split rather than added, or cached tokens get double-counted.
   **overwrites** `usage_details` — a shim written to _add_ to existing usage breaks the moment the
   lockfile moves. Treat overwrite as load-bearing.
 - Bad, because it depends on `after_model_callback` running inside the OpenInference `call_llm` span
-  so `update_current_generation` targets the right observation. If it does not, the fallback is to
-  set `langfuse.observation.model` / `langfuse.observation.usage_details` on the current span
-  directly. **This must be verified during implementation, not assumed.**
+  so `update_current_generation` targets the right observation. Verified under test in both streaming
+  modes rather than assumed (see Confirmation), so the contemplated fallback of writing
+  `langfuse.observation.*` to the span directly is unnecessary — but the dependency is real and the
+  test is what will catch it if an ADK release moves the callback out of that span.
 - Bad, because on the streamed root agent the callback fires **once per chunk**, not once per call.
   `base_llm_flow.py:1169-1182` invokes `_handle_after_model_callback` inside
   `async for llm_response in agen`, and in SSE mode that generator yields every partial plus a final
@@ -355,37 +356,40 @@ must be split rather than added, or cached tokens get double-counted.
 
 ## Confirmation
 
-`adk/scripts/langfuse_gcp_reconcile.py` reproduces the whole analysis above and doubles as the
-regression check. It re-prices generations at rates **derived from the billing CSV** rather than
-hardcoded list prices, so it keeps working when Google reprices or a new model appears:
+**The load-bearing assumption is verified, not assumed.** `update_current_generation` writes to
+whatever OTel span is current, so the whole fix depends on `after_model_callback` running inside the
+instrumentor's own `call_llm` span. `cofacts_ai/tests/test_langfuse_usage_mapping.py` proves it by
+running a real ADK agent through a real instrumented tracer and asserting our
+`langfuse.observation.*` attributes land on the same span the instrumentor put its
+`llm.token_count.*` on — in **both** streaming and non-streaming mode, since the divergence between
+them is what strips the model names in the first place. The fallback of setting the attributes on the
+span directly turned out not to be needed. The same file pins the arithmetic: tool-use folded into
+`input`, cached split out of `prompt` rather than added, `output_reasoning` spelled to match a priced
+key, the `usage_metadata is None` guard, and that an empty aggregated response cannot clobber a good
+write.
+
+Beyond the tests, `adk/scripts/langfuse_check_usage.py` is the standing check against live data:
 
 ```
-uv run python scripts/langfuse_gcp_reconcile.py \
-    --billing-csv <export grouped by SKU> --from 2026-07-01 --to 2026-08-01
+uv run python scripts/langfuse_check_usage.py --from 2026-09-01 --to 2026-10-01 \
+    --max-unpriced-share 0.02 --max-unpriced-generations 0     # exits 1 on breach
 ```
 
-It prints the per-family GCP-vs-reconstructed table with a coverage column, the per-agent unpriced
-token table above, and two health metrics that need no CSV:
+It asserts two invariants, both **version-independent** — they describe correct output rather than
+what any instrumentor release emits, which matters because the dep is unpinned:
 
-- **bucket mismatch** — share of generations where the priced keys don't sum to `total`. This is the
-  single best invariant: `input + output + input_cached_tokens + output_reasoning == total` should
-  hold for every generation. Today it fails on **77.6%**.
-- **unpriced models** — generations whose model never resolved. Today **290**.
+- **unpriced tokens** — priced keys must sum to `total`; the shortfall is tokens Google billed and
+  Langfuse gave away. On the August window before the fix: **25.6% of 33.3M tokens**.
+- **unpriced generations** — a token-carrying generation must resolve a model and cost more than $0.
+  Before the fix: **152 of 901**.
 
-`split_usage` encodes `0.1.10`'s span shapes, so **update it before upgrading**: it infers tool-use
-as the residue `total - input - output - reasoning`, which on `0.1.18`+ is already inside `input`. The
-residue goes to zero and bucket mismatch improves on its own — crediting the shim for the upgrade's
-work, and quietly ending the check.
+Both should be ~0 after deploy. The forensic half of the old `langfuse_gcp_reconcile.py` — re-pricing
+against a billing CSV to locate the gap — was deleted with the fix: its findings are recorded above
+for July and August, and re-deriving rates from a CSV export is not something a regression check
+needs to do.
 
-Both should be ~0 after the fix, so it can run periodically and fail loudly:
-
-```
-uv run python scripts/langfuse_gcp_reconcile.py --from … --to … \
-    --max-bucket-mismatch 0.02 --max-unpriced-models 0     # exits 1 on breach
-```
-
-One caveat the script prints for itself: a Langfuse API key is **project-scoped** while the bill
-covers the whole billing account, so per-family coverage below 100% may just mean another project
+One caveat the check prints for itself: a Langfuse API key is **project-scoped** while the bill
+covers the whole billing account, so a family reconciling below 100% may just mean another project
 owns that usage. In July, `gemini 3.1 flash lite` shows 26% coverage because `rumors-api` — a
 separate Langfuse project — owns most of it.
 
@@ -421,8 +425,8 @@ streamed root agent and `ai_writer` is `gemini-3-flash-preview` (`adk/cofacts_ai
 - Good, because it removes cause 1 with no code of ours, and the dep is unpinned — a lockfile bump.
 - Good, because `0.1.18` also stopped thinking tokens being double-counted into `completion`.
 - Bad, because it reaches only cause 1; causes 2, 3 and 5 are unchanged through `0.1.24`.
-- Bad, because it needs dependency work and a traced run to validate, and it moves the ground under
-  `langfuse_gcp_reconcile.py` — see Confirmation.
+- Bad, because it needs dependency work and a traced run to validate. It does not move the ground
+  under `langfuse_check_usage.py`, whose invariants are deliberately version-independent.
 
 ### Custom model definitions pricing the instrumentor's key names
 
