@@ -363,6 +363,45 @@ covers the whole billing account, so per-family coverage below 100% may just mea
 owns that usage. In July, `gemini 3.1 flash lite` shows 26% coverage because `rumors-api` — a
 separate Langfuse project — owns most of it.
 
+### August re-check: the reconstruction holds on a second month
+
+Re-running the script over 2026-08-01 .. 2026-08-28 against that period's SKU export ($18.28 for the
+billing account) reproduces the July result on fresh data, so the mapping above is not fitted to one
+month:
+
+| family                              | GCP bill |                        reconstructed |       coverage |
+| ----------------------------------- | -------: | -----------------------------------: | -------------: |
+| `gemini 3 flash` (all `cofacts/ai`) |  $13.432 |                              $13.268 |        **99%** |
+| `gemini 3.1 flash lite`             |  $ 4.849 | $1.282 in-project + $3.566 elsewhere | 28% in-project |
+| **total**                           |  $18.282 |                              $18.116 |        **99%** |
+
+Against a Langfuse-reported $7.939 — the health metrics are unchanged in shape (78.6% bucket
+mismatch on 883 generations, 17.3% with no model), so the same three causes are still live and the
+correction still roughly doubles the reported figure.
+
+The one number that is not independent is the $3.566: a project-scoped API key cannot see it, so it
+is the bill minus what `cofacts/ai` owns. What makes it attributable rather than merely residual is
+its **modality shape**. Splitting the flash-lite SKUs by modality rather than blending them (the
+script blends, which is why its in-project figure reads $1.346 against $1.282 here) leaves
+**2.72M audio and 6.11M video input tokens with zero in-project counterpart** — every flash-lite
+generation in `cofacts/ai` is the text-only `proofreader_*` set. Audio and video input on flash-lite
+can therefore only be `rumors-api`'s `transcribeAV`, which runs exactly
+`gemini-3.1-flash-lite` @ `global` (`src/graphql/util.js`, `TRANSCRIPT_MODELS`). The implied volume
+is consistent with that feature: 2.72M audio tokens at Gemini's 32 tok/s is ~23.6 hours of media in
+28 days, and the video side then works out to ~72 tok/s, in line with low-resolution 1 fps frames —
+i.e. one media stream carrying both, not two unrelated workloads. Residual output is 422k tokens
+against the feature's `maxOutputTokens: 2048`, so ≥206 transcripts.
+
+That leaves **$0.166 (0.9%) genuinely unexplained**, all of it inside `gemini 3 flash` — consistent
+with the untraced `session_title.py` client and spans lost on scale-to-zero redeploys, both listed as
+follow-ups above.
+
+Two caveats to carry forward. The 153 model-less generations are priced by `--fallback-family
+gemini 3 flash`, which is right only because cause 2 hits the streamed root agent and `ai_writer` is
+`gemini-3-flash-preview` (`adk/cofacts_ai/agent.py:698`) — re-check that assumption if the writer's
+model changes. And the fix was still unshipped in this window, so this is the size of the error the
+fix has to remove, not evidence that it removed it.
+
 ## Pros and Cons of the Options
 
 ### File the reasoning-key gap upstream with Langfuse (cause 3)
