@@ -6,7 +6,7 @@ consulted: nonumpa
 informed: Cofacts contributors
 ---
 
-# Run url-resolver as a Cloud Run sidecar, with a switchable browser backend
+# Run url-resolver as a Cloud Run sidecar, with its browser on Cloudflare
 
 ## Context and Problem Statement
 
@@ -51,12 +51,12 @@ For where the browser itself runs, once the sidecar exists:
 
 - **In-container chromium** (url-resolver's default; the Docker image bundles it).
 - **Cloudflare Browser Rendering** over url-resolver's `BROWSER_BACKEND=cloudflare` path.
-- **Pick one at deploy time**, via a repo variable.
+- **Pick one at deploy time**, via a repo variable — shipped first, then reverted (below).
 
 ## Decision Outcome
 
-Chosen options: **a sidecar container**, with **the browser backend selected by the
-`URL_RESOLVER_BROWSER_BACKEND` repo variable**, defaulting to in-container chromium.
+Chosen options: **a sidecar container**, with its browser **pinned to Cloudflare Browser
+Rendering** and the container sized for that.
 
 The sidecar follows how rumors-deploy already runs url-resolver in
 `docker-compose.sample.yml`, and gets the containment property for free: as a sidecar the gRPC
@@ -67,28 +67,41 @@ fronted by IAM auth that url-resolver cannot speak; reusing the GCE instance wou
 unauthenticated port on the network and re-coupled cofacts.ai to the host that #118's own
 project is trying to move work off.
 
-Making the browser backend a **deploy-time variable rather than a code choice** is the part
-worth recording. Whether chromium works on Cloud Run is genuinely unknown (see below), and the
-two backends have opposite failure modes — local chromium can OOM the instance, Cloudflare can
-run out of quota or credentials. A variable makes the switch, and the rollback, a settings
-change rather than a PR. Unset renders as an empty string, which url-resolver reads as `local`
-(`process.env.BROWSER_BACKEND || 'local'`), so the wiring lands inert and the default stays the
-behaviour we already understand.
+For the browser, this record first shipped a deploy-time switch (`URL_RESOLVER_BROWSER_BACKEND`,
+defaulting to local chromium) on the reasoning that chromium-on-Cloud-Run was unproven and a
+variable makes the rollback free. **That was reverted before merge**, because the switch was not
+actually free: keeping a revert to local chromium viable meant keeping the container sized for
+chromium — 1 vCPU / 2048 MiB — permanently, on every revision, whether or not a browser ever
+started in it. An option nobody exercises, billed continuously, on a service that runs
+`minScale: 0` precisely to avoid paying for idle.
+
+So the backend is pinned in `service.template.yaml` and the sidecar drops to **0.5 vCPU /
+512 MiB**, roughly 10x its measured 45 MiB idle footprint on this path. Instance totals go from
+2.5 vCPU / 3.25 GiB before the sidecar, to 3.0 vCPU / 3.75 GiB — where the switchable version
+would have cost 3.5 vCPU / 5.25 GiB. Reverting to a local chromium is now a code change to two
+places at once (the `BROWSER_BACKEND` value and the resource limits), which is the intended
+coupling: they are not independently correct, and a revert that changes only one of them OOMs
+the instance.
+
+Local chromium remains url-resolver's default everywhere else, including docker-compose for
+local development. Only the Cloud Run deployment is pinned.
 
 ### Consequences
 
 - Good, because the unauthenticated gRPC port is never on a network, in any environment.
 - Good, because PR previews exercise the real resolver path, so #118 becomes reviewable.
-- Good, because switching to Cloudflare — or back — is a repo variable, not a deploy of new code.
-- Bad, because instance totals grow from 2.5 vCPU / 3.25 GiB to 3.5 vCPU / 5.25 GiB, and the
-  sidecar stays sized for local chromium (1 vCPU / 2 GiB) **even when running on Cloudflare**.
-  Trimming it to the Cloudflare footprint would OOM the instance the moment someone reverts the
-  variable. These limits can only come down once the local fallback is retired for good.
-- Bad, because the Cloudflare path adds an external paid dependency and a long-lived credential
-  to a pipeline that previously had neither.
+- Good, because the ~500 MB chromium process leaves the instance entirely, taking the
+  OOM-kills-the-agent-turn risk and the CPU-throttling question with it, and letting the sidecar
+  cost a third of what the switchable version did.
+- Bad, because a Cloudflare outage or an exhausted quota now has **no fallback**: url-resolver
+  fails every resolve and the verifier degrades to `url_context` only. That degrade is silent by
+  the client's design (see Confirmation), so it will not announce itself. Accepted knowingly —
+  the alternative was paying for a standing chromium-sized container to hedge it.
+- Bad, because the deploy now hard-depends on a Workers Paid plan and a long-lived
+  account-scoped API token; the two Cloudflare secrets are required for any deploy to succeed.
 - Neutral: url-resolver connects to Cloudflare lazily and lets the session lapse on idle, rather
-  than eagerly launching and holding a browser. That happens to suit Cloud Run's scale-to-zero
-  and CPU-throttling model better than the local path does.
+  than eagerly launching and holding a browser. That suits Cloud Run's scale-to-zero and
+  CPU-throttling model better than the local path did.
 
 ## Confirmation
 
@@ -96,9 +109,9 @@ The sidecar is confirmed by deploy: a revision reached Ready with all four conta
 new resource totals, so Cloud Run accepted the fractional CPU sum, pulled the Docker Hub image,
 and the sidecar passed its startup probe. Preview serves HTTP 200; CI is green.
 
-The Cloudflare backend is confirmed by a CI guard plus a manual check. The guard fails the
-deploy when `URL_RESOLVER_BROWSER_BACKEND` is `cloudflare` while either Cloudflare secret is
-empty — the one misconfiguration that would otherwise deploy clean and degrade silently.
+The Cloudflare credentials are confirmed by a CI guard: the deploy workflow refuses to render
+`service.yaml` when either secret is empty — the misconfiguration that would otherwise deploy
+clean and degrade silently.
 
 **What no automated check covers: whether the browser actually renders.** The startup probe is
 TCP on 4000, and the gRPC server binds and stays up whether or not a browser is available, so
@@ -114,10 +127,9 @@ gcloud logging read \
   --limit 50 --region asia-east1
 ```
 
-On the **local** backend, `Browser launched successfully.` should appear at container start.
-On the **Cloudflare** backend it must not — that path connects lazily, so the line appears only
-after the first real scrape. Absence at startup is correct there and proves nothing; send a URL
-through the verifier and check for it then.
+`Browser launched successfully.` must **not** appear at container start: the Cloudflare path
+connects lazily, so the line appears only after the first real scrape. Absence at startup is
+correct and proves nothing — send a URL through the verifier, then look for it.
 
 ## Pros and Cons of the Options
 
@@ -132,8 +144,8 @@ through the verifier and check for it then.
 - Bad, because the browser is one long-lived process reused across requests and frozen between
   them by CPU throttling. `scrape.js` relaunches on `disconnected`, so a dropped CDP connection
   should self-heal, but the first affected request still fails.
-- Bad, because it is what forces the 2 GiB sidecar, and an OOM there takes the whole instance —
-  and an in-flight agent turn — with it.
+- Bad, because it is what forces the 1 vCPU / 2 GiB sidecar — billed on every revision, idle or
+  not — and an OOM there takes the whole instance, and an in-flight agent turn, with it.
 
 ### Cloudflare Browser Rendering
 
@@ -143,6 +155,8 @@ through the verifier and check for it then.
   session as expected, rather than eagerly holding a browser — a better fit for a container that
   scales to zero.
 - Neutral, because the code already exists upstream and is a configuration change here.
+- Good, because with no local chromium to keep viable, the sidecar can hold 0.5 vCPU / 512 MiB
+  instead of 1 vCPU / 2 GiB.
 - Bad, because it requires a **Workers Paid** plan ($5/month; Workers Free allows 10 minutes of
   browser time per day) plus $0.09 per browser-hour beyond the 10 hours included monthly. At
   ~5 s per resolution, 10k URLs/day is roughly 417 browser-hours ≈ $37/month — and the real
@@ -166,6 +180,8 @@ through the verifier and check for it then.
   needed. Pricing and limits:
   https://developers.cloudflare.com/browser-run/pricing/ and
   https://developers.cloudflare.com/browser-run/limits/
-- **Revisit when**: the local backend is confirmed working (or not) on Cloud Run with real
-  traffic. Either answer retires the variable — confirmation lets the Cloudflare path go, a
-  failure makes Cloudflare the only option and frees the sidecar to shrink.
+- **Revisit when**: Cloudflare browser-hour spend exceeds what a standing chromium-sized
+  sidecar would have cost (roughly, when sustained volume passes ~10k URLs/day), or when a
+  Cloudflare outage causes a user-visible regression. Either would reopen the local backend —
+  which would mean restoring both the `BROWSER_BACKEND` value and the 1 vCPU / 2048 MiB limits,
+  and would still leave chromium-on-Cloud-Run unproven.
