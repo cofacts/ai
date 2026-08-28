@@ -28,6 +28,10 @@ Usage:
     uv run python scripts/langfuse_check_usage.py --from … --to … \
         --max-unpriced-share 0.02 --max-unpriced-generations 0   # exits 1 on breach
 
+    # verify a PR preview deploy before merging, without production drowning it out
+    uv run python scripts/langfuse_check_usage.py --environment preview \
+        --from 2026-09-01 --to 2026-09-02
+
 Reads LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL from the environment,
 the same variables `instrumentation.py` uses. The key is project-scoped, so one run sees one
 Langfuse project — `rumors-api`'s transcripts live in their own.
@@ -44,7 +48,11 @@ import httpx
 
 
 def fetch_generations(
-    base_url: str, auth: tuple[str, str], start: str, end: str
+    base_url: str,
+    auth: tuple[str, str],
+    start: str,
+    end: str,
+    environment: str | None = None,
 ) -> list[dict]:
     """Page through every GENERATION observation in the window."""
     out: list[dict] = []
@@ -59,6 +67,7 @@ def fetch_generations(
                     "toStartTime": end,
                     "limit": 100,
                     "page": page,
+                    **({"environment": environment} if environment else {}),
                 },
             )
             resp.raise_for_status()
@@ -96,6 +105,12 @@ def main() -> int:
     )
     parser.add_argument("--to", dest="end", required=True, help="exclusive, YYYY-MM-DD")
     parser.add_argument(
+        "--environment",
+        help="limit to one tracing environment (production / staging / preview). "
+        "Deploys set this via LANGFUSE_TRACING_ENVIRONMENT, so it is how a preview "
+        "run gets checked on its own.",
+    )
+    parser.add_argument(
         "--max-unpriced-share",
         type=float,
         help="fail if the unpriced share of all tokens exceeds this (0-1)",
@@ -116,12 +131,17 @@ def main() -> int:
         )
         return 2
 
+    scope = f" [{args.environment}]" if args.environment else ""
     print(
-        f"Fetching generations {args.start} .. {args.end} from {base_url}",
+        f"Fetching generations{scope} {args.start} .. {args.end} from {base_url}",
         file=sys.stderr,
     )
     generations = fetch_generations(
-        base_url, (public, secret), f"{args.start}T00:00:00Z", f"{args.end}T00:00:00Z"
+        base_url,
+        (public, secret),
+        f"{args.start}T00:00:00Z",
+        f"{args.end}T00:00:00Z",
+        args.environment,
     )
     if not generations:
         print("No generations in window.", file=sys.stderr)
@@ -145,7 +165,9 @@ def main() -> int:
 
     n = len(generations)
     share = unpriced / total_tokens if total_tokens else 0.0
-    print(f"\n{'=' * 78}\n{n:,} generations, {args.start} .. {args.end}\n{'=' * 78}")
+    print(
+        f"\n{'=' * 78}\n{n:,} generations{scope}, {args.start} .. {args.end}\n{'=' * 78}"
+    )
     print(f"  reported cost                         ${cost:>12.3f}")
     print(f"  tokens in `total`                      {total_tokens:>12,}")
     print(

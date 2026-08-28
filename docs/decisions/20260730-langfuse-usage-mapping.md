@@ -383,7 +383,12 @@ what any instrumentor release emits, which matters because the dep is unpinned:
 - **unpriced generations** — a token-carrying generation must resolve a model and cost more than $0.
   Before the fix: **152 of 901**.
 
-Both should be ~0 after deploy. The forensic half of the old `langfuse_gcp_reconcile.py` — re-pricing
+Both should be ~0 after deploy. Because cost is fixed at ingestion, the check has to run against
+generations produced by the new code — which is what `--environment preview` is for: a PR deploy sets
+`LANGFUSE_TRACING_ENVIRONMENT=preview` (`.github/workflows/deploy.yml`) into the same Langfuse
+project, so one streamed fact-check through a preview URL can be measured on its own before merging.
+The `preview` baseline matches production's shape (23.9% unpriced over 17 generations), so it is a
+fair comparison. The forensic half of the old `langfuse_gcp_reconcile.py` — re-pricing
 against a billing CSV to locate the gap — was deleted with the fix: its findings are recorded above
 for July and August, and re-deriving rates from a CSV export is not something a regression check
 needs to do.
