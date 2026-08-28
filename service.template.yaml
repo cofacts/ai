@@ -152,6 +152,13 @@ spec:
           value: "${CLOUDFLARE_ACCOUNT_ID}"
         - name: CLOUDFLARE_API_TOKEN
           value: "${CLOUDFLARE_API_TOKEN}"
+        # Idle window before Cloudflare closes the remote session. Unset renders
+        # as "" and url-resolver falls back to its own 60000 ms default. The
+        # session is billed until it times out, so this trades session reuse
+        # against a billed idle tail; set the CLOUDFLARE_KEEP_ALIVE_MS repo
+        # variable to tune it (Cloudflare caps it at 600000).
+        - name: CLOUDFLARE_KEEP_ALIVE_MS
+          value: "${CLOUDFLARE_KEEP_ALIVE_MS}"
         startupProbe:
           # The gRPC server binds immediately; chromium launches in the
           # background right after. A TCP probe therefore only proves the RPC
