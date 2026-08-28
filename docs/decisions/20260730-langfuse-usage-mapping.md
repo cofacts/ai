@@ -37,8 +37,10 @@ an `openinference-instrumentation-google-adk` upgrade that might silently undo i
   `{input: 1287, output: 729, completion_details.reasoning: 9963, total: 2955369}` and charged
   **$0.0028**. The 2.94M-token difference is `usageMetadata.toolUsePromptTokenCount`, which Gemini
   reports _separately from_ `promptTokenCount`, counts inside `totalTokenCount`, and Google bills at
-  the normal text-input rate. No OTel attribute carries it, so it only ever reaches Langfuse inside
-  `total` — a key with no price. This one mechanism is ~43% of the gap.
+  the normal text-input rate. On the `0.1.10` our lockfile pins, no OTel attribute carries it, so it
+  only ever reaches Langfuse inside `total` — a key with no price. This one mechanism is ~43% of the
+  gap. **Fixed upstream in `0.1.18`** (2026-07-30) by folding the count into
+  `llm.token_count.prompt`; still live for us until we upgrade.
 - [A generation with no model name — `e9f23487`](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/traces/e9f23487bb5ad686cff21342603aea98) —
   `model = null` ⇒ `modelId = null` ⇒ `costDetails = {}` ⇒ **$0**, while carrying real tokens. These
   are truncated spans: ~5.6 attributes against 25.4 on healthy ones, holding only the response side
@@ -128,16 +130,11 @@ Langfuse's SDKs and OTel instrumentation. It is not, and there are three indepen
    [semantic conventions](https://arize-ai.github.io/openinference/spec/semantic_conventions.html)
    define exactly eight `llm.token_count.*` attributes — `prompt`, `completion`, `total`,
    `completion_details.reasoning`, `completion_details.audio`, `prompt_details.cache_read`,
-   `prompt_details.cache_write`, `prompt_details.audio`. **There is no tool-use attribute.** So this
-   is not the instrumentor forgetting to emit a field; the vocabulary it targets has nowhere to put
-   one. ~~Fixing this upstream requires a spec change first, then a library change.~~
-   **Corrected — this inference does not follow, and it is the mistake this record most needs to
-   flag.** Having no bucket of its own does not mean having nowhere to go: 0.1.18 fixed it by adding
-   the tool-use count to the existing `llm.token_count.prompt`, which is what Google bills it as
-   anyway, and is the same fold this record chose for its own shim two paragraphs below. Everything
-   above this sentence still holds — the number really does not reach Langfuse on 0.1.10, and `total`
-   really is unpriceable — but "no attribute exists" is an argument about the vocabulary, not about
-   what a library can do with the vocabulary it has. See the version audit below.
+   `prompt_details.cache_write`, `prompt_details.audio`. **There is no tool-use attribute**, so the
+   count cannot arrive under a name of its own. Note what does _not_ follow: having no bucket is not
+   having nowhere to go. An instrumentor can fold the count into `prompt` — which is what Google
+   bills it as — and `0.1.18` does exactly that, with no spec change. That is also the fold chosen
+   for our shim below, and for the same reason: `prompt` already carries a price.
 3. **`total` is reserved, so it cannot be priced as a workaround.** Langfuse's docs define it as
    "not a bucket itself but spans all buckets and equals their sum" — a derived aggregate, not a
    priceable bucket. Buckets are assumed mutually exclusive with `total == sum(buckets)`, and our
@@ -194,59 +191,6 @@ export instead" reaction: ADK's own `trace_call_llm` sets only `gen_ai.usage.inp
 have hidden ~$10.9/month with no signal to find it by. The path we are on is buggy but observable,
 which is the better of the two failure modes.
 
-### The upstream has moved since this was written
-
-This record was drafted against the version in our lockfile, **0.1.10**. Auditing every release since
-(diffing the sdists, not the changelog — the relevant change is not in it) shows **cause 1 was fixed
-upstream in `0.1.18`, published 2026-07-30 — the same day as this record.** `_wrappers.py`'s
-`_get_attributes_from_usage_metadata` now reads:
-
-```python
-prompt = (obj.prompt_token_count or 0) + (obj.tool_use_prompt_token_count or 0)
-if prompt:
-    yield SpanAttributes.LLM_TOKEN_COUNT_PROMPT, prompt
-```
-
-Grepping `tool_use_prompt_token_count` across the sdists pins the transition exactly: absent in
-0.1.17, present in 0.1.18 ([#3178](https://github.com/Arize-ai/openinference/issues/3178), released
-as "Handle Thinking Token Inclusion Correctly"; the same PR also stopped thinking tokens being
-double-counted into `completion`).
-
-**They did it without a spec change** — by folding tool-use into the existing
-`llm.token_count.prompt`, which is precisely the trick this record chose for its own shim, and for
-the same reason: that key already carries a price. So the "three-party sequence" this record uses to
-argue against waiting on upstream was, for cause 1, never required. The argument for owning the
-mapping does not collapse — three of the four causes are untouched below — but the driver and the
-option must be read with this correction.
-
-Nothing else moved. Verified against 0.1.24, the latest release:
-
-| cause                 | Aug 2026 size          | fixed by upgrading? | why                                                                                          |
-| --------------------- | ---------------------- | ------------------- | -------------------------------------------------------------------------------------------- |
-| 1. tool-use tokens    | $2.70 (8.63M tok)      | **yes, 0.1.18**     | folded into `prompt`                                                                         |
-| 2. `model = null`     | $3.39 (9.36M tok)      | **no**              | `_TraceCallLlm` unchanged 0.1.10→0.1.24: still `get_current_span()`, still `if llm_request:` |
-| 3. reasoning unpriced | $2.82 (1.14M tok)      | **no**              | still emitted as `completion_details.reasoning`; a Langfuse-side allowlist gap either way    |
-| 5. cached never sent  | ~$2.3 (over-statement) | **no**              | `cached_content_token_count` appears **0 times** in 0.1.24                                   |
-
-Two details worth carrying:
-
-- **Cause 5 is the most filable of the four, and this record under-describes it.** Above it reads as
-  "the bucket is never sent"; the reason is a one-line omission. The OpenInference spec **already
-  has** `llm.token_count.prompt_details.cache_read`, `usage_metadata` already carries
-  `cached_content_token_count`, and the instrumentor simply never reads it. No spec change, no
-  Langfuse change — the same shape as
-  [langfuse#13571](https://github.com/langfuse/langfuse/issues/13571) → #13572, which is cited above
-  as the model for cause 3.
-- **Cause 2 has not been addressed, and is now the largest single cause.** The `llm_response.partial`
-  check added in 0.1.23 is [#3542](https://github.com/Arize-ai/openinference/issues/3542), about
-  spans being locked at `OK` on ADK 2.x failures — it does not touch the model name.
-
-The upgrade is cheap: `pyproject.toml` does not pin the instrumentor, so only the lockfile holds us
-at 0.1.10. It is not free of work, though: 0.1.21+ requires `openinference-instrumentation>=0.1.59`
-(we run 0.1.46) and `openinference-semantic-conventions>=0.1.33` (0.1.28), and 0.1.23 adds ADK
-1.32+/2.x code paths behind an `_adk_version() < (1, 32, 0)` gate while we run ADK 1.26 — so it needs
-a real traced run, not a green lockfile.
-
 ## Decision Drivers
 
 - Cost per feature and per user has to be trustworthy in Langfuse, or we cannot see a runaway agent
@@ -258,19 +202,16 @@ a real traced run, not a green lockfile.
 - `usageMetadata` from `google-genai` is authoritative and already in hand at the callback boundary;
   the OTel attribute set the instrumentor emits is a lossy projection of it.
 - Whatever we do must survive an `openinference-instrumentation-google-adk` upgrade — silently
-  reverting to lossy usage is the failure mode this record exists to prevent. Note this cuts both
-  ways, per the version audit above: an upgrade is also how cause 1 gets fixed, so "survive" means
-  "keep working when upstream starts sending a value we also compute", not "resist upgrading".
+  reverting to lossy usage is the failure mode this record exists to prevent.
 - Prefer a fix that needs no per-model Langfuse configuration, since model ids churn (four Gemini
   families appeared on this bill in one month) and a config step that must be repeated per model
   will be forgotten.
-- The causes sit at **different layers**, so one blanket answer is wrong. Cause 3 is a Langfuse-side
-  allowlist gap on a name that already exists in the OpenInference spec, with a merged fix precedent.
-  Cause 1 ~~needs a new attribute in the spec before any library can carry it~~ — **corrected: it
-  needed no spec change and is already fixed in 0.1.18** (see the version audit above); it is
-  therefore reachable by a dependency bump alone. Cause 2 is a bug in a library we do not control,
-  and cause 5 a one-line omission in it. Causes 2, 3 and 5 are what still needs working around
-  locally.
+- The causes sit at **different layers**, so one blanket answer is wrong. Cause 1 is already fixed
+  upstream, so a dependency bump reaches it. Cause 3 is a Langfuse-side allowlist gap on a name that
+  already exists in the OpenInference spec, with a merged fix precedent. Cause 2 is a bug in a
+  library we do not control, and cause 5 a one-line omission in it: the spec has
+  `prompt_details.cache_read` and `usage_metadata` has `cached_content_token_count`, and through
+  `0.1.24` the instrumentor never reads it. Causes 2, 3 and 5 are what needs working around locally.
 
 ## Considered Options
 
@@ -279,15 +220,8 @@ a real traced run, not a green lockfile.
   `output_reasoning`. Ask for the spelling to be added to the resolver chain, exactly as
   [#13571](https://github.com/langfuse/langfuse/issues/13571) → #13572 did for
   `prompt_details.cache_read`.
-- **File the tool-use gap upstream and wait (cause 1).** Assessed here as requiring a new
-  `llm.token_count.*` attribute in the
-  [OpenInference spec](https://arize-ai.github.io/openinference/spec/semantic_conventions.html), then
-  an instrumentor release emitting it, then Langfuse recognising it — a three-party sequence.
-  **This assessment was wrong**, and is kept because the reasoning error is instructive: it assumed
-  the token needed a bucket of its own. Upstream instead folded it into the existing `prompt` key and
-  shipped in 0.1.18 the same day, unilaterally.
-- **Upgrade `openinference-instrumentation-google-adk` (0.1.10 → 0.1.24).** A lockfile bump, no code
-  of our own. Reaches cause 1 only; causes 2, 3 and 5 are unchanged upstream.
+- **Upgrade `openinference-instrumentation-google-adk` (`0.1.10` → `0.1.24`).** A lockfile bump — the
+  instrumentor is unpinned in `pyproject.toml` — that takes cause 1 for free. Reaches nothing else.
 - **Add project-level custom model definitions that price the instrumentor's own key names.**
   Langfuse lets user-defined models override managed ones, so define `gemini-3-flash-preview` etc.
   with prices for `completion_details.reasoning` and `prompt_details.audio` — the keys the
@@ -299,23 +233,30 @@ a real traced run, not a green lockfile.
 
 ## Decision Outcome
 
-Chosen option: **own the mapping in `LangfuseTracingPlugin`**, and **also file the reasoning-key gap
-upstream** — the two are complementary, not alternatives.
+Chosen option: **upgrade the instrumentor first, then own the mapping in `LangfuseTracingPlugin`**,
+and **also file the reasoning-key gap upstream** — the three are complementary, not alternatives.
 
-**Amended after the version audit above: also upgrade the instrumentor, and do that first.** It is a
-lockfile bump that removes cause 1 ($2.70 of the August window) with no code of ours to maintain, and
-sequencing it first keeps the shim's job honest — whatever gap survives the upgrade is what the shim
-actually has to earn. Upgrading is not a substitute: it leaves causes 2, 3 and 5, about $6.2 plus the
-cache over-statement of the ~$10.3 August gap.
+Upgrade first because it is a lockfile bump that takes cause 1 with no code of ours to maintain, and
+because sequencing it first keeps the shim's credit honest: whatever survives the upgrade is what the
+shim actually has to earn. It is not a substitute — auditing every release from `0.1.10` to `0.1.24`
+(by diffing sdists; the change is not in the changelog) shows only cause 1 moved:
 
-Own the mapping, because it is the only option that reaches causes 2, 3 and 5 (and cause 1, though an
-upgrade now covers that one too). Custom model
-definitions cannot: for cause 1 there is **no key to price** (the tool-use tokens exist only inside
-the reserved `total`), for cause 2 there is **no model name to match**, and for cause 5 the
+| cause                 | Aug 2026 size          | upgrading fixes it?               |
+| --------------------- | ---------------------- | --------------------------------- |
+| 1. tool-use tokens    | $2.70 (8.63M tok)      | **yes, `0.1.18`**                 |
+| 2. `model = null`     | $3.39 (9.36M tok)      | no — `_TraceCallLlm` is unchanged |
+| 3. reasoning unpriced | $2.82 (1.14M tok)      | no — and Langfuse-side anyway     |
+| 5. cached never sent  | ~$2.3 (over-statement) | no — the field is still unread    |
+
+Not free of work, though: `0.1.21`+ needs `openinference-instrumentation>=0.1.59` (we run `0.1.46`)
+and `openinference-semantic-conventions>=0.1.33` (`0.1.28`), and `0.1.23` adds ADK 1.32+/2.x paths
+behind a version gate while we run ADK 1.26 — so validate with a real traced run, not a green
+lockfile.
+
+Own the mapping, because it is the only option that reaches causes 2, 3 and 5. Custom model
+definitions cannot: for cause 2 there is **no model name to match**, and for cause 5 the
 `input_cached_tokens` bucket is never sent at all — you cannot discount a bucket you do not receive.
-Waiting on upstream for cause 1 means waiting on a spec change, a library release and a Langfuse
-release in sequence, while ~$18/month stays mis-attributed and every day of delay is unrecoverable
-because Langfuse never backfills.
+Every day we leave those unfixed is permanently mis-priced, because Langfuse never backfills.
 
 File cause 3 upstream anyway, because it is a genuinely different situation: the name already exists
 in the spec, Langfuse simply does not normalize it, and #13571 shows that class of report getting
@@ -353,10 +294,10 @@ get_client().update_current_generation(
 Two choices in there are the reason this needs **no Langfuse configuration change at all**, and both
 are easy to get wrong later:
 
-- **Fold `tool_use_prompt_token_count` into `input`.** Google bills it at the plain input rate, and
-  `input` is already priced in every managed Gemini definition. A dedicated `input_tool_use` key
-  would read better in the UI but would require custom model definitions for every model — the
-  churn we are trying to avoid.
+- **Fold `tool_use_prompt_token_count` into `input`,** as `0.1.18` upstream also does. Google bills
+  it at the plain input rate and `input` is already priced in every managed Gemini definition; a
+  dedicated `input_tool_use` key would read better in the UI but needs custom model definitions for
+  every model — the churn we are trying to avoid.
 - **Emit `output_reasoning` and `input_cached_tokens`, not the instrumentor's
   `completion_details.reasoning`.** Those two key names already carry correct prices in the managed
   `gemini-3-flash-preview`, `gemini-3.1-flash-lite` and `gemini-3.5-flash` definitions. This is a
@@ -377,13 +318,11 @@ must be split rather than added, or cached tokens get double-counted.
 - Good, because it needs no per-model Langfuse configuration, so a new Gemini family prices
   correctly on arrival as long as a managed definition exists.
 - Bad, because we now carry a shim that duplicates what the instrumentor should do, and it must be
-  re-verified on every `openinference-instrumentation-google-adk` bump — including the possibility
-  that a future version fixes this and we start double-counting. **This is no longer hypothetical:**
-  0.1.18 already folds tool-use into `prompt`, and the instrumentor is unpinned in `pyproject.toml`,
-  so any lockfile refresh picks it up. What keeps that safe is that
-  `update_current_generation(usage_details=...)` **overwrites**; a shim written to _add_ to the
-  existing usage would double-count the moment the lockfile moves. Write it as overwrite, and treat
-  that as load-bearing rather than incidental.
+  re-verified on every `openinference-instrumentation-google-adk` bump. The double-counting hazard is
+  live, not hypothetical: `0.1.18` already folds tool-use into `prompt` and the dep is unpinned, so
+  any lockfile refresh picks it up. What keeps that safe is that `update_current_generation`
+  **overwrites** `usage_details` — a shim written to _add_ to existing usage breaks the moment the
+  lockfile moves. Treat overwrite as load-bearing.
 - Bad, because it depends on `after_model_callback` running inside the OpenInference `call_llm` span
   so `update_current_generation` targets the right observation. If it does not, the fallback is to
   set `langfuse.observation.model` / `langfuse.observation.usage_details` on the current span
@@ -410,9 +349,9 @@ must be split rather than added, or cached tokens get double-counted.
 - Neutral, because emitting `output_reasoning` ourselves makes the outcome of the cause-3 upstream
   issue irrelevant to us — good for independence, but it also removes our incentive to chase it. File
   it anyway; it is a one-sided fix that helps everyone else on ADK plus Langfuse.
-- Neutral, because the tool-use and span-truncation bugs stay unreported unless someone files them.
-  Worth doing, but on a three-party timeline (spec, then library, then Langfuse), so it can never be
-  the thing we wait for.
+- Neutral, because the span-truncation bug (cause 2) and the unread cached-token field (cause 5) stay
+  unreported unless someone files them. Both worth filing — cause 5 is a one-liner — but neither is
+  something to wait for.
 
 ## Confirmation
 
@@ -433,12 +372,10 @@ token table above, and two health metrics that need no CSV:
   hold for every generation. Today it fails on **77.6%**.
 - **unpriced models** — generations whose model never resolved. Today **290**.
 
-**`split_usage` encodes 0.1.10's span shapes and must be updated alongside any instrumentor
-upgrade.** It infers tool-use tokens as the residue `total - input - output - reasoning`, which is
-only correct while the instrumentor omits them. On 0.1.18+ they are already inside `input`, so the
-residue goes to zero and **bucket mismatch improves on its own** — the metric would report success
-that the upgrade, not the shim, delivered. Update the script's assumptions before upgrading, or the
-two effects become indistinguishable and the regression check silently stops checking anything.
+`split_usage` encodes `0.1.10`'s span shapes, so **update it before upgrading**: it infers tool-use
+as the residue `total - input - output - reasoning`, which on `0.1.18`+ is already inside `input`. The
+residue goes to zero and bucket mismatch improves on its own — crediting the shim for the upgrade's
+work, and quietly ending the check.
 
 Both should be ~0 after the fix, so it can run periodically and fail loudly:
 
@@ -452,44 +389,21 @@ covers the whole billing account, so per-family coverage below 100% may just mea
 owns that usage. In July, `gemini 3.1 flash lite` shows 26% coverage because `rumors-api` — a
 separate Langfuse project — owns most of it.
 
-### August re-check: the reconstruction holds on a second month
+Re-run over **2026-08-01 .. 2026-08-28** against that period's export, the model holds on data it was
+not fitted to: `gemini 3 flash` (entirely `cofacts/ai`) reconstructs to **$13.268 of its billed
+$13.432 — 99%**, and flash-lite to $1.282 in-project against a billed $4.849. Total **$18.116 of
+$18.282**, against a Langfuse-reported $7.939. Health metrics keep July's shape (78.6% bucket
+mismatch on 883 generations, 17.3% with no model), so all three causes were still live all month.
 
-Re-running the script over 2026-08-01 .. 2026-08-28 against that period's SKU export ($18.28 for the
-billing account) reproduces the July result on fresh data, so the mapping above is not fitted to one
-month:
-
-| family                              | GCP bill |                        reconstructed |       coverage |
-| ----------------------------------- | -------: | -----------------------------------: | -------------: |
-| `gemini 3 flash` (all `cofacts/ai`) |  $13.432 |                              $13.268 |        **99%** |
-| `gemini 3.1 flash lite`             |  $ 4.849 | $1.282 in-project + $3.566 elsewhere | 28% in-project |
-| **total**                           |  $18.282 |                              $18.116 |        **99%** |
-
-Against a Langfuse-reported $7.939 — the health metrics are unchanged in shape (78.6% bucket
-mismatch on 883 generations, 17.3% with no model), so the same three causes are still live and the
-correction still roughly doubles the reported figure.
-
-The one number that is not independent is the $3.566: a project-scoped API key cannot see it, so it
-is the bill minus what `cofacts/ai` owns. What makes it attributable rather than merely residual is
-its **modality shape**. Splitting the flash-lite SKUs by modality rather than blending them (the
-script blends, which is why its in-project figure reads $1.346 against $1.282 here) leaves
-**2.72M audio and 6.11M video input tokens with zero in-project counterpart** — every flash-lite
-generation in `cofacts/ai` is the text-only `proofreader_*` set. Audio and video input on flash-lite
-can therefore only be `rumors-api`'s `transcribeAV`, which runs exactly
-`gemini-3.1-flash-lite` @ `global` (`src/graphql/util.js`, `TRANSCRIPT_MODELS`). The implied volume
-is consistent with that feature: 2.72M audio tokens at Gemini's 32 tok/s is ~23.6 hours of media in
-28 days, and the video side then works out to ~72 tok/s, in line with low-resolution 1 fps frames —
-i.e. one media stream carrying both, not two unrelated workloads. Residual output is 422k tokens
-against the feature's `maxOutputTokens: 2048`, so ≥206 transcripts.
-
-That leaves **$0.166 (0.9%) genuinely unexplained**, all of it inside `gemini 3 flash` — consistent
-with the untraced `session_title.py` client and spans lost on scale-to-zero redeploys, both listed as
-follow-ups above.
-
-Two caveats to carry forward. The 153 model-less generations are priced by `--fallback-family
-gemini 3 flash`, which is right only because cause 2 hits the streamed root agent and `ai_writer` is
-`gemini-3-flash-preview` (`adk/cofacts_ai/agent.py:698`) — re-check that assumption if the writer's
-model changes. And the fix was still unshipped in this window, so this is the size of the error the
-fix has to remove, not evidence that it removed it.
+The $3.566 flash-lite remainder no key can see is attributable rather than merely residual, by
+**modality**: split those SKUs instead of blending them and 2.72M audio and 6.11M video input tokens
+have no in-project counterpart, every flash-lite generation in `cofacts/ai` being a text-only
+`proofreader_*`. On flash-lite that can only be `rumors-api`'s `transcribeAV`, and the implied ~34
+media/day agrees with the 249 media articles over 8 days counted in the Jul 9–17 transcript outage.
+The genuinely unexplained part is **$0.166 (0.9%)**, all inside `gemini 3 flash` — the untraced
+`session_title.py` client and redeploy-dropped spans, both follow-ups below. Note the 153 model-less
+generations are priced by `--fallback-family gemini 3 flash`, right only because cause 2 hits the
+streamed root agent and `ai_writer` is `gemini-3-flash-preview` (`adk/cofacts_ai/agent.py:698`).
 
 ## Pros and Cons of the Options
 
@@ -502,27 +416,13 @@ fix has to remove, not evidence that it removed it.
 - Neutral, because our own shim makes us independent of the outcome either way.
 - Bad, because it reaches only ~$5.8 of the ~$25.5 gap, and only after a release.
 
-### File the tool-use gap upstream and wait (cause 1)
+### Upgrade the instrumentor (`0.1.10` → `0.1.24`)
 
-- Good, because this is genuinely the right long-term home for it — and in the event it is where the
-  fix landed.
-- Bad, because it was judged a **three-party sequence** (spec, then instrumentor, then Langfuse) and
-  therefore unwaitable. That judgement was wrong: folding into an existing priced key needs only the
-  instrumentor, and 0.1.18 shipped it the same day. The lesson is to check whether an existing key
-  can carry the value before concluding a spec change is required.
-- Bad, because ~$10.9/month keeps mis-attributing meanwhile, unrecoverably — this part held: we sat
-  on 0.1.10 through August and paid it anyway.
-
-### Upgrade the instrumentor (0.1.10 → 0.1.24)
-
-- Good, because it removes cause 1 with no code of ours, and the instrumentor is unpinned so it is a
-  lockfile bump.
-- Good, because 0.1.18 also fixed thinking tokens being double-counted into `completion`, and later
-  releases carry unrelated fixes we would want eventually anyway.
-- Bad, because it reaches only cause 1: causes 2, 3 and 5 are byte-for-byte unchanged through 0.1.24.
-- Bad, because it needs dependency work and a real traced run to validate (see the version audit),
-  not just a resolving lockfile.
-- Bad, because it moves the ground under `langfuse_gcp_reconcile.py` — see Confirmation.
+- Good, because it removes cause 1 with no code of ours, and the dep is unpinned — a lockfile bump.
+- Good, because `0.1.18` also stopped thinking tokens being double-counted into `completion`.
+- Bad, because it reaches only cause 1; causes 2, 3 and 5 are unchanged through `0.1.24`.
+- Bad, because it needs dependency work and a traced run to validate, and it moves the ground under
+  `langfuse_gcp_reconcile.py` — see Confirmation.
 
 ### Custom model definitions pricing the instrumentor's key names
 
@@ -560,7 +460,7 @@ fix has to remove, not evidence that it removed it.
 - Neutral, because the plugin already exists for trace-id stamping; this is one more callback, not
   new machinery.
 - Bad, because it must be re-verified on instrumentor upgrades, and could double-count if upstream
-  fixes this — which, for cause 1, upstream already has.
+  fixes this.
 
 ## More Information
 
@@ -570,15 +470,6 @@ fix has to remove, not evidence that it removed it.
   but token capture reconciles at ~96%, leaving only ~$0.8 residual); and the two Flash Lite names
   in the dashboard, which is just `rumors-api`'s `a8c03e1` replacing a retired
   `gemini-3.1-flash-lite-preview` on 2026-07-17 — both names carry identical correct prices.
-- **Upstream work this implies**, in feasibility order (see the version audit for the evidence):
-  1. **Cause 5 → a one-line PR to openinference.** Read `usage_metadata.cached_content_token_count`
-     and yield `LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ`. The spec attribute exists; nothing else
-     has to change. Most likely of the four to land, and we can send it ourselves.
-  2. **Cause 3 → the Langfuse issue** already decided above.
-  3. **Cause 2 → an openinference issue.** A real bug, and far broader than our bill — it silently
-     un-instruments the root agent of every streamed ADK deployment. Needs the live repro listed
-     below before filing.
-  4. **Cause 1 → nothing. Already fixed in 0.1.18**; just upgrade.
 - **Follow-ups this record does not fix:**
   - `rumors-api` `src/graphql/util.js:940-946` reads only `promptTokenCount` and
     `candidatesTokenCount` out of `usageMetadata`, dropping `thoughtsTokenCount`,
@@ -594,6 +485,9 @@ fix has to remove, not evidence that it removed it.
     current cause, but both services can silently drop buffered spans on redeploy.
   - `adk/cofacts_ai/session_title.py:80-91` calls a raw `genai.Client()` outside
     `GoogleADKInstrumentor`, so session-title generation is billed but untraced.
+  - Send openinference a one-line PR for cause 5: read `cached_content_token_count` and yield
+    `LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ`. Spec attribute exists, field exists, nothing else
+    changes — the most likely of the upstream gaps to land, and we can write it ourselves.
   - Confirm the streaming trigger behind cause 2 with a live repro: run one fact-check through
     `/run_sse` and one through a non-streaming call, and compare whether the writer's `call_llm`
     spans carry `llm.model_name` and a finish reason. If streaming is confirmed, that is worth an
@@ -623,11 +517,9 @@ fix has to remove, not evidence that it removed it.
     spellings, not a generic absorber; canonical OpenInference `prompt_details.cache_read` went
     unrecognised and under-reported a production account's cost by ~30%. Fixed by adding the
     spellings to the resolver chain.
-  - Beware second-hand summaries here. A widely-surfaced claim holds that
-    `tool_use_prompt_token_count` is "automatically aggregated into the input usage type" when using
-    Langfuse's SDKs or OTel instrumentation. The three reasons above show it is not, and the sources
-    such summaries cite are themselves bug reports of this very symptom. Verify against the spec and
-    against a real span's attribute set, as the evidence section does.
+  - The widely-surfaced claim that `tool_use_prompt_token_count` is "automatically aggregated into
+    the input usage type" is **version-dependent**: false on the `0.1.10` we run, true on `0.1.18`+.
+    Check the installed `_wrappers.py` rather than a summary.
 - This continues the observability thread listed under "To backfill" in
   [`index.md`](index.md): Langfuse instrumentation ([#8](https://github.com/cofacts/ai/pull/8)),
   session grouping ([#56](https://github.com/cofacts/ai/pull/56)), per-environment traces
