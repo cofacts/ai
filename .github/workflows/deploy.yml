@@ -149,12 +149,9 @@ jobs:
           SERVICE_ACCOUNT_EMAIL: ${{ secrets.SERVICE_ACCOUNT_EMAIL }}
           GC_PROJECT_ID: ${{ secrets.GC_PROJECT_ID }}
           COFACTS_API_URL: ${{ secrets.COFACTS_API_URL }}
-          # Where the url-resolver sidecar runs puppeteer's browser. Leave the
-          # repo variable unset for in-container chromium; set it to `cloudflare`
-          # to use Cloudflare Browser Rendering (needs the two secrets below).
-          # Unset substitutes to an empty string, which url-resolver reads as
-          # `local` — so this is inert until the variable is set.
-          BROWSER_BACKEND: ${{ vars.URL_RESOLVER_BROWSER_BACKEND }}
+          # The url-resolver sidecar runs puppeteer's browser on Cloudflare
+          # Browser Rendering; service.template.yaml pins BROWSER_BACKEND to
+          # `cloudflare`, so both of these are required, not optional.
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           # Idle window (ms) before Cloudflare closes the remote browser session.
@@ -164,26 +161,24 @@ jobs:
           # tail. Cloudflare caps it at 600000.
           CLOUDFLARE_KEEP_ALIVE_MS: ${{ vars.CLOUDFLARE_KEEP_ALIVE_MS }}
         run: |
-          # Fail fast on a half-configured Cloudflare backend. Without this the
-          # deploy succeeds and the breakage is invisible: url-resolver throws on
+          # Fail fast on missing Cloudflare credentials. Without this the deploy
+          # succeeds and the breakage is invisible: url-resolver throws on
           # connect, the error goes to a Rollbar that has no token configured,
           # and the ADK client buckets every resolve as RESOLVER_UNAVAILABLE —
           # which it treats as "no signal" and silently degrades past, back to
           # url_context only. That is precisely the failure #118 exists to end,
-          # so it must never be reachable by forgetting a secret.
-          if [ "$BROWSER_BACKEND" = "cloudflare" ]; then
-            MISSING=""
-            if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-              MISSING="$MISSING CLOUDFLARE_ACCOUNT_ID"
-            fi
-            if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-              MISSING="$MISSING CLOUDFLARE_API_TOKEN"
-            fi
-            if [ -n "$MISSING" ]; then
-              echo "::error::URL_RESOLVER_BROWSER_BACKEND is 'cloudflare' but these repo secrets are empty:$MISSING"
-              echo "::error::Set them under Settings > Secrets and variables > Actions, or clear the URL_RESOLVER_BROWSER_BACKEND variable to fall back to in-container chromium."
-              exit 1
-            fi
+          # so it must not be reachable by forgetting to paste a secret.
+          MISSING=""
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            MISSING="$MISSING CLOUDFLARE_ACCOUNT_ID"
+          fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            MISSING="$MISSING CLOUDFLARE_API_TOKEN"
+          fi
+          if [ -n "$MISSING" ]; then
+            echo "::error::url-resolver runs on Cloudflare Browser Rendering, but these repo secrets are empty:$MISSING"
+            echo "::error::Set them under Settings > Secrets and variables > Actions. The token needs the account-level 'Browser Rendering: Edit' scope."
+            exit 1
           fi
 
           # The allowlist is load-bearing: envsubst substitutes only the names
@@ -191,7 +186,7 @@ jobs:
           # placeholder missing from this list reaches Cloud Run as literal text.
           # Listed-but-unset names become the empty string, which is the safe
           # default the template is written around.
-          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${LANGFUSE_TRACING_ENVIRONMENT} ${DATABASE_URL} ${GCS_ARTIFACT_BUCKET} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL} ${BROWSER_BACKEND} ${CLOUDFLARE_ACCOUNT_ID} ${CLOUDFLARE_API_TOKEN} ${CLOUDFLARE_KEEP_ALIVE_MS}' < service.template.yaml > service.yaml
+          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${LANGFUSE_TRACING_ENVIRONMENT} ${DATABASE_URL} ${GCS_ARTIFACT_BUCKET} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL} ${CLOUDFLARE_ACCOUNT_ID} ${CLOUDFLARE_API_TOKEN} ${CLOUDFLARE_KEEP_ALIVE_MS}' < service.template.yaml > service.yaml
           # Deliberately not dumping service.yaml here: envsubst has just inlined
           # DATABASE_URL, the Langfuse secret key and the Cloudflare API token
           # into it. `gcloud run services replace` reports its own errors.

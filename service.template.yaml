@@ -119,35 +119,42 @@ spec:
         image: docker.io/cofacts/url-resolver:latest
         resources:
           limits:
-            # Chromium is what sizes this container: one browser process tree
-            # plus up to SCRAPE_MAX_CONCURRENCY (default 3) live pages. Cloud
-            # Run terminates the whole instance when any single container
-            # exceeds its memory limit — which would kill an agent turn in
-            # flight — so this is sized with headroom over the ~150 MiB idle
-            # footprint rather than trimmed to it. If it still OOMs, lower
-            # SCRAPE_MAX_CONCURRENCY before raising the limit.
+            # Sized for the Cloudflare backend below, where no chromium ever
+            # starts in this container: measured idle footprint is ~45 MiB (0
+            # browser processes), against ~150 MiB and a full browser process
+            # tree on the local backend. What remains here is the gRPC server
+            # plus Readability.js over page text arriving from the remote
+            # browser — up to SCRAPE_MAX_CONCURRENCY (default 3) pages at once,
+            # and a CDP message can now carry up to 32 MiB.
             #
-            # This sizing follows the *local* browser path even when
-            # BROWSER_BACKEND is `cloudflare` and no chromium ever starts here.
-            # The backend is a repo variable that can revert to local at any
-            # moment, and a container trimmed to the Cloudflare footprint would
-            # OOM the instance the moment someone flips it back. Trim these only
-            # once the local fallback is retired for good.
-            cpu: "1000m"
-            memory: "2048Mi"
+            # 512Mi is therefore ~10x the idle footprint, not a trim to it.
+            # Cloud Run terminates the *whole instance* when any single
+            # container exceeds its memory limit, which on a 900 s request
+            # timeout means killing an agent turn in flight — so the headroom is
+            # deliberate. If it ever OOMs, lower SCRAPE_MAX_CONCURRENCY before
+            # raising this.
+            #
+            # These numbers only hold while BROWSER_BACKEND is `cloudflare`.
+            # Reverting to a local chromium here without restoring 1 vCPU /
+            # 2048Mi would OOM the instance.
+            cpu: "500m"
+            memory: "512Mi"
         env:
         - name: PORT
           value: "4000"
-        # Where puppeteer's browser runs. Unset renders as "" here, which
-        # url-resolver reads as `local` (`process.env.BROWSER_BACKEND || 'local'`),
-        # so an unconfigured deploy keeps launching chromium inside this
-        # container. Set the URL_RESOLVER_BROWSER_BACKEND repo variable to
-        # `cloudflare` to move it to Cloudflare Browser Rendering instead; clear
-        # the variable to roll back.
+        # Where puppeteer's browser runs. Pinned to Cloudflare Browser Rendering
+        # rather than selectable: the container above is sized for it, and a
+        # deploy-time switch back to a local chromium would OOM the instance
+        # rather than fall back gracefully. Reverting is a code change — this
+        # line and the resource limits together — which is the point. Local
+        # chromium remains url-resolver's default everywhere else, including
+        # docker-compose for local dev.
         - name: BROWSER_BACKEND
-          value: "${BROWSER_BACKEND}"
-        # Only read when BROWSER_BACKEND is `cloudflare`; inert otherwise. The
-        # token needs the account-level "Browser Rendering: Edit" scope.
+          value: "cloudflare"
+        # Required, not optional: with the backend pinned above, an empty value
+        # here fails every resolve. The deploy workflow refuses to render this
+        # file when either is unset. The token needs the account-level
+        # "Browser Rendering: Edit" scope and nothing else.
         - name: CLOUDFLARE_ACCOUNT_ID
           value: "${CLOUDFLARE_ACCOUNT_ID}"
         - name: CLOUDFLARE_API_TOKEN
@@ -160,9 +167,10 @@ spec:
         - name: CLOUDFLARE_KEEP_ALIVE_MS
           value: "${CLOUDFLARE_KEEP_ALIVE_MS}"
         startupProbe:
-          # The gRPC server binds immediately; chromium launches in the
-          # background right after. A TCP probe therefore only proves the RPC
-          # endpoint is up, not that a browser is ready — the client already
+          # The gRPC server binds immediately, and on the Cloudflare backend no
+          # browser is contacted until the first scrape. A TCP probe therefore
+          # only proves the RPC endpoint is up, never that a browser is
+          # reachable — the client already
           # treats an unreachable/failing resolver as "no signal" and falls
           # back to `url_context`, so that is the right amount of gating here.
           tcpSocket:
