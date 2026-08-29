@@ -45,7 +45,6 @@ from .agent_names import (
 )
 from .media_filedata import (
     _COFACTS_MEDIA_URL_RE,
-    _URL_TRAILING_PUNCT,
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
@@ -302,7 +301,56 @@ def inject_youtube_filedata(
     return None
 
 
-_HTTP_URL_RE = re.compile(r"https?://[^\s\"'<>]+")
+# CJK sentence punctuation ends a URL. It has to be excluded from the match
+# itself, not merely stripped afterwards: Chinese prose has no spaces, so
+# `https://example.com/a，另一個` would otherwise capture the following words
+# into the URL, which then resolves DEAD and gets the verifier told not to
+# trust a perfectly good source.
+#
+# Full-width BRACKETS are deliberately absent from this set -- they can be part
+# of a URL and are handled by _trim_url_punctuation below.
+_CJK_URL_STOP = "，。、！？；：〜～…—「」『』〈〉《》【】"
+
+_HTTP_URL_RE = re.compile(r"https?://[^\s\"'<>" + _CJK_URL_STOP + r"]+")
+
+# Closing bracket -> its opener. A trailing closer is part of the URL when the
+# URL contains a matching opener (`.../Mercury_(planet)`) and prose punctuation
+# when it does not (`(https://example.com)`).
+_URL_CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{", "）": "（"}
+
+# Punctuation that commonly ends a sentence right after a URL. Brackets are
+# handled by the balance rule above instead of appearing here.
+_URL_TRAILING_CHARS = ".,;:!?\"'"
+
+
+def _trim_url_punctuation(url: str) -> str:
+    """Strip prose punctuation from the end of an extracted URL.
+
+    Mirrors what rumors-site gets from `linkifyjs.tokenize()` (`lib/text.tsx`),
+    whose behaviour is pinned by its own `parses half-width brackets correctly`
+    / `parses full-width brackets correctly` tests. A plain `rstrip` of a
+    punctuation set cannot do this: it would break `.../Mercury_(planet)` by
+    taking the closing paren that belongs to the URL, and it cannot tell that
+    apart from the wrapping paren in `(https://example.com)`.
+
+    `linkify-it-py` was tried instead of hand-rolling this and rejected -- it
+    handles half-width brackets but keeps a trailing full-width `）` and, more
+    importantly, swallows following words in CJK prose exactly as the old
+    regex did.
+    """
+    while url:
+        last = url[-1]
+        opener = _URL_CLOSING_BRACKETS.get(last)
+        if opener is not None:
+            if url.count(opener) >= url.count(last):
+                break  # balanced -- the bracket belongs to the URL
+            url = url[:-1]
+        elif last in _URL_TRAILING_CHARS:
+            url = url[:-1]
+        else:
+            break
+    return url
+
 
 _RESOLVED_PAGE_PREFIX = "[RESOLVED PAGE] "
 _LINK_NOT_FOUND_PREFIX = "[LINK NOT FOUND] "
@@ -423,7 +471,7 @@ def _extract_web_urls(
             if not part.text:
                 continue
             for match in _HTTP_URL_RE.findall(part.text):
-                url = match.rstrip(_URL_TRAILING_PUNCT)
+                url = _trim_url_punctuation(match)
                 if _YOUTUBE_URL_RE.fullmatch(url) or _COFACTS_MEDIA_URL_RE.fullmatch(
                     url
                 ):
@@ -481,6 +529,22 @@ async def inject_resolved_url_content(
     successfully resolved text is cached; dead/unfetchable results are cheap
     to re-attempt and are not persisted.
     """
+    # Clear first, so every exit below -- the early returns, the `except`, and
+    # the normal path -- leaves this key describing only the current call.
+    #
+    # `temp:` is NOT scoped per AgentTool call: agent_tool.py seeds the child
+    # session from the parent's state and forwards the child's delta back up,
+    # so without this a call that resolves nothing inherits the previous
+    # call's meta and append_verifier_sources reports pages this response
+    # never read. ai_verifier runs once per claim, so that is a claim citing
+    # the *previous* claim's URLs -- the fabricated citation this whole
+    # feature exists to prevent.
+    #
+    # This costs no extra fetches. The fetch cache is the artifact
+    # (`resolved-<sha1>.txt`, loaded below); this key is only the handoff to
+    # the after-model callback, which cannot see the injected request parts.
+    callback_context.state[RESOLVED_META_STATE_KEY] = {}
+
     try:
         urls, target_content = _extract_web_urls(llm_request)
         urls = [url for url in urls if not _url_already_injected(llm_request, url)]
@@ -581,8 +645,9 @@ async def inject_resolved_url_content(
         if not injected_parts:
             return None
         target_content.parts = list(target_content.parts) + injected_parts
-        if resolved_meta:
-            callback_context.state[RESOLVED_META_STATE_KEY] = resolved_meta
+        # Unconditional: an empty dict is the correct answer when this call
+        # resolved nothing, and must not leave the pre-call value standing.
+        callback_context.state[RESOLVED_META_STATE_KEY] = resolved_meta
     except Exception:
         logger.exception(
             "inject_resolved_url_content failed; skipping url-resolver injection"

@@ -26,6 +26,8 @@ from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
 from cofacts_ai.agent import (
+    RESOLVED_META_STATE_KEY,
+    _extract_web_urls,
     _resolved_artifact_filename,
     inject_resolved_url_content,
 )
@@ -84,10 +86,16 @@ class FakeArtifactStore:
         )
 
 
-def make_context(store: FakeArtifactStore | None = None) -> CallbackContext:
+def make_context(
+    store: FakeArtifactStore | None = None, state: dict | None = None
+) -> CallbackContext:
+    """`state` seeds the context the way agent_tool.py seeds a child session
+    from the parent's state (`agent_tool.py:236-244`), which is why `temp:`
+    keys survive from one ai_verifier call to the next. Leaving it always
+    empty would make the fake kinder than production and hide the leak."""
     store = store or FakeArtifactStore()
     ctx = AsyncMock()
-    ctx.state = {}
+    ctx.state = dict(state or {})
     ctx.load_artifact = store.load_artifact
     ctx.save_artifact = store.save_artifact
     ctx.get_artifact_version = store.get_artifact_version
@@ -215,7 +223,10 @@ class TestInjectResolvedUrlContent:
             await inject_resolved_url_content(context, request)
 
         assert request.contents[0].parts == original_parts
-        assert "temp:cofacts_resolved_meta" not in context.state
+        # Present and empty, not absent: leaving the key untouched is what let
+        # a previous call's meta stand in for this one (see
+        # TestResolvedMetaDoesNotLeakAcrossCalls).
+        assert context.state[RESOLVED_META_STATE_KEY] == {}
 
     async def test_youtube_url_excluded_from_resolution(self):
         request = make_request(user_text("https://youtu.be/abc123"))
@@ -292,7 +303,8 @@ class TestInjectResolvedUrlContent:
             await inject_resolved_url_content(context, request)
 
         resolve_mock.assert_not_called()
-        assert "temp:cofacts_resolved_meta" not in context.state
+        # Same invariant as above: cleared, not skipped.
+        assert context.state[RESOLVED_META_STATE_KEY] == {}
 
     async def test_resolver_exception_is_swallowed(self):
         request = make_request(user_text("https://good.com"))
@@ -429,3 +441,155 @@ class TestInjectResolvedUrlContent:
         meta = context2.state["temp:cofacts_resolved_meta"]["https://untitled.com"]
         assert meta["title"] == "https://untitled.com"
         assert meta["canonical"] is None
+
+
+class TestUrlExtraction:
+    """URL boundaries, pinned against rumors-site.
+
+    The site extracts URLs with `linkifyjs.tokenize()` (`lib/text.tsx`) and
+    pins the hard cases in `lib/__tests__/text.tsx` under
+    `parses half-width brackets correctly` / `parses full-width brackets
+    correctly`. The first two tests below are those exact strings, so the two
+    codebases agree on what counts as a URL. The rest cover CJK prose, which
+    is the common case here and which the old regex got wrong.
+    """
+
+    def urls(self, text: str) -> list[str]:
+        urls, _ = _extract_web_urls(make_request(user_text(text)))
+        return urls
+
+    def test_half_width_brackets_match_rumors_site(self):
+        assert self.urls(
+            "http://foo.com/blah_(a)_(b) (http://foo.com/blah_(a)_(b)) "
+            "http://foo.com/blah_(a)_(b))"
+        ) == ["http://foo.com/blah_(a)_(b)"]  # deduped; all three are the same URL
+
+    def test_full_width_brackets_match_rumors_site(self):
+        assert self.urls(
+            "http://foo.com/blah_（a）_（b） （http://foo.com/blah_(a)_(b)） "
+            "http://foo.com/blah_(a)_(b)）"
+        ) == ["http://foo.com/blah_（a）_（b）", "http://foo.com/blah_(a)_(b)"]
+
+    def test_cjk_punctuation_does_not_swallow_following_words(self):
+        # Chinese has no spaces, so the old `[^\s...]+` ran the URL into the
+        # next words and the resulting URL resolved DEAD.
+        assert self.urls(
+            "來源：https://example.com/a，另一個 https://example.com/b、"
+            "還有 https://example.com/c！"
+        ) == [
+            "https://example.com/a",
+            "https://example.com/b",
+            "https://example.com/c",
+        ]
+
+    def test_full_width_period_is_not_part_of_the_url(self):
+        assert self.urls("見 https://zh.wikipedia.org/wiki/水星_(行星)。") == [
+            "https://zh.wikipedia.org/wiki/水星_(行星)"
+        ]
+
+    def test_wikipedia_disambiguation_parens_are_kept(self):
+        assert self.urls(
+            "請查核 https://en.wikipedia.org/wiki/Mercury_(planet) 這篇"
+        ) == ["https://en.wikipedia.org/wiki/Mercury_(planet)"]
+        # ...including when a sentence period follows.
+        assert self.urls("見 https://en.wikipedia.org/wiki/Mercury_(planet).") == [
+            "https://en.wikipedia.org/wiki/Mercury_(planet)"
+        ]
+
+    def test_query_string_survives_a_trailing_period(self):
+        assert self.urls("https://example.com/s?q=a&b=1. 就這樣") == [
+            "https://example.com/s?q=a&b=1"
+        ]
+
+    def test_youtube_and_cofacts_media_are_still_excluded(self):
+        assert self.urls(
+            "https://www.youtube.com/watch?v=abc123 和 https://example.com/x"
+        ) == ["https://example.com/x"]
+
+
+class TestResolvedMetaDoesNotLeakAcrossCalls:
+    """`temp:cofacts_resolved_meta` must describe only the current call.
+
+    ai_verifier runs as an AgentTool, once per claim, and `temp:` is not
+    scoped per call -- agent_tool.py seeds the child session from the parent's
+    state and forwards the child's delta back up. So a call that resolves
+    nothing used to inherit the previous call's meta, and
+    append_verifier_sources reported pages that response never read: a claim
+    citing the *previous* claim's URLs.
+
+    Each test seeds the second context with the first call's meta, which is
+    what agent_tool.py actually does.
+    """
+
+    STALE = {
+        "https://old.com": {"status": "resolved", "title": "Old", "canonical": None}
+    }
+
+    async def test_call_with_no_urls_does_not_inherit_previous_meta(self):
+        context = make_context(state=dict(self.STALE))
+        request = make_request(user_text("這則訊息沒有任何連結"))
+
+        with patch("cofacts_ai.agent.resolve_urls", AsyncMock(return_value=[])):
+            await inject_resolved_url_content(context, request)
+
+        assert context.state[RESOLVED_META_STATE_KEY] == {}
+
+    async def test_all_timeouts_do_not_inherit_previous_meta(self):
+        context = make_context(state=dict(self.STALE))
+        request = make_request(user_text("https://slow.com"))
+
+        with patch(
+            "cofacts_ai.agent.resolve_urls",
+            AsyncMock(return_value=[unavailable("https://slow.com")]),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        assert context.state[RESOLVED_META_STATE_KEY] == {}
+
+    async def test_exception_path_does_not_inherit_previous_meta(self):
+        context = make_context(state=dict(self.STALE))
+        request = make_request(user_text("https://boom.com"))
+
+        with patch(
+            "cofacts_ai.agent.resolve_urls",
+            AsyncMock(side_effect=RuntimeError("resolver exploded")),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        assert context.state[RESOLVED_META_STATE_KEY] == {}
+
+    async def test_clearing_meta_does_not_cost_a_refetch(self):
+        """The regression guard for this change.
+
+        The fetch cache is the artifact, not this state key, so clearing the
+        key must not make the next call re-resolve. If this ever fails, the
+        two mechanisms have been conflated.
+        """
+        store = FakeArtifactStore()
+        resolve_mock = AsyncMock(
+            return_value=[resolved("https://good.com", title="Cached Title")]
+        )
+
+        context1 = make_context(store)
+        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+            await inject_resolved_url_content(
+                context1, make_request(user_text("https://good.com"))
+            )
+
+        # Second call, seeded from the first exactly as agent_tool.py would.
+        context2 = make_context(
+            store,
+            state={RESOLVED_META_STATE_KEY: context1.state[RESOLVED_META_STATE_KEY]},
+        )
+        request2 = make_request(user_text("https://good.com"))
+        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+            await inject_resolved_url_content(context2, request2)
+
+        resolve_mock.assert_awaited_once()  # served from the artifact cache
+        assert "https://good.com" in context2.state[RESOLVED_META_STATE_KEY]
+        [part] = [
+            t
+            for t in text_parts(request2.contents[0])
+            if t.startswith("[RESOLVED PAGE]")
+        ]
+        assert "Cached Title" in part
