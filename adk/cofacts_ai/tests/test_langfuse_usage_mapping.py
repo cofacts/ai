@@ -25,6 +25,7 @@ Two things are worth testing, and they need different setups:
   place.
 """
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any, AsyncGenerator, Optional, cast
 from unittest.mock import patch
@@ -87,7 +88,18 @@ class Recorder:
 async def run_plugin(
     responses: list[LlmResponse], request_model: Optional[str] = MODEL
 ) -> list[dict[str, Any]]:
-    """Drives the callbacks over one turn's responses, as ADK would."""
+    """Drives the callbacks over one turn's responses, as ADK would.
+
+    Each turn runs in its own task so it gets its own copy of the context, the
+    way concurrent sub-agents do — otherwise the model a previous turn stashed in
+    the `ContextVar` would still be visible here.
+    """
+    return await asyncio.create_task(_run_plugin(responses, request_model))
+
+
+async def _run_plugin(
+    responses: list[LlmResponse], request_model: Optional[str]
+) -> list[dict[str, Any]]:
     plugin = LangfuseTracingPlugin()
     recorder = Recorder()
     with patch("instrumentation.get_client", return_value=recorder):
@@ -127,9 +139,11 @@ async def test_tool_use_tokens_are_folded_into_input():
         "input_cached_tokens": 0,
         "output": 729,
         "output_reasoning": 9963,
+        "total": 2_955_369,
     }
-    # The invariant the reconcile script checks: priced keys sum to `total`.
-    assert sum(call["usage_details"].values()) == 2_955_369
+    # The invariant `scripts/langfuse_check_usage.py` checks: the priced keys sum
+    # to `total`, and `total` is Gemini's own count rather than a sum of ours.
+    assert sum(v for k, v in call["usage_details"].items() if k != "total") == 2_955_369
 
 
 async def test_cached_tokens_are_split_out_of_prompt():
@@ -155,16 +169,22 @@ async def test_cached_tokens_are_split_out_of_prompt():
         "input_cached_tokens": 8_000,
         "output": 500,
         "output_reasoning": 0,
+        "total": 10_500,
     }
-    assert sum(call["usage_details"].values()) == 10_500
+    assert sum(v for k, v in call["usage_details"].items() if k != "total") == 10_500
 
 
-async def test_model_comes_from_the_response_then_the_request():
-    """`model_version` is authoritative when present, but ADK's aggregated
-    response for a streamed turn leaves it unset — hence the request-side
-    fallback, which is what repairs the `model = null` generations.
+async def test_model_comes_from_the_request_then_the_response():
+    """The request-side id is what the managed price definitions match.
+
+    Vertex can answer with a dated build, and every managed Gemini definition
+    from 2.5 onwards ends in a hard `$` — so a dated name matches nothing,
+    resolves to no model and costs $0 for good, since cost is computed at
+    ingestion. `model_version` stays the fallback for when the request side is
+    unavailable; it is unset on ADK's aggregated streamed response anyway, which
+    is the case that repairs the `model = null` generations.
     """
-    (from_response,) = await run_plugin(
+    (from_request,) = await run_plugin(
         [
             LlmResponse(
                 model_version="gemini-3-flash-preview-11-2026",
@@ -172,12 +192,18 @@ async def test_model_comes_from_the_response_then_the_request():
             )
         ]
     )
-    assert from_response["model"] == "gemini-3-flash-preview-11-2026"
-
-    (from_request,) = await run_plugin(
-        [LlmResponse(usage_metadata=usage(prompt_token_count=1))]
-    )
     assert from_request["model"] == MODEL
+
+    (from_response,) = await run_plugin(
+        [
+            LlmResponse(
+                model_version="gemini-3-flash-preview-11-2026",
+                usage_metadata=usage(prompt_token_count=1),
+            )
+        ],
+        request_model=None,
+    )
+    assert from_response["model"] == "gemini-3-flash-preview-11-2026"
 
 
 async def test_a_response_without_usage_writes_nothing():
@@ -309,5 +335,5 @@ async def test_writes_onto_the_call_llm_span(streaming: bool):
     assert attributes["langfuse.observation.model.name"] == MODEL
     assert attributes["langfuse.observation.usage_details"] == (
         '{"input": 40400, "input_cached_tokens": 100, '
-        '"output": 30, "output_reasoning": 70}'
+        '"output": 30, "output_reasoning": 70, "total": 40600}'
     )

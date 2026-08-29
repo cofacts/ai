@@ -12,8 +12,9 @@ how Langfuse came to under-report real Vertex AI spend by ~2x. See
 This is the standing regression check for that fix. It asserts two invariants over a window
 of generations:
 
-  * **unpriced tokens** — the priced usage keys must sum to `total`. Anything short of that
-    is tokens Google billed and Langfuse gave away free.
+  * **unpriced tokens** — the usage keys Langfuse actually priced must sum to `total`.
+    Anything short of that is tokens Google billed and Langfuse gave away free, whether
+    because the key carried no price or because the bucket never arrived at all.
   * **unpriced generations** — a generation carrying tokens must have resolved a model and
     come out with a non-zero cost.
 
@@ -84,16 +85,32 @@ def fetch_generations(
             page += 1
 
 
-def unpriced_tokens(usage: dict) -> int:
-    """Tokens inside `total` that no priced key accounts for.
+def unpriced_tokens(usage: dict, costs: dict) -> int:
+    """Tokens `total` covers that Langfuse attached no price to.
 
-    `total` is Langfuse's derived aggregate — "not a bucket itself but spans all buckets and
-    equals their sum" — so any shortfall is a bucket that was never sent, or was sent under a
-    key with no price.
+    Two ways a token goes free, and both have to be counted or this passes while
+    Google bills us:
+
+    * **A bucket arrived under a key with no price.** This is cause 3 — the
+      instrumentor's `completion_details.reasoning` is a well-formed key that no
+      managed Gemini definition prices. Summing every key as if it were priced
+      would wave exactly that regression through, so `costDetails` decides: it
+      comes back from the same endpoint and names the keys that earned a price.
+    * **A bucket never arrived.** This is cause 1 — tool-use tokens reach
+      Langfuse only inside `total`, which is an aggregate ("not a bucket itself
+      but spans all buckets and equals their sum") and cannot be priced. The
+      shortfall of `total` over everything received is what makes them visible.
+
+    `total` works as a yardstick only because the plugin ingests Gemini's own
+    `total_token_count`. When no total is ingested Langfuse derives one by summing
+    the keys it received, and a derived total cannot expose a bucket that is
+    missing from those same keys.
     """
-    total = usage.get("total") or 0
-    priced = sum(v for k, v in usage.items() if k != "total" and isinstance(v, int))
-    return max(total - priced, 0)
+    priced_keys = {k for k in costs if k != "total"}
+    received = {k: v for k, v in usage.items() if k != "total" and isinstance(v, int)}
+    unpriced_keys = sum(v for k, v in received.items() if k not in priced_keys)
+    never_sent = max((usage.get("total") or 0) - sum(received.values()), 0)
+    return unpriced_keys + never_sent
 
 
 def main() -> int:
@@ -154,7 +171,7 @@ def main() -> int:
 
     for obs in generations:
         usage = obs.get("usageDetails") or {}
-        missing = unpriced_tokens(usage)
+        missing = unpriced_tokens(usage, obs.get("costDetails") or {})
         total_tokens += usage.get("total") or 0
         unpriced += missing
         cost += obs.get("calculatedTotalCost") or 0.0

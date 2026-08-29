@@ -156,6 +156,14 @@ class LangfuseTracingPlugin(BasePlugin):
         an upgrade that folds tool-use into `prompt` does not help us, because
         that folded value also includes the cached tokens we need to split out.
 
+        `total` is sent explicitly for the same reason. Langfuse derives it as the
+        sum of the keys it received when none is ingested, and a total derived
+        from our own buckets cannot contradict them: the shortfall
+        `scripts/langfuse_check_usage.py` watches would be 0 by construction, and
+        a bucket we later drop or misspell would vanish from the yardstick along
+        with the tokens. `total_token_count` comes from Gemini, so it stays an
+        independent reference.
+
         Written via `langfuse.observation.*` attributes, which Langfuse's
         ingestion gives precedence over the generic OTel ones, so this lands on
         the instrumentor's own `call_llm` span rather than creating a second
@@ -176,13 +184,26 @@ class LangfuseTracingPlugin(BasePlugin):
         # are split rather than added, or cached tokens get counted twice.
         cached = usage.cached_content_token_count or 0
 
+        usage_details = {
+            "input": prompt - cached + (usage.tool_use_prompt_token_count or 0),
+            "input_cached_tokens": cached,
+            "output": usage.candidates_token_count or 0,
+            "output_reasoning": usage.thoughts_token_count or 0,
+        }
+        if usage.total_token_count is not None:
+            usage_details["total"] = usage.total_token_count
+
         get_client().update_current_generation(
-            model=llm_response.model_version or _request_model.get(),
-            usage_details={
-                "input": prompt - cached + (usage.tool_use_prompt_token_count or 0),
-                "input_cached_tokens": cached,
-                "output": usage.candidates_token_count or 0,
-                "output_reasoning": usage.thoughts_token_count or 0,
-            },
+            # The request side is preferred over `model_version` because Vertex
+            # can answer with a dated build (`gemini-3-flash-preview-11-2026`)
+            # while the managed price definitions on our instance match the
+            # undated id exactly: every Gemini definition from 2.5 onwards ends
+            # in a hard `$`, and the optional group the older ones carry is
+            # Vertex's `@version` form, not a date suffix. An unmatched name
+            # resolves to no model and costs $0, permanently, since cost is
+            # computed at ingestion. `model_version` remains the fallback for
+            # the case the request side cannot cover.
+            model=_request_model.get() or llm_response.model_version,
+            usage_details=usage_details,
         )
         return None

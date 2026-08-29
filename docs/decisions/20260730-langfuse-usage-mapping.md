@@ -311,7 +311,12 @@ must be split rather than added, or cached tokens get double-counted.
 - Good, because usage comes from the authoritative `google-genai` object instead of a lossy OTel
   projection, so tool-use and thinking tokens are priced for the first time.
 - Good, because it repairs the truncated `model = null` spans **without needing to know why they
-  truncate** — we set the model name ourselves.
+  truncate** — we set the model name ourselves. The name we set is the request's, not the response's
+  `model_version`: Vertex can answer with a dated build (`gemini-3-flash-preview-11-2026`) while every
+  managed Gemini definition from 2.5 onwards matches the undated id and ends in a hard `$` — the
+  optional group the older ones carry is Vertex's `@version` form, not a date suffix. A name that
+  matches nothing is the same permanent silent-$0 as `gemini-3.5-flash` above, so `model_version` is
+  only the fallback.
 - Good, because cached tokens finally get their 90% discount. Langfuse currently _over_-charges here
   (23.37M tokens at full rate: $11.69 instead of $1.09, ~$3.7 of overstatement), which partially
   masks the under-reporting and is why the naive gap looks like $25.5 rather than $28.6.
@@ -378,17 +383,29 @@ uv run python scripts/langfuse_check_usage.py --from 2026-09-01 --to 2026-10-01 
 It asserts two invariants, both **version-independent** — they describe correct output rather than
 what any instrumentor release emits, which matters because the dep is unpinned:
 
-- **unpriced tokens** — priced keys must sum to `total`; the shortfall is tokens Google billed and
-  Langfuse gave away. On the August window before the fix: **25.6% of 33.3M tokens**.
+- **unpriced tokens** — the keys Langfuse actually priced must sum to `total`; the shortfall is
+  tokens Google billed and Langfuse gave away. A key is counted as priced only if it appears in the
+  observation's `costDetails`, because the two ways a token goes free look different in the data and
+  only one of them is a missing bucket: cause 1 hides tool-use tokens inside `total`, while cause 3
+  sends `completion_details.reasoning` in full under a name that carries no price. Summing every key
+  as if it were priced would report the first and miss the second. On 2026-08-01..29, before the fix:
+  **56.9% of 33.9M tokens**.
 - **unpriced generations** — a token-carrying generation must resolve a model and cost more than $0.
-  Before the fix: **152 of 901**.
+  Over the same window: **152 of 925**.
 
 Both should be ~0 after deploy. Because cost is fixed at ingestion, the check has to run against
 generations produced by the new code — which is what `--environment preview` is for: a PR deploy sets
 `LANGFUSE_TRACING_ENVIRONMENT=preview` (`.github/workflows/deploy.yml`) into the same Langfuse
 project, so one streamed fact-check through a preview URL can be measured on its own before merging.
-The `preview` baseline matches production's shape (23.9% unpriced over 17 generations), so it is a
-fair comparison. The forensic half of the old `langfuse_gcp_reconcile.py` — re-pricing
+Running three fact-checks through a preview deploy against three through `staging` on the same day is
+what confirmed the fix on live traffic: 47.6% of 3.79M tokens unpriced and 10 of 75 generations at $0
+on `staging`, against 0% and 0 of 63 on `preview`.
+
+For that first invariant to keep working, the plugin has to ingest Gemini's `total_token_count`
+rather than leave `total` out. Langfuse derives an absent `total` by summing the keys it received, so
+a derived total is computed from our own buckets and cannot contradict them — the shortfall would be
+0 by construction, and a bucket a later edit drops or misspells would disappear from the yardstick
+along with the tokens. Sending the total keeps the reference on Gemini's side of the wire. The forensic half of the old `langfuse_gcp_reconcile.py` — re-pricing
 against a billing CSV to locate the gap — was deleted with the fix: its findings are recorded above
 for July and August, and re-deriving rates from a CSV export is not something a regression check
 needs to do.
