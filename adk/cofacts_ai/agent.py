@@ -318,6 +318,56 @@ def _resolved_artifact_filename(url: str) -> str:
     return f"resolved-{digest}.txt"
 
 
+def _encode_resolved_artifact(
+    text: str, title: Optional[str], canonical: Optional[str]
+) -> bytes:
+    """Pack page text plus its metadata into one artifact body.
+
+    The metadata rides *inside* the artifact rather than in `custom_metadata`
+    because reading that back requires `get_artifact_version`, which
+    `ForwardingArtifactService` — the service an `AgentTool`-hosted agent gets,
+    i.e. `ai_verifier` in production — only implements from ADK 2.5.0. On the
+    pinned 1.26.0 it raises `NotImplementedError`, and a raise anywhere in
+    `inject_resolved_url_content` costs the *entire* injection, silently
+    reverting the verifier to url_context-only.
+
+    Keeping it in the body also preserves a real `None`: `GcsArtifactService`
+    stringifies `custom_metadata` values, so an untitled page came back as the
+    literal string "None" — truthy, so the `or url` fallback never fired and
+    the UI showed "None" as the source title.
+    """
+    header = json.dumps({"title": title, "canonical": canonical}, ensure_ascii=False)
+    return f"{header}\n{text}".encode("utf-8")
+
+
+def _decode_resolved_artifact(data: bytes) -> tuple[str, Optional[str], Optional[str]]:
+    """Unpack `_encode_resolved_artifact`, tolerating pre-envelope artifacts.
+
+    Artifacts written before the envelope existed are raw page text whose first
+    line is page content, not JSON. Those must still be usable: falling through
+    to an exception here would abandon the whole injection, which is the very
+    failure this envelope exists to prevent. Such a body is returned as text
+    with no metadata, and the caller's `or url` fallback supplies the title.
+    """
+    body = data.decode("utf-8")
+    header, sep, text = body.partition("\n")
+    if not sep:
+        return body, None, None
+    try:
+        meta = json.loads(header)
+    except (ValueError, TypeError):
+        return body, None, None
+    if not isinstance(meta, dict) or "title" not in meta:
+        return body, None, None
+    title = meta.get("title")
+    canonical = meta.get("canonical")
+    return (
+        text,
+        title if isinstance(title, str) else None,
+        canonical if isinstance(canonical, str) else None,
+    )
+
+
 def _water_fill(lengths: dict[str, int], budget: int) -> dict[str, int]:
     """Max-min fair allocation of `budget` chars across `lengths`.
 
@@ -449,13 +499,13 @@ async def inject_resolved_url_content(
             filename = _resolved_artifact_filename(url)
             cached = await callback_context.load_artifact(filename)
             if cached is not None and cached.inline_data and cached.inline_data.data:
-                text = cached.inline_data.data.decode("utf-8")
-                version_info = await callback_context.get_artifact_version(filename)
-                meta = (version_info.custom_metadata if version_info else None) or {}
+                text, title, canonical = _decode_resolved_artifact(
+                    cached.inline_data.data
+                )
                 full_texts[url] = text
                 lengths[url] = len(text)
-                titles[url] = meta.get("title") or url
-                canonicals[url] = meta.get("canonical")
+                titles[url] = title or url
+                canonicals[url] = canonical
             else:
                 to_fetch.append(url)
 
@@ -472,10 +522,11 @@ async def inject_resolved_url_content(
                         artifact=genai_types.Part(
                             inline_data=genai_types.Blob(
                                 mime_type="text/plain",
-                                data=r.summary.encode("utf-8"),
+                                data=_encode_resolved_artifact(
+                                    r.summary, r.title, r.canonical
+                                ),
                             )
                         ),
-                        custom_metadata={"title": r.title, "canonical": r.canonical},
                     )
                 elif r.status == ResolveStatus.DEAD:
                     resolved_meta[r.url] = {

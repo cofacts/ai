@@ -3,14 +3,19 @@ that pre-fetches plain web URLs through url-resolver for ai_verifier.
 
 `resolve_urls` is monkeypatched so no network/gRPC is involved; a small fake
 artifact store (dict-backed) stands in for `CallbackContext.load_artifact` /
-`save_artifact` / `get_artifact_version`, since this callback uses the
-artifact store both as its fetch cache and to persist the full page text for
-the UI. Coverage: a resolved URL gets a `[RESOLVED PAGE]` part; a dead URL
-(DNS failure) gets an advisory `[LINK NOT FOUND]` note, not a ban; a URL the
+`save_artifact`, since this callback uses the artifact store both as its fetch
+cache and to persist the full page text for the UI. That fake's
+`get_artifact_version` raises, matching the `ForwardingArtifactService` an
+`AgentTool`-hosted agent actually gets -- see the class docstring.
+
+Coverage: a resolved URL gets a `[RESOLVED PAGE]` part; a dead URL (DNS
+failure) gets an advisory `[LINK NOT FOUND]` note, not a ban; a URL the
 resolver merely couldn't fetch (e.g. a PDF) gets nothing injected so
 url_context gets a clean shot at it; YouTube and Cofacts-media URLs are
 excluded (handled elsewhere via FileData); re-running the callback on the
-same request is a no-op (idempotency); a resolver outage injects nothing.
+same request is a no-op (idempotency); a resolver outage injects nothing; and
+the artifact cache round-trips page text plus title/canonical without the
+version API, including for artifacts written before that envelope existed.
 """
 
 from typing import cast
@@ -20,7 +25,10 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
-from cofacts_ai.agent import inject_resolved_url_content
+from cofacts_ai.agent import (
+    _resolved_artifact_filename,
+    inject_resolved_url_content,
+)
 from cofacts_ai.url_resolver.client import ResolvedUrl, ResolveStatus
 
 
@@ -38,11 +46,20 @@ def text_parts(content: genai_types.Content) -> list[str]:
 
 class FakeArtifactStore:
     """Minimal in-memory stand-in for the ADK artifact service, keyed by
-    filename -- enough to exercise load/save/get_artifact_version."""
+    filename.
+
+    `get_artifact_version` raises, deliberately: production hands an
+    `AgentTool`-hosted agent a `ForwardingArtifactService`, which only
+    implements that method from ADK 2.5.0 and raises `NotImplementedError` on
+    the pinned 1.26.0. An earlier version of this fake implemented it, which
+    hid a bug where the first cache *hit* raised, the callback's blanket
+    `except Exception` swallowed it, and the entire injection was abandoned --
+    silently reverting the verifier to url_context-only. Keeping the raise here
+    means every test in this file exercises the production plumbing.
+    """
 
     def __init__(self):
         self.blobs: dict[str, bytes] = {}
-        self.metadata: dict[str, dict] = {}
 
     async def load_artifact(self, filename, version=None):
         if filename not in self.blobs:
@@ -54,16 +71,17 @@ class FakeArtifactStore:
         )
 
     async def save_artifact(self, filename, artifact, custom_metadata=None):
+        # custom_metadata is accepted to mirror ADK's signature, but the
+        # callback no longer passes it -- reading it back is what needed
+        # get_artifact_version. Metadata now rides inside the artifact body.
         self.blobs[filename] = artifact.inline_data.data
-        self.metadata[filename] = custom_metadata or {}
         return 1
 
     async def get_artifact_version(self, filename, version=None):
-        if filename not in self.blobs:
-            return None
-        from types import SimpleNamespace
-
-        return SimpleNamespace(custom_metadata=self.metadata.get(filename, {}))
+        raise NotImplementedError(
+            "ForwardingArtifactService.get_artifact_version is unimplemented "
+            "on ADK 1.26.0"
+        )
 
 
 def make_context(store: FakeArtifactStore | None = None) -> CallbackContext:
@@ -317,3 +335,97 @@ class TestInjectResolvedUrlContent:
         assert "truncated" not in parts["https://short.com"]
         assert "truncated from 1000 chars" in parts["https://long.com"]
         assert long_text not in parts["https://long.com"]
+
+    async def test_cache_hit_survives_unimplemented_get_artifact_version(self):
+        """Regression: the first cache *hit* must not abandon the injection.
+
+        `ForwardingArtifactService.get_artifact_version` raises on the pinned
+        ADK, and the callback's blanket `except Exception` turns any raise into
+        a total, silent revert to url_context-only. Because the cache is filled
+        on the 1st model call of a verifier turn, this fired on the 2nd call of
+        that same turn and every verifier call after it in the session.
+        """
+        store = FakeArtifactStore()
+        resolve_mock = AsyncMock(
+            return_value=[resolved("https://good.com", title="Cached Title")]
+        )
+        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+            await inject_resolved_url_content(
+                make_context(store), make_request(user_text("https://good.com"))
+            )
+
+        # Second turn: served from cache, so get_artifact_version would be the
+        # only reason to touch the version API.
+        request2 = make_request(user_text("https://good.com"))
+        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+            await inject_resolved_url_content(make_context(store), request2)
+
+        resolve_mock.assert_awaited_once()
+        [part] = [
+            t
+            for t in text_parts(request2.contents[0])
+            if t.startswith("[RESOLVED PAGE]")
+        ]
+        assert "body text" in part
+        assert "Cached Title" in part
+
+    async def test_legacy_raw_text_artifact_still_injects(self):
+        """Artifacts written before the metadata envelope are raw page text.
+
+        Preview deploys already wrote some. Treating an unparseable first line
+        as page content -- rather than raising -- is what keeps those usable.
+        """
+        store = FakeArtifactStore()
+        store.blobs[_resolved_artifact_filename("https://old.com")] = (
+            b"legacy page body with no envelope"
+        )
+        request = make_request(user_text("https://old.com"))
+        resolve_mock = AsyncMock(return_value=[])
+
+        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+            await inject_resolved_url_content(make_context(store), request)
+
+        resolve_mock.assert_not_awaited()
+        [part] = [
+            t
+            for t in text_parts(request.contents[0])
+            if t.startswith("[RESOLVED PAGE]")
+        ]
+        assert "legacy page body with no envelope" in part
+        # No stored title, so the URL stands in for it.
+        assert "TITLE: https://old.com" in part
+
+    async def test_untitled_page_does_not_round_trip_as_the_string_none(self):
+        """`GcsArtifactService` stringifies custom_metadata, so an untitled page
+        used to come back as the literal "None" -- truthy, so `or url` never
+        fired and the UI showed "None" as the source title."""
+        store = FakeArtifactStore()
+        untitled = ResolvedUrl(
+            url="https://untitled.com",
+            canonical=None,
+            title=None,
+            summary="body text",
+            http_status=200,
+            status=ResolveStatus.RESOLVED,
+            error=None,
+        )
+        with patch("cofacts_ai.agent.resolve_urls", AsyncMock(return_value=[untitled])):
+            await inject_resolved_url_content(
+                make_context(store), make_request(user_text("https://untitled.com"))
+            )
+
+        request2 = make_request(user_text("https://untitled.com"))
+        context2 = make_context(store)
+        with patch("cofacts_ai.agent.resolve_urls", AsyncMock(return_value=[])):
+            await inject_resolved_url_content(context2, request2)
+
+        [part] = [
+            t
+            for t in text_parts(request2.contents[0])
+            if t.startswith("[RESOLVED PAGE]")
+        ]
+        assert "TITLE: None" not in part
+        assert "TITLE: https://untitled.com" in part
+        meta = context2.state["temp:cofacts_resolved_meta"]["https://untitled.com"]
+        assert meta["title"] == "https://untitled.com"
+        assert meta["canonical"] is None
