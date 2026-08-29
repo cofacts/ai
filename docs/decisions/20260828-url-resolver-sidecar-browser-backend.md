@@ -86,6 +86,36 @@ the instance.
 Local chromium remains url-resolver's default everywhere else, including docker-compose for
 local development. Only the Cloud Run deployment is pinned.
 
+### A failing sidecar must degrade, not take the service down
+
+The client is written so that an absent resolver is survivable: `resolve_urls()` buckets an
+unreachable one as `RESOLVER_UNAVAILABLE`, documented in its `ResolveStatus` docstring as "no
+signal", and the verifier proceeds on `url_context`. A graceful degrade is only worth writing if
+the deployment permits it to happen, and the first version of this sidecar did not — it gave
+`url-resolver` a `tcpSocket` startup probe and listed it in `backend`'s `container-dependencies`,
+which together meant a sidecar that could not bind port 4000 stopped the revision from ever
+becoming Ready. The fact-checking service _unavailable_ rather than _degraded_, over a dependency
+built to be optional.
+
+**The startup probe, not the dependency, is the operative gate.** Cloud Run's container runtime
+contract requires that "all containers within the instance need to be healthy" for an instance to
+serve, so any startup probe on the sidecar gates the whole revision regardless of what depends on
+it. Removing only the `container-dependencies` entry would have changed startup ordering and left
+the availability coupling intact. What the dependency did do was make the probe _mandatory_ —
+Cloud Run rejects a deployment with "Dependent container must have startup probe specified" — so
+both had to go, and the annotation now lists only `cloudsql-proxy`.
+
+Nothing is lost with the probe. It could only ever be `tcpSocket`, and the gRPC server binds
+before any browser is contacted, so passing it proved the port was open and never that a page
+could be rendered — precisely the gap the rest of this record is about. Meanwhile the exposure it
+created was concrete rather than hypothetical, because the image is the mutable
+`docker.io/cofacts/url-resolver:latest`: an upstream push that broke startup would have taken the
+site down on the next cold start, with no deploy on this side to correlate it against.
+
+This does not make the sidecar wholly unable to affect the instance — a container that _exits_
+still terminates it, and that is not configurable away. What it removes is the failure-to-bind
+case, which is the one reachable without a deploy here.
+
 ### Consequences
 
 - Good, because the unauthenticated gRPC port is never on a network, in any environment.
@@ -102,6 +132,9 @@ local development. Only the Cloud Run deployment is pinned.
 - Neutral: url-resolver connects to Cloudflare lazily and lets the session lapse on idle, rather
   than eagerly launching and holding a browser. That suits Cloud Run's scale-to-zero and
   CPU-throttling model better than the local path did.
+- Neutral: moving the browser off-instance made the client's default resolve deadline too tight,
+  so `URL_RESOLVER_TIMEOUT` is now set explicitly in the template (see Confirmation) instead of
+  being inherited from the library.
 
 ## Confirmation
 
@@ -112,6 +145,16 @@ and the sidecar passed its startup probe. Preview serves HTTP 200; CI is green.
 The Cloudflare credentials are confirmed by a CI guard: the deploy workflow refuses to render
 `service.yaml` when either secret is empty — the misconfiguration that would otherwise deploy
 clean and degrade silently.
+
+The resolve budget is set rather than inherited. `URL_RESOLVER_TIMEOUT` is a deadline for the
+_whole_ `ResolveUrl` stream, not per URL — the client passes it straight to the streaming RPC and
+marks every URL still unanswered when the stream ends as `TIMEOUT`, another status it treats as
+"no signal". The library default of 30 s does not clear the arithmetic on this path: up to 20 URLs
+(`URL_RESOLVER_MAX_URLS`) at `SCRAPE_MAX_CONCURRENCY` 3 is roughly seven waves, each now a round
+trip to a remote browser rather than an in-process one. So the template sets 120 s, which makes
+the budget a deploy-visible decision and keeps a link-heavy message from silently resolving
+nothing. It also caps user-visible latency, because the pre-fetch blocks the verifier's model
+call.
 
 **What no automated check covers: whether the browser actually renders.** The startup probe is
 TCP on 4000, and the gRPC server binds and stays up whether or not a browser is available, so

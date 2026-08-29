@@ -11,7 +11,15 @@ spec:
     metadata:
       annotations:
         run.googleapis.com/execution-environment: gen2
-        run.googleapis.com/container-dependencies: '{"ingress":["backend"],"backend":["cloudsql-proxy","url-resolver"]}'
+        # url-resolver is deliberately absent here. The client is written to
+        # survive an unreachable resolver — every URL buckets as
+        # RESOLVER_UNAVAILABLE ("no signal") and the verifier falls back to
+        # `url_context` — and that fallback is only worth having if the
+        # deployment lets it happen. Listing url-resolver would also force it to
+        # carry a startup probe, which is the thing that would actually gate the
+        # revision; see the comment where that probe used to be, on the
+        # url-resolver container below.
+        run.googleapis.com/container-dependencies: '{"ingress":["backend"],"backend":["cloudsql-proxy"]}'
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "3"
     spec:
@@ -80,6 +88,19 @@ spec:
         # the docker-compose service name the client defaults to.
         - name: URL_RESOLVER_ADDRESS
           value: "localhost:4000"
+        # Deadline for the WHOLE ResolveUrl stream, not per URL: the client
+        # passes it straight to the streaming RPC, and any URL still
+        # unanswered when the stream ends comes back TIMEOUT — which it treats
+        # as "no signal" and degrades past, invisibly. The client's own default
+        # is 30s, which does not clear the arithmetic here: up to 20 URLs
+        # (URL_RESOLVER_MAX_URLS) at SCRAPE_MAX_CONCURRENCY 3 is ~7 waves, and
+        # each wave is a round trip to a remote Cloudflare browser rather than
+        # an in-process chromium. Set explicitly so the budget is a
+        # deploy-visible decision: ~7 waves at ~10s each, plus headroom, and
+        # still far inside the revision's 900s timeout. This blocks the
+        # verifier's model call, so it caps user-visible latency too.
+        - name: URL_RESOLVER_TIMEOUT
+          value: "120"
         startupProbe:
           tcpSocket:
             port: 8000
@@ -166,17 +187,23 @@ spec:
         # variable to tune it (Cloudflare caps it at 600000).
         - name: CLOUDFLARE_KEEP_ALIVE_MS
           value: "${CLOUDFLARE_KEEP_ALIVE_MS}"
-        startupProbe:
-          # The gRPC server binds immediately, and on the Cloudflare backend no
-          # browser is contacted until the first scrape. A TCP probe therefore
-          # only proves the RPC endpoint is up, never that a browser is
-          # reachable — the client already
-          # treats an unreachable/failing resolver as "no signal" and falls
-          # back to `url_context`, so that is the right amount of gating here.
-          tcpSocket:
-            port: 4000
-          initialDelaySeconds: 2
-          timeoutSeconds: 5
-          periodSeconds: 10
-          failureThreshold: 3
+        # No startupProbe, deliberately — this is what actually keeps a broken
+        # sidecar from taking the service down. Cloud Run requires that "all
+        # containers within the instance need to be healthy" for an instance to
+        # serve, so a startup probe here would gate the whole revision's
+        # readiness, not just this container. Dropping `url-resolver` from
+        # container-dependencies above is not sufficient on its own: the probe
+        # is the operative gate, and the dependency was only what made the probe
+        # mandatory ("Dependent container must have startup probe specified").
+        #
+        # Nothing is given up by removing it. The probe could only be tcpSocket,
+        # and the gRPC server binds before any browser is contacted, so passing
+        # it proved the port was open and never that a page could be rendered —
+        # while failing it took the whole service down over a dependency the
+        # client is explicitly written to survive.
+        #
+        # This does not make the sidecar wholly unable to affect the instance: a
+        # container that *exits* still terminates it. What it removes is the
+        # failure-to-bind case, which is the one a mutable `:latest` tag makes
+        # reachable with no deploy on this side to correlate it against.
   ${TRAFFIC_BLOCK}
