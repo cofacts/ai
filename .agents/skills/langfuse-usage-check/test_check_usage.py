@@ -1,4 +1,4 @@
-"""Tests for the standing check in `scripts/langfuse_check_usage.py`.
+"""Tests for the standing check in `check_usage.py`, next to this file.
 
 The check is what tells us the usage mapping is still working on live data, so
 its own blind spots are worth pinning down: it has to count a token as free both
@@ -12,13 +12,12 @@ import importlib.util
 from pathlib import Path
 
 _spec = importlib.util.spec_from_file_location(
-    "langfuse_check_usage",
-    Path(__file__).resolve().parents[2] / "scripts" / "langfuse_check_usage.py",
+    "check_usage", Path(__file__).resolve().parent / "check_usage.py"
 )
 assert _spec and _spec.loader
-langfuse_check_usage = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(langfuse_check_usage)
-unpriced_tokens = langfuse_check_usage.unpriced_tokens
+check_usage = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(check_usage)
+unpriced_tokens = check_usage.unpriced_tokens
 
 
 def test_the_fixed_path_reports_nothing_unpriced():

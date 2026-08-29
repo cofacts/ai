@@ -373,12 +373,21 @@ span directly turned out not to be needed. The same file pins the arithmetic: to
 key, the `usage_metadata is None` guard, and that an empty aggregated response cannot clobber a good
 write.
 
-Beyond the tests, `adk/scripts/langfuse_check_usage.py` is the standing check against live data:
+Beyond the tests, the `langfuse-usage-check` skill
+([`.agents/skills/langfuse-usage-check/`](../../.agents/skills/langfuse-usage-check/SKILL.md),
+symlinked into `.claude/skills/`) is the standing check against live data:
 
 ```
-uv run python scripts/langfuse_check_usage.py --from 2026-09-01 --to 2026-10-01 \
+python3 .agents/skills/langfuse-usage-check/check_usage.py --from 2026-09-01 --to 2026-10-01 \
     --max-unpriced-share 0.02 --max-unpriced-generations 0     # exits 1 on breach
 ```
+
+It lives with a skill rather than in `adk/scripts/` because a breach is never self-explanatory:
+the number says tokens went free, and which of the causes above it is takes reading
+`usageDetails` against `costDetails` and the span attributes. `SKILL.md` carries that playbook
+and the list of events worth running it after — a model id change, an instrumentor or Langfuse
+upgrade, a preview deploy of a mapping change. Those are the moments it can break, so it is
+run on them rather than on a schedule.
 
 It asserts two invariants, both **version-independent** — they describe correct output rather than
 what any instrumentor release emits, which matters because the dep is unpinned:
@@ -448,7 +457,7 @@ streamed root agent and `ai_writer` is `gemini-3-flash-preview` (`adk/cofacts_ai
 - Good, because `0.1.18` also stopped thinking tokens being double-counted into `completion`.
 - Bad, because it reaches only cause 1; causes 2, 3 and 5 are unchanged through `0.1.24`.
 - Bad, because it needs dependency work and a traced run to validate. It does not move the ground
-  under `langfuse_check_usage.py`, whose invariants are deliberately version-independent.
+  under the `langfuse-usage-check` skill, whose invariants are deliberately version-independent.
 
 ### Custom model definitions pricing the instrumentor's key names
 

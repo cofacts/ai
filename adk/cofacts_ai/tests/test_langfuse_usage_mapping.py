@@ -141,7 +141,7 @@ async def test_tool_use_tokens_are_folded_into_input():
         "output_reasoning": 9963,
         "total": 2_955_369,
     }
-    # The invariant `scripts/langfuse_check_usage.py` checks: the priced keys sum
+    # The invariant the `langfuse-usage-check` skill applies: the priced keys sum
     # to `total`, and `total` is Gemini's own count rather than a sum of ours.
     assert sum(v for k, v in call["usage_details"].items() if k != "total") == 2_955_369
 

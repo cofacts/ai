@@ -23,29 +23,34 @@ particular `openinference-instrumentation-google-adk` release happens to emit. T
 because the instrumentor is unpinned, and because an upgrade can quietly move which side of
 the wire a value arrives on.
 
+`SKILL.md` next to this file says when to run it and how to read a breach.
+
 Usage:
 
-    uv run python scripts/langfuse_check_usage.py --from 2026-09-01 --to 2026-10-01
-    uv run python scripts/langfuse_check_usage.py --from … --to … \
+    python3 check_usage.py --from 2026-09-01 --to 2026-10-01
+    python3 check_usage.py --from … --to … \
         --max-unpriced-share 0.02 --max-unpriced-generations 0   # exits 1 on breach
 
     # verify a PR preview deploy before merging, without production drowning it out
-    uv run python scripts/langfuse_check_usage.py --environment preview \
-        --from 2026-09-01 --to 2026-09-02
+    python3 check_usage.py --environment preview --from 2026-09-01 --to 2026-09-02
 
-Reads LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL from the environment,
-the same variables `instrumentation.py` uses. The key is project-scoped, so one run sees one
-Langfuse project — `rumors-api`'s transcripts live in their own.
+Standard library only, so it runs anywhere `python3` does — no virtualenv, and nothing to
+export by hand. Reads LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL from the
+environment, the same variables `adk/instrumentation.py` uses. The key is project-scoped, so
+one run sees one Langfuse project — `rumors-api`'s transcripts live in their own.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
+import json
 import os
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import defaultdict
-
-import httpx
 
 
 def fetch_generations(
@@ -56,33 +61,43 @@ def fetch_generations(
     environment: str | None = None,
 ) -> list[dict]:
     """Page through every GENERATION observation in the window."""
+    credentials = base64.b64encode(f"{auth[0]}:{auth[1]}".encode()).decode()
     out: list[dict] = []
-    with httpx.Client(base_url=base_url, auth=auth, timeout=120.0) as client:
-        page = 1
-        while True:
-            resp = client.get(
-                "/api/public/observations",
-                params={
-                    "type": "GENERATION",
-                    "fromStartTime": start,
-                    "toStartTime": end,
-                    "limit": 100,
-                    "page": page,
-                    **({"environment": environment} if environment else {}),
-                },
-            )
-            resp.raise_for_status()
-            body = resp.json()
-            batch = body.get("data") or []
-            out.extend(batch)
-            meta = body.get("meta") or {}
-            print(
-                f"  page {page}/{meta.get('totalPages', '?')} ({len(out)} so far)",
-                file=sys.stderr,
-            )
-            if page >= (meta.get("totalPages") or 0) or not batch:
-                return out
-            page += 1
+    page = 1
+    while True:
+        query = urllib.parse.urlencode(
+            {
+                "type": "GENERATION",
+                "fromStartTime": start,
+                "toStartTime": end,
+                "limit": 100,
+                "page": page,
+                **({"environment": environment} if environment else {}),
+            }
+        )
+        request = urllib.request.Request(
+            f"{base_url.rstrip('/')}/api/public/observations?{query}",
+            headers={
+                "Authorization": f"Basic {credentials}",
+                "Accept": "application/json",
+                # Named explicitly: Cloudflare fronts langfuse.cofacts.tw and
+                # answers the default `Python-urllib/3.x` signature with a 403
+                # (error 1010) before the request reaches Langfuse.
+                "User-Agent": "cofacts-langfuse-usage-check/1.0",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            body = json.load(response)
+        batch = body.get("data") or []
+        out.extend(batch)
+        meta = body.get("meta") or {}
+        print(
+            f"  page {page}/{meta.get('totalPages', '?')} ({len(out)} so far)",
+            file=sys.stderr,
+        )
+        if page >= (meta.get("totalPages") or 0) or not batch:
+            return out
+        page += 1
 
 
 def unpriced_tokens(usage: dict, costs: dict) -> int:

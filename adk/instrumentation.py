@@ -159,7 +159,7 @@ class LangfuseTracingPlugin(BasePlugin):
         `total` is sent explicitly for the same reason. Langfuse derives it as the
         sum of the keys it received when none is ingested, and a total derived
         from our own buckets cannot contradict them: the shortfall
-        `scripts/langfuse_check_usage.py` watches would be 0 by construction, and
+        `.agents/skills/langfuse-usage-check` watches would be 0 by construction, and
         a bucket we later drop or misspell would vanish from the yardstick along
         with the tokens. `total_token_count` comes from Gemini, so it stays an
         independent reference.
