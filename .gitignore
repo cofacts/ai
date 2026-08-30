@@ -18,6 +18,9 @@ __pycache__/
 .venv/
 .adk
 cofacts.ai_ui_mockup
-.claude
+# Local Claude Code settings stay out, but skills checked in under .agents/ are
+# symlinked here so Claude Code loads them.
+.claude/*
+!.claude/skills/
 .gemini/
 gha-creds-*.json

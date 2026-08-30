@@ -52,17 +52,17 @@ jobs:
         run: uv sync --group dev
 
       - name: Check formatting (ruff format)
-        run: uv run ruff format --check .
+        run: uv run ruff format --check . ../.agents/skills
 
       # !cancelled(): run every check even when an earlier one fails,
       # so a single CI run reports all format/lint/type errors at once.
       - name: Lint (ruff check)
         if: ${{ !cancelled() }}
-        run: uv run ruff check .
+        run: uv run ruff check . ../.agents/skills
 
       - name: Typecheck (ty)
         if: ${{ !cancelled() }}
-        run: uv run ty check .
+        run: uv run ty check . ../.agents/skills
 
   lint-frontend:
     name: Lint frontend (ESLint, Prettier, tsc)
