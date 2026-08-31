@@ -7,6 +7,7 @@ import {
 import { useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatArea } from '@/components/ChatArea'
+import { SessionUnavailable } from '@/components/SessionUnavailable'
 import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
 import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
@@ -24,6 +25,7 @@ function SessionPage() {
     messages,
     isStreaming,
     error,
+    sessionNotFound,
     sendMessage,
     stopGeneration,
     lastReplyDraftId,
@@ -73,6 +75,7 @@ function SessionPage() {
       // otherwise when the stream ends, the session will be stale.
       return
     }
+    if (sessionNotFound) return
     markSessionOpened({ data: sessionId })
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ['sessions'] })
@@ -80,7 +83,11 @@ function SessionPage() {
       .catch((err) => {
         if (isAuthExpiredError(err)) handleAuthExpired()
       })
-  }, [sessionId, queryClient, isStreaming])
+  }, [sessionId, queryClient, isStreaming, sessionNotFound])
+
+  if (sessionNotFound) {
+    return <SessionUnavailable />
+  }
 
   return (
     <>
