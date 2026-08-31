@@ -13,8 +13,19 @@ interface HeaderProps {
   onToggleSidebar: () => void
 }
 
+// Profile placeholder for an authenticated session whose GetUser fetch
+// hasn't resolved (or failed) yet — still a real, logged-in user, just
+// without name/avatar. UserAvatar falls back to its generic silhouette.
+const PLACEHOLDER_PROFILE = {
+  name: null,
+  avatarUrl: null,
+  avatarType: null,
+  avatarData: null,
+}
+
 export function Header({ onToggleSidebar }: HeaderProps) {
-  const { user, isLoading, login, logout } = useAuth()
+  const { authenticated, user, isLoading, login, logout } = useAuth()
+  const profile = user ?? PLACEHOLDER_PROFILE
 
   return (
     <header className="h-14 md:h-16 bg-white border-b border-border-subtle flex items-center justify-between px-4 shrink-0 z-30 relative shadow-sm">
@@ -78,25 +89,25 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               person
             </span>
           </div>
-        ) : user ? (
+        ) : authenticated ? (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <button
                   type="button"
-                  aria-label={user.name ?? ''}
+                  aria-label={profile.name ?? ''}
                   className="rounded-full overflow-hidden cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               }
             >
-              <UserAvatar user={user} size={36} />
+              <UserAvatar user={profile} size={36} />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <div className="flex items-center gap-3 px-3 py-2.5">
-                <UserAvatar user={user} size={40} />
+                <UserAvatar user={profile} size={40} />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-text-main truncate">
-                    {user.name}
+                    {profile.name ?? '使用者'}
                   </div>
                 </div>
               </div>
