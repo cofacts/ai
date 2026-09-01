@@ -113,6 +113,70 @@ callback is not a tool, so it also sidesteps the ADK built-in-tool constraint en
 isolates context nicely but leaves the verifier reading through the same black box) and is
 retained only as a possible future writer-side convenience.
 
+### Where the hook sits
+
+`inject_resolved_url_content` is a third `before_model_callback` on `ai_verifier`, alongside the
+two that already inject media. Being a callback rather than a tool is the whole point: it runs
+between the request being assembled and Gemini seeing it, so the page text is in context before
+the model produces a token. There is no branch in which the model "skips the tool".
+
+```mermaid
+flowchart TB
+    W["ai_writer"] -->|"AgentTool · one call per claim"| H1
+    ART[("ADK artifacts<br/>resolved-sha1(url).txt<br/>fetch cache + audit record")]
+
+    subgraph V["inside one ai_verifier call"]
+        direction TB
+        H1["inject_youtube_filedata"] --> H2["inject_cofacts_media_filedata"] --> H3["inject_resolved_url_content"] --> G["Gemini<br/>+ url_context (kept)"] --> A["append_verifier_sources"]
+    end
+
+    ART <-->|"read / write"| H3
+    H3 <-->|"gRPC over localhost"| UR["url-resolver sidecar<br/>headless browser"]
+    A -->|"JSON · content + sources"| W
+
+    style H3 fill:#fde68a,stroke:#b45309,stroke-width:3px
+```
+
+### What it does to the content
+
+Each plain web URL in the message becomes one of four things in the request. The split is by
+**cause of failure**, not by success/failure, because that is what decides whether the verifier
+is allowed to treat a URL as bad — and, downstream, whether the page can appear in `sources`.
+
+```mermaid
+flowchart LR
+    U["one plain http(s) URL<br/>from the user's message"]
+    C{"already an<br/>artifact?"}
+    R["url-resolver scrape<br/>Readability body text<br/>html never leaves the client"]
+    S{"ResolveStatus<br/>bucketed by cause"}
+    SV["save artifact<br/>JSON header + body"]
+    B["_water_fill()<br/>200k chars shared<br/>across the turn"]
+
+    U --> C
+    C -->|"hit"| B
+    C -->|"miss"| R --> S
+    S -->|"RESOLVED"| SV --> B
+
+    B --> O1["[RESOLVED PAGE] url<br/>TITLE: …<br/>--- verbatim page text"]
+    S -->|"DEAD<br/>DNS failure · malformed"| O2["[LINK NOT FOUND] url: reason<br/>advisory: verify with url_context,<br/>withhold support only if that fails too"]
+    S -->|"RESOLVER_CANT_FETCH<br/>PDF · blocked · TLS"| O3["[NOTE] couldn't fetch url<br/>rely on url_context"]
+    S -->|"TIMEOUT<br/>RESOLVER_UNAVAILABLE"| O4["nothing injected at all<br/>url_context handles it"]
+
+    O1 --> S1["in sources<br/>the verifier read this text"]
+    O2 --> S2["absent from sources<br/>neither path fetched it"]
+    O3 --> S3["in sources only if<br/>url_context grounds it"]
+    O4 --> S3
+
+    style O1 fill:#d1fae5,stroke:#047857
+    style O2 fill:#fee2e2,stroke:#b91c1c
+    style O3 fill:#fef3c7,stroke:#b45309
+    style O4 fill:#f3f4f6,stroke:#6b7280
+```
+
+The right-hand column is the self-correcting property: no ban list decides what may be cited.
+A dead URL is fetched by neither path, so it is simply absent; a PDF the resolver cannot read
+still appears if `url_context` grounded it.
+
 As shipped in #118:
 
 1. **A gRPC client for url-resolver** (`adk/cofacts_ai/url_resolver/`). The `.proto` files are
@@ -127,7 +191,12 @@ As shipped in #118:
    `RESOLVER_CANT_FETCH`, meaning _the resolver_ failed, not the page; `url_context` may still
    read it. A whole-call failure yields `RESOLVER_UNAVAILABLE` for every URL, never `DEAD`.
 3. **`inject_resolved_url_content` as a third `before_model_callback`** on `ai_verifier`,
-   alongside the existing `inject_youtube_filedata` / `inject_cofacts_media_filedata`. It injects
+   alongside the existing `inject_youtube_filedata` / `inject_cofacts_media_filedata`. The whole
+   pipeline — CJK-aware URL extraction, the artifact envelope, budgeting and the callback itself
+   — lives in `adk/cofacts_ai/resolved_pages.py`, the way media injection lives in
+   `media_filedata.py`; `agent.py` keeps only the agent wiring and `append_verifier_sources`,
+   which sits beside `append_grounding_sources` because the two share the `{content, sources}`
+   contract. It injects
    one **text** part per URL (`FileData` is reserved for binary media Gemini perceives natively):
    `[RESOLVED PAGE] <url>` with the real Readability-cleaned body text; `[LINK NOT FOUND]` for
    `DEAD`; **nothing at all** for `RESOLVER_CANT_FETCH` / `TIMEOUT` /
