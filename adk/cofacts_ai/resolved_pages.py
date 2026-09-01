@@ -43,6 +43,27 @@ logger = logging.getLogger(__name__)
 # reset in inject_resolved_url_content.
 RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
 
+# Cofacts' own url-resolver output for URLs seen in an article or reply,
+# harvested from the writer's Cofacts tool responses and read here as a
+# last-resort fallback: {url: {"summary", "title", "fetchedAt", "status"}}.
+#
+# Handed over as state rather than parsed back out of the request. The writer
+# cites tool results to the verifier as plain text blocks (see
+# writer_citations._render_block), and for `search_cofacts_database` that block
+# is a whole JSON dump -- digging the hyperlinks back out of a prompt string
+# would be a parser against a format that exists to be read by a model, not by
+# us. `after_tool` already holds the structured response, and agent_tool.py
+# seeds the verifier's child session from the writer's state, so the data can
+# simply be carried.
+#
+# Unlike RESOLVED_META_STATE_KEY this deliberately ACCUMULATES across the turn
+# and is never reset. That key is an assertion about one call ("these are the
+# pages this response read"), so a stale value there is a fabricated citation.
+# This one is a lookup table keyed by URL, where every entry is stamped with
+# the date it was fetched -- an old entry is not wrong, just old, and the
+# injected text says so.
+COFACTS_HYPERLINKS_STATE_KEY = "temp:cofacts_hyperlinks"
+
 
 # CJK sentence punctuation ends a URL. It has to be excluded from the match
 # itself, not merely stripped afterwards: Chinese prose has no spaces, so
@@ -95,9 +116,92 @@ def _trim_url_punctuation(url: str) -> str:
     return url
 
 
+def harvest_cofacts_hyperlinks(
+    callback_context: CallbackContext, tool_response: object
+) -> None:
+    """Collect `hyperlinks` out of a Cofacts tool response into state.
+
+    Called from ai_writer's after_tool callback, where the response is still a
+    dict. Walks it rather than indexing fixed paths, because the two tools nest
+    the same field differently -- `get_single_cofacts_article` under
+    `article.hyperlinks` plus one list per reply, `search_cofacts_database`
+    under `data.edges[].node.hyperlinks` -- and a walk keeps working if the
+    GraphQL shape moves.
+
+    Only entries with usable text are kept. `status`/`error` record how Cofacts'
+    own crawl went, and a hyperlink whose crawl failed carries no summary worth
+    falling back to.
+    """
+    found: dict[str, dict] = {}
+
+    def walk(node: object) -> None:
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+            return
+        if not isinstance(node, dict):
+            return
+        links = node.get("hyperlinks")
+        if isinstance(links, list):
+            for link in links:
+                if not isinstance(link, dict):
+                    continue
+                url = link.get("url")
+                summary = link.get("summary")
+                if not isinstance(url, str) or not isinstance(summary, str):
+                    continue
+                if not summary.strip() or link.get("status") != 200:
+                    continue
+                found[url] = {
+                    "summary": summary,
+                    "title": link.get("title"),
+                    "fetchedAt": link.get("fetchedAt"),
+                }
+        for value in node.values():
+            walk(value)
+
+    walk(tool_response)
+    if not found:
+        return
+    existing = callback_context.state.get(COFACTS_HYPERLINKS_STATE_KEY) or {}
+    # Merge rather than replace: one turn can touch several articles, and the
+    # verifier may be called about a URL first seen two tool calls ago.
+    callback_context.state[COFACTS_HYPERLINKS_STATE_KEY] = {**existing, **found}
+
+
 _RESOLVED_PAGE_PREFIX = "[RESOLVED PAGE] "
 _LINK_NOT_FOUND_PREFIX = "[LINK NOT FOUND] "
 _RESOLVER_CANT_FETCH_PREFIX = "[NOTE] url-resolver couldn't fetch "
+
+# Deliberately a different marker from [RESOLVED PAGE]. This text was not read
+# in this turn and may describe a page that has since changed or gone, so the
+# verifier must be able to tell the two apart -- and, in the prompt, is told to
+# weigh them differently. It also never reaches `sources`: see the comment at
+# the injection site.
+_ARCHIVED_PAGE_PREFIX = "[ARCHIVED PAGE] "
+
+
+def _stage_archived(
+    url: str,
+    cofacts_links: dict,
+    archived: dict,
+    lengths: dict,
+) -> bool:
+    """Queue Cofacts' stored copy of `url` for injection. True if there was one.
+
+    The caller uses the return value to decide whether it still needs to emit
+    its own "couldn't fetch" note -- an archived copy says that and more.
+    """
+    entry = cofacts_links.get(url)
+    if not isinstance(entry, dict):
+        return False
+    summary = entry.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        return False
+    archived[url] = entry
+    lengths[url] = len(summary)
+    return True
+
 
 _DEFAULT_TOTAL_CHAR_BUDGET = 200_000
 
@@ -239,6 +343,7 @@ def _url_already_injected(llm_request: LlmRequest, url: str) -> bool:
     inject_cofacts_media_filedata."""
     markers = (
         f"{_RESOLVED_PAGE_PREFIX}{url}\n",
+        f"{_ARCHIVED_PAGE_PREFIX}{url}\n",
         f"{_LINK_NOT_FOUND_PREFIX}{url}:",
         f"{_RESOLVER_CANT_FETCH_PREFIX}{url} (",
     )
@@ -296,6 +401,10 @@ async def inject_resolved_url_content(
 
         resolved_meta: dict[str, dict] = {}
         injected_parts: list[genai_types.Part] = []
+        archived: dict[str, dict] = {}
+        cofacts_links = callback_context.state.get(COFACTS_HYPERLINKS_STATE_KEY) or {}
+        if not isinstance(cofacts_links, dict):
+            cofacts_links = {}
         lengths: dict[str, int] = {}
         full_texts: dict[str, str] = {}
         titles: dict[str, str] = {}
@@ -351,18 +460,32 @@ async def inject_resolved_url_content(
                             )
                         )
                     )
+                # Everything below is "the resolver failed, the page probably
+                # didn't": RESOLVER_CANT_FETCH (PDF, blocked, TLS) and the two
+                # no-signal buckets. These are the cases where Cofacts' own
+                # older crawl of the same URL is worth having, so try it before
+                # falling through to url_context alone.
+                #
+                # DEAD is deliberately excluded: there the URL itself does not
+                # resolve, and pairing "this link is broken" with the text it
+                # served years ago invites exactly the citation the advisory
+                # note is trying to prevent.
                 elif r.status == ResolveStatus.RESOLVER_CANT_FETCH:
-                    injected_parts.append(
-                        genai_types.Part(
-                            text=(
-                                f"{_RESOLVER_CANT_FETCH_PREFIX}{r.url} ({r.error}) "
-                                "— may be a PDF or blocked; rely on url_context."
+                    if not _stage_archived(r.url, cofacts_links, archived, lengths):
+                        injected_parts.append(
+                            genai_types.Part(
+                                text=(
+                                    f"{_RESOLVER_CANT_FETCH_PREFIX}{r.url} "
+                                    f"({r.error}) — may be a PDF or blocked; "
+                                    "rely on url_context."
+                                )
                             )
                         )
-                    )
-                # TIMEOUT / RESOLVER_UNAVAILABLE: inject nothing, degrade to
-                # url_context — a resolver hiccup must never be mistaken for
-                # proof that a URL is dead.
+                else:
+                    # TIMEOUT / RESOLVER_UNAVAILABLE. Without an archived copy
+                    # this stays silent on purpose: a resolver hiccup must never
+                    # be mistaken for proof that a URL is dead.
+                    _stage_archived(r.url, cofacts_links, archived, lengths)
 
         budget = int(
             os.environ.get("URL_RESOLVER_TOTAL_CHAR_BUDGET", _DEFAULT_TOTAL_CHAR_BUDGET)
@@ -384,6 +507,37 @@ async def inject_resolved_url_content(
                 "title": titles[url],
                 "canonical": canonicals[url],
             }
+
+        # Archived copies share the same char budget -- they cost the same
+        # context as a fresh page -- but are rendered under their own marker and
+        # are POINTEDLY ABSENT from resolved_meta. That omission is the safety
+        # property: resolved_meta is what append_verifier_sources turns into
+        # `sources`, so a page nobody could fetch this turn can never be
+        # presented to a reader as a source the verifier read.
+        for url, entry in archived.items():
+            full_text = entry["summary"]
+            allowed = allocation.get(url, len(full_text))
+            body = full_text if allowed >= len(full_text) else full_text[:allowed]
+            fetched = entry.get("fetchedAt")
+            when = (
+                f"on {fetched[:10]}"
+                if isinstance(fetched, str)
+                else "at some earlier date"
+            )
+            injected_parts.append(
+                genai_types.Part(
+                    text=(
+                        f"{_ARCHIVED_PAGE_PREFIX}{url}\n"
+                        f"TITLE: {entry.get('title') or url}\n"
+                        f"url-resolver could not reach this page just now. The text "
+                        f"below is what Cofacts crawled {when}, NOT what the page "
+                        f"says today — it may have changed or gone. Use it as "
+                        f"background only: do not treat it as confirmation that "
+                        f"this link currently supports a claim, and prefer "
+                        f"url_context if that can still read the page.\n---\n{body}"
+                    )
+                )
+            )
 
         if not injected_parts:
             return None
