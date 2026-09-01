@@ -65,8 +65,9 @@ names — the `name=` strings, mirrored in `src/lib/adk.ts` — drop it: `writer
 Agents exchange data through callbacks in `adk/cofacts_ai/agent.py` (a structured
 `{content, sources}` JSON contract), and media is injected as Gemini `FileData` through
 before-model callbacks in `adk/cofacts_ai/media_filedata.py` and `agent.py`. The same callback
-chain pre-fetches web pages for the verifier through the internal **url-resolver** gRPC service
-(`adk/cofacts_ai/url_resolver/`), so its verdicts rest on page text the system actually read.
+chain pre-fetches web pages for the verifier (`adk/cofacts_ai/resolved_pages.py`) through the
+internal **url-resolver** gRPC service (`adk/cofacts_ai/url_resolver/`), so its verdicts rest on
+page text the system actually read.
 
 Each `AgentTool` call is a **fresh, stateless, single-message session** — a sub-agent sees only
 that call's `request` string. So every tool result is stamped with a footnote id (`cite_as`, e.g.

@@ -18,7 +18,8 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types as genai_types
 
-from cofacts_ai.agent import RESOLVED_META_STATE_KEY, append_verifier_sources
+from cofacts_ai.agent import append_verifier_sources
+from cofacts_ai.resolved_pages import RESOLVED_META_STATE_KEY
 
 
 def make_context(resolved_meta: dict | None = None) -> CallbackContext:

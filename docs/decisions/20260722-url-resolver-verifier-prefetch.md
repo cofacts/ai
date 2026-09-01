@@ -28,7 +28,8 @@ Monthly share showed no improvement across the window (May 25%, June 17%, July 2
 prompt-level rules shipped in #55/#77 had not closed it.
 
 Scope: the ADK verifier's perception layer only — `ai_verifier`'s `before_model_callback` chain
-and `after_model_callback` in `adk/cofacts_ai/agent.py`, plus a new gRPC client package and a new
+(`adk/cofacts_ai/resolved_pages.py`) and `after_model_callback` (`agent.py`), plus a new gRPC
+client package and a new
 internal service dependency ([`cofacts/url-resolver`](https://github.com/cofacts/url-resolver))
 in the deploy topology. The writer, the investigator and the `claim_sources` gate are unchanged.
 Driving PR: [cofacts/ai#118](https://github.com/cofacts/ai/pull/118).

@@ -9,11 +9,8 @@ This module implements a hierarchical agent system with:
 """
 
 import asyncio
-import hashlib
 import json
 import logging
-import os
-import re
 import time
 from datetime import datetime
 from typing import Any, Optional
@@ -44,10 +41,11 @@ from .agent_names import (
     AI_WRITER_NAME,
 )
 from .media_filedata import (
-    _COFACTS_MEDIA_URL_RE,
+    _YOUTUBE_URL_RE,
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
+from .resolved_pages import RESOLVED_META_STATE_KEY, inject_resolved_url_content
 from .session_title import generate_session_title
 from .tools import (
     draft_factcheck_response,
@@ -56,7 +54,7 @@ from .tools import (
     search_cofacts_database,
     search_image_web,
 )
-from .url_resolver.client import ResolveStatus, resolve_urls
+from .url_resolver.client import ResolveStatus
 from .writer_citations import attach_citation, resolve_citations
 
 load_dotenv()
@@ -157,9 +155,6 @@ async def append_grounding_sources(
     return _set_text_content(llm_response, serialized)
 
 
-RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
-
-
 async def append_verifier_sources(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
@@ -217,11 +212,6 @@ async def append_verifier_sources(
         ensure_ascii=False,
     )
     return _set_text_content(llm_response, serialized)
-
-
-_YOUTUBE_URL_RE = re.compile(
-    r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?[^\s\"'<>]*v=|shorts/|live/|embed/|v/)|youtu\.be/)[^\s\"'<>]+"
-)
 
 
 def inject_youtube_filedata(
@@ -298,360 +288,6 @@ def inject_youtube_filedata(
             )
     except Exception:
         logger.exception("inject_youtube_filedata failed; skipping YouTube injection")
-    return None
-
-
-# CJK sentence punctuation ends a URL. It has to be excluded from the match
-# itself, not merely stripped afterwards: Chinese prose has no spaces, so
-# `https://example.com/a，另一個` would otherwise capture the following words
-# into the URL, which then resolves DEAD and gets the verifier told not to
-# trust a perfectly good source.
-#
-# Full-width BRACKETS are deliberately absent from this set -- they can be part
-# of a URL and are handled by _trim_url_punctuation below.
-_CJK_URL_STOP = "，。、！？；：〜～…—「」『』〈〉《》【】"
-
-_HTTP_URL_RE = re.compile(r"https?://[^\s\"'<>" + _CJK_URL_STOP + r"]+")
-
-# Closing bracket -> its opener. A trailing closer is part of the URL when the
-# URL contains a matching opener (`.../Mercury_(planet)`) and prose punctuation
-# when it does not (`(https://example.com)`).
-_URL_CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{", "）": "（"}
-
-# Punctuation that commonly ends a sentence right after a URL. Brackets are
-# handled by the balance rule above instead of appearing here.
-_URL_TRAILING_CHARS = ".,;:!?\"'"
-
-
-def _trim_url_punctuation(url: str) -> str:
-    """Strip prose punctuation from the end of an extracted URL.
-
-    Mirrors what rumors-site gets from `linkifyjs.tokenize()` (`lib/text.tsx`),
-    whose behaviour is pinned by its own `parses half-width brackets correctly`
-    / `parses full-width brackets correctly` tests. A plain `rstrip` of a
-    punctuation set cannot do this: it would break `.../Mercury_(planet)` by
-    taking the closing paren that belongs to the URL, and it cannot tell that
-    apart from the wrapping paren in `(https://example.com)`.
-
-    `linkify-it-py` was tried instead of hand-rolling this and rejected -- it
-    handles half-width brackets but keeps a trailing full-width `）` and, more
-    importantly, swallows following words in CJK prose exactly as the old
-    regex did.
-    """
-    while url:
-        last = url[-1]
-        opener = _URL_CLOSING_BRACKETS.get(last)
-        if opener is not None:
-            if url.count(opener) >= url.count(last):
-                break  # balanced -- the bracket belongs to the URL
-            url = url[:-1]
-        elif last in _URL_TRAILING_CHARS:
-            url = url[:-1]
-        else:
-            break
-    return url
-
-
-_RESOLVED_PAGE_PREFIX = "[RESOLVED PAGE] "
-_LINK_NOT_FOUND_PREFIX = "[LINK NOT FOUND] "
-_RESOLVER_CANT_FETCH_PREFIX = "[NOTE] url-resolver couldn't fetch "
-
-_DEFAULT_TOTAL_CHAR_BUDGET = 200_000
-
-
-def _resolved_artifact_filename(url: str) -> str:
-    """Stable per-URL artifact filename, used as both the fetch cache key and
-    the UI-visible record of the full page text that was read."""
-    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()
-    return f"resolved-{digest}.txt"
-
-
-def _encode_resolved_artifact(
-    text: str, title: Optional[str], canonical: Optional[str]
-) -> bytes:
-    """Pack page text plus its metadata into one artifact body.
-
-    The metadata rides *inside* the artifact rather than in `custom_metadata`
-    because reading that back requires `get_artifact_version`, which
-    `ForwardingArtifactService` — the service an `AgentTool`-hosted agent gets,
-    i.e. `ai_verifier` in production — only implements from ADK 2.5.0. On the
-    pinned 1.26.0 it raises `NotImplementedError`, and a raise anywhere in
-    `inject_resolved_url_content` costs the *entire* injection, silently
-    reverting the verifier to url_context-only.
-
-    Keeping it in the body also preserves a real `None`: `GcsArtifactService`
-    stringifies `custom_metadata` values, so an untitled page came back as the
-    literal string "None" — truthy, so the `or url` fallback never fired and
-    the UI showed "None" as the source title.
-    """
-    header = json.dumps({"title": title, "canonical": canonical}, ensure_ascii=False)
-    return f"{header}\n{text}".encode("utf-8")
-
-
-def _decode_resolved_artifact(data: bytes) -> tuple[str, Optional[str], Optional[str]]:
-    """Unpack `_encode_resolved_artifact`, tolerating pre-envelope artifacts.
-
-    Artifacts written before the envelope existed are raw page text whose first
-    line is page content, not JSON. Those must still be usable: falling through
-    to an exception here would abandon the whole injection, which is the very
-    failure this envelope exists to prevent. Such a body is returned as text
-    with no metadata, and the caller's `or url` fallback supplies the title.
-    """
-    body = data.decode("utf-8")
-    header, sep, text = body.partition("\n")
-    if not sep:
-        return body, None, None
-    try:
-        meta = json.loads(header)
-    except (ValueError, TypeError):
-        return body, None, None
-    if not isinstance(meta, dict) or "title" not in meta:
-        return body, None, None
-    title = meta.get("title")
-    canonical = meta.get("canonical")
-    return (
-        text,
-        title if isinstance(title, str) else None,
-        canonical if isinstance(canonical, str) else None,
-    )
-
-
-def _water_fill(lengths: dict[str, int], budget: int) -> dict[str, int]:
-    """Max-min fair allocation of `budget` chars across `lengths`.
-
-    Pages shorter than an equal share keep their full length; the budget
-    freed by short pages is redistributed evenly across the pages too long
-    to fit. If the total already fits under budget, every page gets its full
-    length back (the loop below falls through with no truncation).
-    """
-    if not lengths:
-        return {}
-    items = sorted(lengths.items(), key=lambda kv: kv[1])
-    remaining_budget = budget
-    remaining_count = len(items)
-    allocation: dict[str, int] = {}
-    for i, (key, length) in enumerate(items):
-        fair_share = remaining_budget / remaining_count if remaining_count else 0
-        if length <= fair_share:
-            allocation[key] = length
-            remaining_budget -= length
-            remaining_count -= 1
-        else:
-            # This item, and every remaining one (all >= it, since sorted
-            # ascending), gets an equal split of what's left.
-            equal_share = (
-                int(remaining_budget // remaining_count) if remaining_count else 0
-            )
-            for key2, _ in items[i:]:
-                allocation[key2] = equal_share
-            break
-    return allocation
-
-
-def _extract_web_urls(
-    llm_request: LlmRequest,
-) -> tuple[list[str], Optional[genai_types.Content]]:
-    """Plain http(s) URLs to pre-fetch via url-resolver, and the latest user
-    content that mentioned any of them (mirrors inject_youtube_filedata's
-    "latest content wins" — today each verifier AgentTool call is a fresh
-    single-message session, so there is normally just one candidate).
-
-    Excludes YouTube URLs (watched via FileData + url_context; url-resolver
-    can only scrape HTML text, not video content) and Cofacts media URLs
-    (same reason, handled by inject_cofacts_media_filedata).
-    """
-    urls: list[str] = []
-    seen = set()
-    target_content = None
-    for content in llm_request.contents:
-        if content.role != "user" or not content.parts:
-            continue
-        found_here = []
-        for part in content.parts:
-            if not part.text:
-                continue
-            for match in _HTTP_URL_RE.findall(part.text):
-                url = _trim_url_punctuation(match)
-                if _YOUTUBE_URL_RE.fullmatch(url) or _COFACTS_MEDIA_URL_RE.fullmatch(
-                    url
-                ):
-                    continue
-                found_here.append(url)
-        if not found_here:
-            continue
-        target_content = content
-        for url in found_here:
-            if url not in seen:
-                seen.add(url)
-                urls.append(url)
-    return urls, target_content
-
-
-def _url_already_injected(llm_request: LlmRequest, url: str) -> bool:
-    """True if a [RESOLVED PAGE]/[LINK NOT FOUND]/[NOTE] part for this URL is
-    already present anywhere in the request. The verifier's before_model
-    callbacks re-run on every model call in a turn (the request is rebuilt
-    from conversation history each time), so without this check we'd
-    re-inject the same page text on every call — mirrors the `seen` dedup in
-    inject_cofacts_media_filedata."""
-    markers = (
-        f"{_RESOLVED_PAGE_PREFIX}{url}\n",
-        f"{_LINK_NOT_FOUND_PREFIX}{url}:",
-        f"{_RESOLVER_CANT_FETCH_PREFIX}{url} (",
-    )
-    for content in llm_request.contents:
-        for part in content.parts or []:
-            if part.text and part.text.startswith(markers):
-                return True
-    return False
-
-
-async def inject_resolved_url_content(
-    callback_context: CallbackContext, llm_request: LlmRequest
-) -> None:
-    """Before-model callback for ai_verifier.
-
-    Pre-fetches every plain web URL through url-resolver and injects the
-    real Readability-cleaned body text as [RESOLVED PAGE] parts, so the
-    verifier bases support/refute decisions on text it actually read instead
-    of relying solely on Gemini's black-box url_context tool — which is what
-    let it hallucinate support for dead or irrelevant links. A URL
-    url-resolver could not resolve at all (DNS failure / malformed) gets an
-    advisory [LINK NOT FOUND] note rather than a hard ban, since url_context
-    may still read a page the resolver's simpler fetch missed; a URL the
-    resolver merely couldn't fetch (PDF, blocked, ...) gets nothing injected
-    so url_context gets a clean shot at it.
-
-    Caches full page text as an ADK artifact keyed by a hash of the URL —
-    this doubles as the fetch cache (skips re-resolving on the verifier's
-    ~2 model calls per turn, and across turns in the same session) and as a
-    UI-visible record of exactly what the system was able to read. Only
-    successfully resolved text is cached; dead/unfetchable results are cheap
-    to re-attempt and are not persisted.
-    """
-    # Clear first, so every exit below -- the early returns, the `except`, and
-    # the normal path -- leaves this key describing only the current call.
-    #
-    # `temp:` is NOT scoped per AgentTool call: agent_tool.py seeds the child
-    # session from the parent's state and forwards the child's delta back up,
-    # so without this a call that resolves nothing inherits the previous
-    # call's meta and append_verifier_sources reports pages this response
-    # never read. ai_verifier runs once per claim, so that is a claim citing
-    # the *previous* claim's URLs -- the fabricated citation this whole
-    # feature exists to prevent.
-    #
-    # This costs no extra fetches. The fetch cache is the artifact
-    # (`resolved-<sha1>.txt`, loaded below); this key is only the handoff to
-    # the after-model callback, which cannot see the injected request parts.
-    callback_context.state[RESOLVED_META_STATE_KEY] = {}
-
-    try:
-        urls, target_content = _extract_web_urls(llm_request)
-        urls = [url for url in urls if not _url_already_injected(llm_request, url)]
-        if not urls or target_content is None or target_content.parts is None:
-            return None
-
-        resolved_meta: dict[str, dict] = {}
-        injected_parts: list[genai_types.Part] = []
-        lengths: dict[str, int] = {}
-        full_texts: dict[str, str] = {}
-        titles: dict[str, str] = {}
-        canonicals: dict[str, Optional[str]] = {}
-
-        to_fetch: list[str] = []
-        for url in urls:
-            filename = _resolved_artifact_filename(url)
-            cached = await callback_context.load_artifact(filename)
-            if cached is not None and cached.inline_data and cached.inline_data.data:
-                text, title, canonical = _decode_resolved_artifact(
-                    cached.inline_data.data
-                )
-                full_texts[url] = text
-                lengths[url] = len(text)
-                titles[url] = title or url
-                canonicals[url] = canonical
-            else:
-                to_fetch.append(url)
-
-        if to_fetch:
-            results = await resolve_urls(to_fetch)
-            for r in results:
-                if r.status == ResolveStatus.RESOLVED and r.summary:
-                    full_texts[r.url] = r.summary
-                    lengths[r.url] = len(r.summary)
-                    titles[r.url] = r.title or r.url
-                    canonicals[r.url] = r.canonical
-                    await callback_context.save_artifact(
-                        filename=_resolved_artifact_filename(r.url),
-                        artifact=genai_types.Part(
-                            inline_data=genai_types.Blob(
-                                mime_type="text/plain",
-                                data=_encode_resolved_artifact(
-                                    r.summary, r.title, r.canonical
-                                ),
-                            )
-                        ),
-                    )
-                elif r.status == ResolveStatus.DEAD:
-                    resolved_meta[r.url] = {
-                        "status": ResolveStatus.DEAD.value,
-                        "error": r.error,
-                    }
-                    injected_parts.append(
-                        genai_types.Part(
-                            text=(
-                                f"{_LINK_NOT_FOUND_PREFIX}{r.url}: {r.error}. "
-                                "url-resolver could not resolve this URL (likely "
-                                "nonexistent/malformed). Verify with url_context; "
-                                "if it also retrieves no content, do NOT claim "
-                                "this link supports any claim."
-                            )
-                        )
-                    )
-                elif r.status == ResolveStatus.RESOLVER_CANT_FETCH:
-                    injected_parts.append(
-                        genai_types.Part(
-                            text=(
-                                f"{_RESOLVER_CANT_FETCH_PREFIX}{r.url} ({r.error}) "
-                                "— may be a PDF or blocked; rely on url_context."
-                            )
-                        )
-                    )
-                # TIMEOUT / RESOLVER_UNAVAILABLE: inject nothing, degrade to
-                # url_context — a resolver hiccup must never be mistaken for
-                # proof that a URL is dead.
-
-        budget = int(
-            os.environ.get("URL_RESOLVER_TOTAL_CHAR_BUDGET", _DEFAULT_TOTAL_CHAR_BUDGET)
-        )
-        allocation = _water_fill(lengths, budget)
-        for url, full_text in full_texts.items():
-            allowed = allocation.get(url, len(full_text))
-            truncated = allowed < len(full_text)
-            body = full_text if not truncated else full_text[:allowed]
-            text = f"{_RESOLVED_PAGE_PREFIX}{url}\nTITLE: {titles[url]}\n---\n{body}"
-            if truncated:
-                text += (
-                    f"\n---(truncated from {len(full_text)} chars; full text "
-                    f"in artifact {_resolved_artifact_filename(url)})"
-                )
-            injected_parts.append(genai_types.Part(text=text))
-            resolved_meta[url] = {
-                "status": ResolveStatus.RESOLVED.value,
-                "title": titles[url],
-                "canonical": canonicals[url],
-            }
-
-        if not injected_parts:
-            return None
-        target_content.parts = list(target_content.parts) + injected_parts
-        # Unconditional: an empty dict is the correct answer when this call
-        # resolved nothing, and must not leave the pre-call value standing.
-        callback_context.state[RESOLVED_META_STATE_KEY] = resolved_meta
-    except Exception:
-        logger.exception(
-            "inject_resolved_url_content failed; skipping url-resolver injection"
-        )
     return None
 
 

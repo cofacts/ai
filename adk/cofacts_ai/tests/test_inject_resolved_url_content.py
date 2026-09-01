@@ -25,7 +25,7 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
-from cofacts_ai.agent import (
+from cofacts_ai.resolved_pages import (
     RESOLVED_META_STATE_KEY,
     _extract_web_urls,
     _resolved_artifact_filename,
@@ -156,7 +156,7 @@ class TestInjectResolvedUrlContent:
         context = make_context()
 
         with patch(
-            "cofacts_ai.agent.resolve_urls",
+            "cofacts_ai.resolved_pages.resolve_urls",
             AsyncMock(return_value=[resolved("https://good.com/article")]),
         ):
             await inject_resolved_url_content(context, request)
@@ -180,7 +180,7 @@ class TestInjectResolvedUrlContent:
         context = make_context()
 
         with patch(
-            "cofacts_ai.agent.resolve_urls",
+            "cofacts_ai.resolved_pages.resolve_urls",
             AsyncMock(return_value=[dead("https://dead.example")]),
         ):
             await inject_resolved_url_content(context, request)
@@ -199,7 +199,7 @@ class TestInjectResolvedUrlContent:
         context = make_context()
 
         with patch(
-            "cofacts_ai.agent.resolve_urls",
+            "cofacts_ai.resolved_pages.resolve_urls",
             AsyncMock(return_value=[cant_fetch("https://report.example/file.pdf")]),
         ):
             await inject_resolved_url_content(context, request)
@@ -217,7 +217,7 @@ class TestInjectResolvedUrlContent:
         original_parts = list(request.contents[0].parts or [])
 
         with patch(
-            "cofacts_ai.agent.resolve_urls",
+            "cofacts_ai.resolved_pages.resolve_urls",
             AsyncMock(return_value=[unavailable("https://good.com")]),
         ):
             await inject_resolved_url_content(context, request)
@@ -233,7 +233,7 @@ class TestInjectResolvedUrlContent:
         context = make_context()
         resolve_mock = AsyncMock(return_value=[])
 
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(context, request)
 
         resolve_mock.assert_not_called()
@@ -245,7 +245,7 @@ class TestInjectResolvedUrlContent:
         context = make_context()
         resolve_mock = AsyncMock(return_value=[])
 
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(context, request)
 
         resolve_mock.assert_not_called()
@@ -255,7 +255,7 @@ class TestInjectResolvedUrlContent:
         context = make_context()
         resolve_mock = AsyncMock(return_value=[resolved("https://good.com")])
 
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(context, request)
             resolve_mock.assert_awaited_once()
             parts_after_first = list(request.contents[0].parts or [])
@@ -275,7 +275,7 @@ class TestInjectResolvedUrlContent:
             return_value=[resolved("https://good.com", title="Cached Title")]
         )
 
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(context1, request1)
 
         # A brand new request/session-turn context sharing the same artifact
@@ -283,7 +283,7 @@ class TestInjectResolvedUrlContent:
         # cache instead of calling resolve_urls again.
         request2 = make_request(user_text("https://good.com"))
         context2 = make_context(store)
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(context2, request2)
 
         resolve_mock.assert_awaited_once()
@@ -299,7 +299,7 @@ class TestInjectResolvedUrlContent:
         context = make_context()
         resolve_mock = AsyncMock(return_value=[])
 
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(context, request)
 
         resolve_mock.assert_not_called()
@@ -312,7 +312,8 @@ class TestInjectResolvedUrlContent:
         original_parts = list(request.contents[0].parts or [])
 
         with patch(
-            "cofacts_ai.agent.resolve_urls", AsyncMock(side_effect=RuntimeError("boom"))
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(side_effect=RuntimeError("boom")),
         ):
             await inject_resolved_url_content(context, request)
 
@@ -326,7 +327,7 @@ class TestInjectResolvedUrlContent:
 
         with (
             patch(
-                "cofacts_ai.agent.resolve_urls",
+                "cofacts_ai.resolved_pages.resolve_urls",
                 AsyncMock(
                     return_value=[
                         resolved("https://short.com", summary=short_text),
@@ -361,7 +362,7 @@ class TestInjectResolvedUrlContent:
         resolve_mock = AsyncMock(
             return_value=[resolved("https://good.com", title="Cached Title")]
         )
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(
                 make_context(store), make_request(user_text("https://good.com"))
             )
@@ -369,7 +370,7 @@ class TestInjectResolvedUrlContent:
         # Second turn: served from cache, so get_artifact_version would be the
         # only reason to touch the version API.
         request2 = make_request(user_text("https://good.com"))
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(make_context(store), request2)
 
         resolve_mock.assert_awaited_once()
@@ -394,7 +395,7 @@ class TestInjectResolvedUrlContent:
         request = make_request(user_text("https://old.com"))
         resolve_mock = AsyncMock(return_value=[])
 
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(make_context(store), request)
 
         resolve_mock.assert_not_awaited()
@@ -421,14 +422,18 @@ class TestInjectResolvedUrlContent:
             status=ResolveStatus.RESOLVED,
             error=None,
         )
-        with patch("cofacts_ai.agent.resolve_urls", AsyncMock(return_value=[untitled])):
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls", AsyncMock(return_value=[untitled])
+        ):
             await inject_resolved_url_content(
                 make_context(store), make_request(user_text("https://untitled.com"))
             )
 
         request2 = make_request(user_text("https://untitled.com"))
         context2 = make_context(store)
-        with patch("cofacts_ai.agent.resolve_urls", AsyncMock(return_value=[])):
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls", AsyncMock(return_value=[])
+        ):
             await inject_resolved_url_content(context2, request2)
 
         [part] = [
@@ -529,7 +534,9 @@ class TestResolvedMetaDoesNotLeakAcrossCalls:
         context = make_context(state=dict(self.STALE))
         request = make_request(user_text("這則訊息沒有任何連結"))
 
-        with patch("cofacts_ai.agent.resolve_urls", AsyncMock(return_value=[])):
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls", AsyncMock(return_value=[])
+        ):
             await inject_resolved_url_content(context, request)
 
         assert context.state[RESOLVED_META_STATE_KEY] == {}
@@ -539,7 +546,7 @@ class TestResolvedMetaDoesNotLeakAcrossCalls:
         request = make_request(user_text("https://slow.com"))
 
         with patch(
-            "cofacts_ai.agent.resolve_urls",
+            "cofacts_ai.resolved_pages.resolve_urls",
             AsyncMock(return_value=[unavailable("https://slow.com")]),
         ):
             await inject_resolved_url_content(context, request)
@@ -551,7 +558,7 @@ class TestResolvedMetaDoesNotLeakAcrossCalls:
         request = make_request(user_text("https://boom.com"))
 
         with patch(
-            "cofacts_ai.agent.resolve_urls",
+            "cofacts_ai.resolved_pages.resolve_urls",
             AsyncMock(side_effect=RuntimeError("resolver exploded")),
         ):
             await inject_resolved_url_content(context, request)
@@ -571,7 +578,7 @@ class TestResolvedMetaDoesNotLeakAcrossCalls:
         )
 
         context1 = make_context(store)
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(
                 context1, make_request(user_text("https://good.com"))
             )
@@ -582,7 +589,7 @@ class TestResolvedMetaDoesNotLeakAcrossCalls:
             state={RESOLVED_META_STATE_KEY: context1.state[RESOLVED_META_STATE_KEY]},
         )
         request2 = make_request(user_text("https://good.com"))
-        with patch("cofacts_ai.agent.resolve_urls", resolve_mock):
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(context2, request2)
 
         resolve_mock.assert_awaited_once()  # served from the artifact cache
