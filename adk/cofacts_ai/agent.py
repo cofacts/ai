@@ -11,7 +11,6 @@ This module implements a hierarchical agent system with:
 import asyncio
 import json
 import logging
-import re
 import time
 from datetime import datetime
 from typing import Any, Optional
@@ -42,8 +41,14 @@ from .agent_names import (
     AI_WRITER_NAME,
 )
 from .media_filedata import (
+    _YOUTUBE_URL_RE,
     inject_article_attachment,
     inject_cofacts_media_filedata,
+)
+from .resolved_pages import (
+    RESOLVED_META_STATE_KEY,
+    harvest_cofacts_hyperlinks,
+    inject_resolved_url_content,
 )
 from .session_title import generate_session_title
 from .tools import (
@@ -53,6 +58,7 @@ from .tools import (
     search_cofacts_database,
     search_image_web,
 )
+from .url_resolver.client import ResolveStatus
 from .writer_citations import attach_citation, resolve_citations
 
 load_dotenv()
@@ -153,30 +159,55 @@ async def append_grounding_sources(
     return _set_text_content(llm_response, serialized)
 
 
-async def append_url_context_sources(
+async def append_verifier_sources(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
     """
     After-model callback for ai_verifier.
 
-    Captures clean URL-title pairs from url_context grounding_chunks and wraps
-    the response as {content, sources} JSON. url_context returns real URLs
-    directly — no redirect resolution or hallucination stripping needed.
+    Builds `sources` as the union of (a) pages url-resolver actually fetched
+    — recorded by inject_resolved_url_content in
+    callback_context.state[RESOLVED_META_STATE_KEY], since this callback only
+    sees the LlmResponse and cannot see the [RESOLVED PAGE] parts the
+    before-model callback injected into the request — and (b) url_context's
+    grounding_chunks (real URLs directly, no redirect resolution needed).
+
+    This union is self-correcting without a hard-coded ban list: a genuinely
+    dead URL is fetched by neither path (url-resolver marked it DEAD, and
+    url_context produces no grounding for a page it can't fetch either), so
+    it never appears in `sources`. A page url-resolver couldn't fetch (PDF,
+    blocked) but that url_context DID ground still shows up via (b).
+
+    Unlike the old url_context-only version, this wraps the response even
+    when url_context returned no grounding_metadata at all (e.g. the model
+    skipped calling it) as long as url-resolver resolved something — a lazy
+    or misbehaving model should not also lose the deterministically-fetched
+    resolver sources.
     """
-    if not llm_response.grounding_metadata:
-        return None
-    metadata = llm_response.grounding_metadata
-    chunks = metadata.grounding_chunks
-    if not chunks or not llm_response.content or not llm_response.content.parts:
+    if not llm_response.content or not llm_response.content.parts:
         return None
 
+    resolved_meta = callback_context.state.get(RESOLVED_META_STATE_KEY) or {}
     sources_list = [
-        {
-            "title": (chunk.web and chunk.web.title) or "Unknown Source",
-            "url": chunk.web.uri if chunk.web else None,
-        }
-        for chunk in chunks
+        {"title": meta.get("title") or url, "url": meta.get("canonical") or url}
+        for url, meta in resolved_meta.items()
+        if meta.get("status") == ResolveStatus.RESOLVED.value
     ]
+    seen_urls = {s["url"] for s in sources_list}
+
+    metadata = llm_response.grounding_metadata
+    chunks = metadata.grounding_chunks if metadata else None
+    for chunk in chunks or []:
+        url = chunk.web.uri if chunk.web else None
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        sources_list.append(
+            {
+                "title": (chunk.web and chunk.web.title) or "Unknown Source",
+                "url": url,
+            }
+        )
 
     content = "".join(p.text or "" for p in llm_response.content.parts)
 
@@ -185,11 +216,6 @@ async def append_url_context_sources(
         ensure_ascii=False,
     )
     return _set_text_content(llm_response, serialized)
-
-
-_YOUTUBE_URL_RE = re.compile(
-    r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?[^\s\"'<>]*v=|shorts/|live/|embed/|v/)|youtu\.be/)[^\s\"'<>]+"
-)
 
 
 def inject_youtube_filedata(
@@ -339,8 +365,12 @@ ai_verifier = LlmAgent(
         # Long YouTube videos can otherwise hang with no client-side deadline.
         http_options=genai_types.HttpOptions(timeout=240_000),
     ),
-    before_model_callback=[inject_youtube_filedata, inject_cofacts_media_filedata],
-    after_model_callback=append_url_context_sources,
+    before_model_callback=[
+        inject_youtube_filedata,
+        inject_cofacts_media_filedata,
+        inject_resolved_url_content,
+    ],
+    after_model_callback=append_verifier_sources,
     instruction=f"""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
@@ -351,10 +381,32 @@ ai_verifier = LlmAgent(
     like `<get_single_cofacts_article-1a2b3c> ... </get_single_cofacts_article-1a2b3c>`; a matching
     `[^get_single_cofacts_article-1a2b3c]` marker in the prose points at that block.
 
+    ## Pre-fetched page text
+    For plain web URLs, the system has already fetched the real page and injected its
+    cleaned body text as a `[RESOLVED PAGE] <url>` part below — this is a real, verbatim
+    fetch, not a summary. Base support/refute for these URLs ONLY on that injected text
+    (quote verbatim from it) — never on training knowledge or on a URL's mere plausibility.
+    A `[LINK NOT FOUND] <url>` note means the system's fetcher could not resolve that URL
+    at all (likely nonexistent or malformed): treat this as advisory, not a ban — still try
+    url_context on it; only if url_context ALSO retrieves no content should you report the
+    claim as ✗ / cannot-verify for that link, and never present it as a supporting source.
+    An `[ARCHIVED PAGE] <url>` part is page text Cofacts crawled ON AN EARLIER DATE, shown
+    only because the fetcher could not reach the page just now. The part states when it was
+    crawled, which can be years ago. Use it as background to understand what the link was
+    about; do NOT treat it as evidence that the page says this today, and never cite it as
+    a source you read. If url_context can still read the page, that reading wins over the
+    archived text wherever the two disagree.
+    A URL with none of these notes simply means the system's fetcher could not get it
+    (e.g. a PDF) and no archived copy exists — fall back to url_context exactly as for any
+    other URL.
+
     ## Your Task
     1. Call url_context for ALL provided web/news/YouTube page URLs in one call (up to 20) —
-       this is MANDATORY. url_context fetches web PAGE metadata (title, publish date,
-       description) from the HTML.
+       this is MANDATORY, even for URLs that already have injected `[RESOLVED PAGE]` text:
+       url_context is still the only source for page METADATA (title, publish date,
+       description) and for anything the system's fetcher could not get.
+       Division of labour: **body text → injected `[RESOLVED PAGE]` parts; page metadata /
+       upload date / video content → url_context (+ FileData)**.
        For video URLs like YouTube, page metadata and video frames are complementary:
        - url_context → upload date, uploader name, page title/description
        - FileData → observable video content (speech, visuals, on-screen text)
@@ -656,6 +708,14 @@ async def after_tool(
     writer_citations.
     """
     normalized = await _normalized_response(tool, tool_context, tool_response)
+    # Stash any Cofacts `hyperlinks` before the payload is handed on. This is
+    # the only point where the response is still structured -- what the writer
+    # later cites to the verifier is a flat text block, and digging the field
+    # back out of that would mean parsing a prompt. Harvesting is unconditional
+    # and shape-agnostic: it costs one walk of a dict we already hold.
+    harvest_cofacts_hyperlinks(
+        tool_context, tool_response if normalized is None else normalized
+    )
     # `is None` rather than a truthiness test: a sub-agent's payload can
     # legitimately deserialize to something falsy, and only None means
     # "unchanged" here.

@@ -7,6 +7,11 @@ On Vertex AI ``file_data.file_uri`` accepts ``gs://`` URIs natively (and HTTP
 URLs are capped at ~15MB, which our media exceeds), so we hand Gemini the
 ``gs://`` form and let the runtime service account read the bucket — no signed
 URLs and no on-demand re-signing required.
+
+Also home to the media URL patterns themselves — Cofacts media and YouTube —
+since the verifier's web page pre-fetch (:mod:`cofacts_ai.resolved_pages`)
+needs the same two patterns to exclude from scraping what Gemini perceives as
+media here.
 """
 
 import logging
@@ -43,6 +48,14 @@ _COFACTS_MEDIA_URL_RE = re.compile(
     r"gs://cofacts-media-collection/[^\s\"'<>]+"
     r"|https?://(?:storage\.googleapis\.com/cofacts-media-collection"
     r"|cofacts-media-collection\.storage\.googleapis\.com)/[^\s\"'<>]+"
+)
+
+# Matches a YouTube watch/shorts/live/embed URL in free text. Gemini perceives
+# these as video via FileData + url_context, so both the media injection below
+# and resolved_pages' web pre-fetch key off this one pattern — url-resolver can
+# only scrape HTML text and would report a video page as contentless.
+_YOUTUBE_URL_RE = re.compile(
+    r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?[^\s\"'<>]*v=|shorts/|live/|embed/|v/)|youtu\.be/)[^\s\"'<>]+"
 )
 
 # Punctuation that commonly trails a URL in prose (sentence end, wrapping
