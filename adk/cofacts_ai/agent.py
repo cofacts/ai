@@ -45,7 +45,11 @@ from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
-from .resolved_pages import RESOLVED_META_STATE_KEY, inject_resolved_url_content
+from .resolved_pages import (
+    RESOLVED_META_STATE_KEY,
+    harvest_cofacts_hyperlinks,
+    inject_resolved_url_content,
+)
 from .session_title import generate_session_title
 from .tools import (
     draft_factcheck_response,
@@ -386,9 +390,15 @@ ai_verifier = LlmAgent(
     at all (likely nonexistent or malformed): treat this as advisory, not a ban — still try
     url_context on it; only if url_context ALSO retrieves no content should you report the
     claim as ✗ / cannot-verify for that link, and never present it as a supporting source.
-    A URL with neither a `[RESOLVED PAGE]` nor a `[LINK NOT FOUND]` note simply means the
-    system's fetcher could not get it (e.g. a PDF) — fall back to url_context exactly as
-    for any other URL.
+    An `[ARCHIVED PAGE] <url>` part is page text Cofacts crawled ON AN EARLIER DATE, shown
+    only because the fetcher could not reach the page just now. The part states when it was
+    crawled, which can be years ago. Use it as background to understand what the link was
+    about; do NOT treat it as evidence that the page says this today, and never cite it as
+    a source you read. If url_context can still read the page, that reading wins over the
+    archived text wherever the two disagree.
+    A URL with none of these notes simply means the system's fetcher could not get it
+    (e.g. a PDF) and no archived copy exists — fall back to url_context exactly as for any
+    other URL.
 
     ## Your Task
     1. Call url_context for ALL provided web/news/YouTube page URLs in one call (up to 20) —
@@ -698,6 +708,14 @@ async def after_tool(
     writer_citations.
     """
     normalized = await _normalized_response(tool, tool_context, tool_response)
+    # Stash any Cofacts `hyperlinks` before the payload is handed on. This is
+    # the only point where the response is still structured -- what the writer
+    # later cites to the verifier is a flat text block, and digging the field
+    # back out of that would mean parsing a prompt. Harvesting is unconditional
+    # and shape-agnostic: it costs one walk of a dict we already hold.
+    harvest_cofacts_hyperlinks(
+        tool_context, tool_response if normalized is None else normalized
+    )
     # `is None` rather than a truthiness test: a sub-agent's payload can
     # legitimately deserialize to something falsy, and only None means
     # "unchanged" here.

@@ -159,16 +159,23 @@ flowchart LR
 
     B --> O1["[RESOLVED PAGE] url<br/>TITLE: …<br/>--- verbatim page text"]
     S -->|"DEAD<br/>DNS failure · malformed"| O2["[LINK NOT FOUND] url: reason<br/>advisory: verify with url_context,<br/>withhold support only if that fails too"]
-    S -->|"RESOLVER_CANT_FETCH<br/>PDF · blocked · TLS"| O3["[NOTE] couldn't fetch url<br/>rely on url_context"]
-    S -->|"TIMEOUT<br/>RESOLVER_UNAVAILABLE"| O4["nothing injected at all<br/>url_context handles it"]
+    S -->|"RESOLVER_CANT_FETCH<br/>PDF · blocked · TLS"| A
+    S -->|"TIMEOUT<br/>RESOLVER_UNAVAILABLE"| A
+
+    A{"Cofacts already<br/>crawled this URL?"}
+    A -->|"yes"| O5["[ARCHIVED PAGE] url<br/>states the crawl date<br/>background only"]
+    A -->|"no · CANT_FETCH"| O3["[NOTE] couldn't fetch url<br/>rely on url_context"]
+    A -->|"no · no signal"| O4["nothing injected at all<br/>url_context handles it"]
 
     O1 --> S1["in sources<br/>the verifier read this text"]
     O2 --> S2["absent from sources<br/>neither path fetched it"]
+    O5 --> S4["never a source<br/>nobody fetched it this turn"]
     O3 --> S3["in sources only if<br/>url_context grounds it"]
     O4 --> S3
 
     style O1 fill:#d1fae5,stroke:#047857
     style O2 fill:#fee2e2,stroke:#b91c1c
+    style O5 fill:#dbeafe,stroke:#1d4ed8
     style O3 fill:#fef3c7,stroke:#b45309
     style O4 fill:#f3f4f6,stroke:#6b7280
 ```
@@ -199,16 +206,19 @@ As shipped in #118:
    contract. It injects
    one **text** part per URL (`FileData` is reserved for binary media Gemini perceives natively):
    `[RESOLVED PAGE] <url>` with the real Readability-cleaned body text; `[LINK NOT FOUND]` for
-   `DEAD`; **nothing at all** for `RESOLVER_CANT_FETCH` / `TIMEOUT` /
-   `RESOLVER_UNAVAILABLE`, so those URLs fall through to `url_context` untouched. YouTube and
-   Cofacts `gs://` media URLs are excluded — they are handled by the sibling callbacks.
+   `DEAD`; and for `RESOLVER_CANT_FETCH` / `TIMEOUT` / `RESOLVER_UNAVAILABLE` either an
+   `[ARCHIVED PAGE]` copy if Cofacts has one (item 10) or, failing that, a one-line note or
+   nothing at all — so a URL the resolver could not read still falls through to `url_context`.
+   YouTube and Cofacts `gs://` media URLs are excluded — they are handled by the sibling
+   callbacks.
 4. **`[LINK NOT FOUND]` is advisory, not a ban.** It instructs the verifier to try `url_context`
    anyway and to withhold support only if that _also_ retrieves nothing. url-resolver's simpler
    fetch failing is not proof a page does not exist.
 5. **Raw text, budgeted across the turn.** All resolved pages are injected **in full** while
    their combined length fits `URL_RESOLVER_TOTAL_CHAR_BUDGET` (default 200 000 chars); only on
    overflow does a max-min fair allocation trim the longest pages, leaving short ones whole. Text
-   is never summarized — the verifier must quote verbatim.
+   is never summarized — the verifier must quote verbatim. Archived copies (item 10) share the
+   same budget: they cost the same context as a fresh page.
 6. **The artifact store doubles as the fetch cache.** Full page text is saved as
    `resolved-<sha1(url)>.txt`, which serves three purposes at once: the cache read that avoids
    re-fetching across the verifier's ~2 model calls per turn (and across turns in a session), the
@@ -222,13 +232,50 @@ As shipped in #118:
    simply absent and can never reach the `claim_sources` gate; a PDF url-resolver missed but
    `url_context` grounded still appears. It also now wraps the response when `url_context`
    returned no grounding at all, so a model that skips it no longer discards the
-   deterministically fetched sources too.
+   deterministically fetched sources too. Item 10 adds a third category the union deliberately
+   does not cover: text that is injected but never cited.
 8. **Verifier prompt rewritten around the new division of labour**: body text from the injected
    `[RESOLVED PAGE]` parts, metadata / upload date / video content from `url_context` — whose
    MUST-call mandate is _kept_, since it remains the fallback and the only source of metadata.
+   `[ARCHIVED PAGE]` carries its own rule: background only, never a source, and `url_context`
+   wins over it wherever the two disagree.
 9. **Internal-only deployment.** url-resolver is insecure gRPC with no auth and is never exposed
    externally: in production it shares the docker-compose network (`URL_RESOLVER_ADDRESS=url-resolver:4000`),
    and on Cloud Run it runs as an adk sidecar over `localhost`.
+
+10. **Cofacts' own earlier crawl is the last-resort fallback** (added in
+    [#136](https://github.com/cofacts/ai/pull/136)). An article or reply already carries
+    `hyperlinks`: page text Cofacts' url-resolver crawled when the message was processed — the
+    same service and the same `summary` field, just resolved earlier. Where the live fetch fails
+    but the page probably still exists (`RESOLVER_CANT_FETCH` and the two no-signal buckets),
+    that copy is injected as `[ARCHIVED PAGE]` instead of nothing.
+
+    Three things make it safe rather than a re-run of the problem this record exists to fix:
+    - **It is never a source.** It is absent from `temp:cofacts_resolved_meta`, which is what
+      item 7's union turns into `sources`. Injecting text the verifier may read while refusing
+      to let that text be _cited_ is the whole point — a page nobody could fetch this turn must
+      not reach a reader as one the verifier read.
+    - **It is dated in the prompt.** `fetchedAt` — the one `Hyperlink` field the tool was not
+      querying — is what makes the copy interpretable at all, and it cannot be inferred from the
+      article: 2016 articles carry hyperlinks backfilled in 2018, and same-day articles carry
+      ones crawled minutes later. A summary without its date is indistinguishable from an
+      eight-year-old one.
+    - **`DEAD` is excluded.** There the URL itself does not resolve, and pairing "this link is
+      broken" with the text it served years ago invites exactly the citation item 4's advisory
+      note exists to prevent.
+
+    The data reaches the verifier through `temp:cofacts_hyperlinks`, harvested in the writer's
+    `after_tool` where the response is still structured. The alternative — recovering it from
+    the citation block the writer sends — would mean parsing a prompt: `resolve_citations`
+    renders a cited tool result as flat text, and for `search_cofacts_database` that text is a
+    whole JSON dump. Unlike `temp:cofacts_resolved_meta` this key accumulates and is never
+    reset, because it is a URL-keyed lookup table rather than an assertion about one call: a
+    stale entry there is merely old, and says so.
+
+    Deliberately **not** done in the same change: skipping the live fetch when Cofacts' copy is
+    fresh. The verifier's question is whether a link works and supports the claim _now_, so the
+    re-fetch stays. Its cost is real — it also spends the 20-URL cap on URLs that already have
+    text — and `fetchedAt` is what a future policy would need to weigh that.
 
 Deliberately **not** done: an investigator-side pre-screen. The investigator is where several
 bad URLs originate, but the architecture already designates the verifier as the gate
@@ -247,7 +294,14 @@ investigator-originated ones downstream while keeping each agent's role intact.
   rather than by a rule someone must maintain.
 - Good, because the failure taxonomy degrades safely in both directions: a resolver outage falls
   back to today's behaviour instead of mass-marking sources dead, and a resolver limitation (PDF)
-  hands the URL to `url_context` instead of suppressing it.
+  hands the URL to `url_context` instead of suppressing it — and, since #136, to Cofacts' own
+  earlier crawl of the same page before that.
+- Good, because the fallback reuses data the pipeline already fetched. `hyperlinks` was being
+  requested and discarded; the only new cost is one extra GraphQL field.
+- Bad, because `[ARCHIVED PAGE]` puts text in front of the model that is true of the past and
+  may be false of the present. The marker, the stated crawl date and the prompt rule are the
+  whole defence, and they are instructions to a model rather than a structural guarantee — the
+  structural part is only that the text cannot become a `source`.
 - Good, because the cached full text gives fact-checkers and future debugging a record of what
   the system actually read — the artifact is evidence, not just a cache.
 - Bad, because every page is now fetched **twice** (url-resolver's puppeteer and Gemini's
