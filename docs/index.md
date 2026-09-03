@@ -47,7 +47,7 @@ flowchart LR
   pinned to Cloudflare Browser Rendering, which is what lets the sidecar hold 0.5 vCPU /
   512 MiB. It needs the `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` repo secrets.
   → decisions: [Cloud Run multi-container deploy](decisions/20260303-cloud-run-multi-container-deploy.md),
-  [url-resolver sidecar & browser backend](decisions/20260828-url-resolver-sidecar-browser-backend.md),
+  [url-resolver Cloud Run sidecar](decisions/20260828-url-resolver-sidecar-browser-backend.md),
   [Postgres session persistence](decisions/20260506-postgres-session-persistence.md),
   [verifier page pre-fetch](decisions/20260722-url-resolver-verifier-prefetch.md).
 
