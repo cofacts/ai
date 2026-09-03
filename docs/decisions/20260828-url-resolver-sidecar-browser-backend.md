@@ -47,7 +47,7 @@ For where the browser itself runs, once the sidecar exists:
 
 - **In-container chromium** (url-resolver's default; the Docker image bundles it).
 - **Cloudflare Browser Rendering** over url-resolver's `BROWSER_BACKEND=cloudflare` path.
-- **Pick one at deploy time**, via a repo variable — shipped first, then reverted (below).
+- **Pick one at deploy time**, via a repo variable selecting the backend per deploy.
 
 ## Decision Outcome
 
@@ -62,20 +62,17 @@ either public or fronted by IAM auth url-resolver cannot speak; reusing the GCE 
 have put an unauthenticated port on the network and re-coupled cofacts.ai to the host this
 project is trying to move work off.
 
-For the browser, this record first shipped a deploy-time switch
-(`URL_RESOLVER_BROWSER_BACKEND`, defaulting to local chromium), on the reasoning that
-chromium-on-Cloud-Run was unproven and a variable makes rollback free. **That was reverted before
-merge**: keeping the revert viable meant keeping the container sized for chromium — 1 vCPU /
-2048 MiB — on every revision whether or not a browser ever started in it, which is an option
-nobody exercises billed continuously, on a service that runs `minScale: 0` precisely to avoid
-paying for idle.
+**Picking the backend at deploy time was rejected because the option is not free to hold
+open.** A repo variable that can select local chromium at any moment obliges every revision to
+be sized for chromium — 1 vCPU / 2048 MiB — whether or not a browser ever starts in it. That is
+2x the CPU and 4x the memory of what the Cloudflare path needs, standing, on a service that runs
+`minScale: 0` precisely to avoid paying for idle: instance totals of 3.5 vCPU / 5.25 GiB against
+3.0 / 3.75. Sizing for the Cloudflare path while leaving the variable switchable is not an
+alternative — flipping it would then OOM the instance.
 
-So the backend is pinned and the sidecar drops to **0.5 vCPU / 512 MiB**, ~10x its measured
-45 MiB idle footprint on this path. Instance totals go from 2.5 vCPU / 3.25 GiB before the
-sidecar to 3.0 vCPU / 3.75 GiB, where the switchable version would have cost 3.5 / 5.25.
-Reverting now takes a code change in two places at once — the `BROWSER_BACKEND` value and the
-resource limits — which is the intended coupling: they are not independently correct, and
-changing only one OOMs the instance.
+Pinned, the sidecar holds **0.5 vCPU / 512 MiB**, ~10x its measured 45 MiB idle footprint.
+Reverting to local chromium becomes a code change in two places at once, the `BROWSER_BACKEND`
+value and the resource limits. That coupling is the point: they are not independently correct.
 
 Local chromium remains url-resolver's default everywhere else, including docker-compose for
 local development. Only the Cloud Run deployment is pinned.
@@ -107,8 +104,7 @@ failure-to-bind case, which the mutable `:latest` tag makes reachable with no de
 - Good, because the unauthenticated gRPC port is never on a network, in any environment.
 - Good, because PR previews exercise the real resolver path, so #118 becomes reviewable.
 - Good, because the ~500 MB chromium process leaves the instance entirely, taking the
-  OOM-kills-the-agent-turn risk and the CPU-throttling question with it, and letting the sidecar
-  cost a third of what the switchable version did.
+  OOM-kills-the-agent-turn risk and the CPU-throttling question with it.
 - Bad, because a Cloudflare outage or an exhausted quota now has **no fallback**: url-resolver
   fails every resolve and the verifier degrades to `url_context` only. That degrade is silent by
   the client's design (see Confirmation), so it will not announce itself. Accepted knowingly —
