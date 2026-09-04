@@ -8,11 +8,17 @@ import { cn } from '@/lib/utils'
  * Runtime agent names (`name=` in `adk/cofacts_ai/agent.py`) to what the user
  * sees. Anything unlisted falls back to the generic label, which is what the
  * writer — the agent users spend most of a fact-check with — deliberately uses.
+ *
+ * Only agents that run inside the persisted session can ever appear here, which
+ * today means `receptionist` and `writer` and nothing else. An `AgentTool`
+ * sub-agent (investigator, verifier, the proofreaders) runs in a throwaway
+ * in-memory session of its own and only its last message comes back, as a tool
+ * result — so it never authors an event the frontend sees, and adding one here
+ * would be dead code. Their names still appear elsewhere in this file and in
+ * RightDrawer as *tool* names, which is a different thing and still live.
  */
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
   receptionist: 'Cofacts 小幫手',
-  investigator: 'AI Investigator',
-  verifier: 'AI Verifier',
 }
 
 interface AgentMessageProps {
