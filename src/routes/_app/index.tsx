@@ -45,7 +45,7 @@ function LandingPage() {
       files: Array<File>
     }) => {
       const sessionId = crypto.randomUUID()
-      const titleSource = text || files[0]?.name || '附件'
+      const titleSource = text || files[0]?.name || 'Attachment'
       const title =
         titleSource.length > 40 ? titleSource.slice(0, 40) + '...' : titleSource
       await createSession({ data: { sessionId, name: title } })
@@ -64,7 +64,7 @@ function LandingPage() {
     sendMutation.error && !isAuthExpiredError(sendMutation.error)
       ? sendMutation.error instanceof Error
         ? sendMutation.error.message
-        : '建立工作階段失敗'
+        : 'Failed to create session'
       : null
 
   return (
@@ -73,7 +73,7 @@ function LandingPage() {
         onSend={(text, files) => sendMutation.mutate({ text, files })}
         disabled={sendMutation.isPending}
         initialValue={prefill}
-        placeholder={`貼上可疑訊息、網址，或 Cofacts 文章連結 (${COFACTS_SITE_URL}/article/...)...`}
+        placeholder={`Paste a suspicious message, URL, or Cofacts article link (${COFACTS_SITE_URL}/article/...)...`}
       />
       {inlineError && (
         <div className="mt-2 text-sm text-red-500 text-center">

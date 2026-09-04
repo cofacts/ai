@@ -1,8 +1,8 @@
 {
-  "name": "Cofacts.ai — AI 協助公民查核",
+  "name": "Cofacts.ai — AI-Assisted Citizen Fact-Checking",
   "short_name": "Cofacts.ai",
-  "description": "貼上可疑訊息或網址，回報給 Cofacts 資料庫，或與 AI 一起查核。",
-  "lang": "zh-TW",
+  "description": "Paste a suspicious message or URL to report it to the Cofacts database, or fact-check it together with AI.",
+  "lang": "en",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

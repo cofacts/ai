@@ -3,17 +3,22 @@ import { Checkbox } from './ui/checkbox'
 import { Textarea } from './ui/textarea'
 import { Button } from './ui/button'
 
-const POSITIVE_OPTIONS = ['語氣適合', '篇幅適中', '出處精準', '具有說服力']
+const POSITIVE_OPTIONS = [
+  'Right tone',
+  'Good length',
+  'Accurate sources',
+  'Persuasive',
+]
 
 const NEGATIVE_OPTIONS = [
-  '篇幅過長',
-  '篇幅過短',
-  '沒抓到重點',
-  '資訊錯誤或過時',
-  '出處不足',
-  '回應文字與出處不符',
-  '提供不存在的出處',
-  '出處摘要錯誤',
+  'Too long',
+  'Too short',
+  'Missed the point',
+  'Incorrect or outdated info',
+  'Insufficient sources',
+  "Response doesn't match sources",
+  'Cites nonexistent sources',
+  'Source summary is wrong',
 ]
 
 interface FeedbackPopoverContentProps {

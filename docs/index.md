@@ -50,6 +50,13 @@ lives in exactly two places, `src/lib/cofactsSite.ts` and `adk/cofacts_ai/cofact
 day there is a production deployment they should read it from configuration instead, so the site
 and the API cannot disagree about which Cofacts they mean.
 
+The UI chrome is English and `<html lang>` is `en`, and the agents answer in whatever language the
+user writes in — falling back to English when the user has pasted a message and written nothing of
+their own. `adk/cofacts_ai/language.py` holds that rule for every agent, alongside a separate one
+that sends research at the _message's_ language: coverage of a rumour lives in the language it
+spreads in, so an English query against a non-English message finds none of it. There is no i18n
+layer; UI strings are literals.
+
 ## The ADK multi-agent system
 
 The root agent is **`ai_receptionist`**, the front desk. It works out what a visitor wants and

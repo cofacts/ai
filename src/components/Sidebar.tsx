@@ -43,7 +43,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
 
   const lastActiveLabel =
     lastEventTime !== undefined
-      ? new Date(lastEventTime * 1000).toLocaleDateString('zh-TW', {
+      ? new Date(lastEventTime * 1000).toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
         })
@@ -186,14 +186,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             className="w-full flex items-center justify-center gap-2 bg-white hover:bg-orange-50 text-primary font-medium py-2.5 px-4 rounded-lg transition-colors border border-primary"
           >
             <span className="material-symbols-outlined text-sm">add</span>
-            <span>新查核任務</span>
+            <span>New fact-check</span>
           </Link>
         </div>
 
         {/* Session list */}
         <div className="flex-1 overflow-y-auto px-2 space-y-1 pb-4">
           <div className="px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider mt-2">
-            查核紀錄
+            Fact-check history
           </div>
 
           {isLoading && (
@@ -209,7 +209,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           {!isLoading && (!sessions || sessions.length === 0) && (
             <div className="px-3 py-4 text-sm text-text-muted text-center">
-              尚無查核任務
+              No fact-check tasks yet
             </div>
           )}
 
@@ -227,7 +227,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="p-4 border-t border-border-subtle bg-gray-50">
           <div className="flex items-center gap-3 text-sm text-text-muted hover:text-text-main cursor-pointer">
             <span className="material-symbols-outlined">help</span>
-            <span>使用教學與支援</span>
+            <span>Help &amp; support</span>
           </div>
         </div>
       </aside>
