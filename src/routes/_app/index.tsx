@@ -7,6 +7,7 @@ import { ChatInput } from '@/components/ChatInput'
 import { WelcomeHero } from '@/components/WelcomeHero'
 import { isAuthExpiredError } from '@/lib/authExpired'
 import { buildReportPrefill } from '@/lib/report'
+import { COFACTS_SITE_URL } from '@/lib/cofactsSite'
 
 // Share entry point. Android's Web Share Target, the iOS shortcut and the LINE
 // bot's hand-off links all arrive here rather than at a dedicated /report page:
@@ -72,7 +73,7 @@ function LandingPage() {
         onSend={(text, files) => sendMutation.mutate({ text, files })}
         disabled={sendMutation.isPending}
         initialValue={prefill}
-        placeholder="貼上可疑訊息、網址，或 Cofacts 文章連結 (https://cofacts.tw/article/...)..."
+        placeholder={`貼上可疑訊息、網址，或 Cofacts 文章連結 (${COFACTS_SITE_URL}/article/...)...`}
       />
       {inlineError && (
         <div className="mt-2 text-sm text-red-500 text-center">

@@ -44,6 +44,12 @@ flowchart LR
   → decisions: [Cloud Run multi-container deploy](decisions/20260303-cloud-run-multi-container-deploy.md),
   [Postgres session persistence](decisions/20260506-postgres-session-persistence.md).
 
+Every deployment — local, PR preview and master — points `COFACTS_API_URL` at
+`dev-api.cofacts.tw`, so the Cofacts site this app links to is **`dev.cofacts.tw`**. That base
+lives in exactly two places, `src/lib/cofactsSite.ts` and `adk/cofacts_ai/cofacts_site.py`; the
+day there is a production deployment they should read it from configuration instead, so the site
+and the API cannot disagree about which Cofacts they mean.
+
 ## The ADK multi-agent system
 
 The root agent is **`ai_receptionist`**, the front desk. It works out what a visitor wants and
@@ -52,13 +58,13 @@ replies. `ai_writer` in turn invokes sub-agents wrapped as ADK `AgentTool`s (the
 call built-in tools such as `google_search` / `url_context` alongside function tools in a single
 agent):
 
-| Agent                                        | Role                                                                                                                                                            |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ai_receptionist`                            | **Root.** Routes report / fact-check / support intents; searches for an existing message and records a `+1` fact-check request. Cheap model, no research tools. |
-| `ai_writer`                                  | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Perceives **images** only.                                       |
-| `ai_investigator`                            | **Discovers** candidate sources via `google_search`.                                                                                                            |
-| `ai_verifier`                                | **Confirms** which source backs which claim via `url_context`; the only agent that perceives **video / audio**.                                                 |
-| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                                                         |
+| Agent                                        | Role                                                                                                                                                                                                             |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ai_receptionist`                            | **Root.** Routes report / fact-check / support intents; searches for an existing message, records a `+1` fact-check request, and files a message the database does not have yet. Cheap model, no research tools. |
+| `ai_writer`                                  | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Perceives **images** only.                                                                                        |
+| `ai_investigator`                            | **Discovers** candidate sources via `google_search`.                                                                                                                                                             |
+| `ai_verifier`                                | **Confirms** which source backs which claim via `url_context`; the only agent that perceives **video / audio**.                                                                                                  |
+| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                                                                                                          |
 
 `ai_writer` is a **`sub_agent`** of `ai_receptionist`, not an `AgentTool` — an `AgentTool` call
 is a single stateless message, which would cost the writer its multi-turn conversation. Control

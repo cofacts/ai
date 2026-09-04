@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
+import { cofactsArticleUrl } from '@/lib/cofactsSite'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -74,7 +75,7 @@ function DrawerHeader({
       <div className="flex items-center gap-1 shrink-0">
         {cofactsArticleId && (
           <a
-            href={`https://cofacts.tw/article/${cofactsArticleId}`}
+            href={cofactsArticleUrl(cofactsArticleId)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -520,7 +521,7 @@ const REPLY_TYPE_INFO: Record<string, { label: string; className: string }> = {
 function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
   return (
     <a
-      href={`https://cofacts.tw/article/${article.id}`}
+      href={cofactsArticleUrl(article.id)}
       target="_blank"
       rel="noopener noreferrer"
       className="shrink-0 w-[210px] rounded-lg border border-gray-200 bg-gray-50 p-3 hover:bg-gray-100 transition-colors flex flex-col gap-2"

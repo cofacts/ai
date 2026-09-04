@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from google.cloud import vision
 from .auth_context import cofacts_token_var
+from .cofacts_site import article_url
 from .media_filedata import signed_url_to_gs
 
 # GraphQL fragment for common Article fields
@@ -322,7 +323,8 @@ async def get_single_cofacts_article(
     Returns the same detailed article information as search_cofacts_database, but for a single specific article.
     For detailed field descriptions, see search_cofacts_database function documentation.
 
-    The article ID can be used to construct Cofacts URLs: https://cofacts.tw/article/{article_id}
+    The result's `article_url` is the page a human can open to read this
+    message on Cofacts — link to that rather than building a URL yourself.
 
     The result carries a `cite_as` id — cite it to let a sub-agent read the suspicious
     message in full instead of retyping or paraphrasing it.
@@ -331,7 +333,8 @@ async def get_single_cofacts_article(
         article_id: The Cofacts article ID to retrieve
 
     Returns:
-        Detailed article information from Cofacts (same structure as search_cofacts_database results)
+        Detailed article information from Cofacts (same structure as
+        search_cofacts_database results), plus `article_url` for linking.
     """
     try:
         graphql_query = f"""
@@ -376,6 +379,7 @@ async def get_single_cofacts_article(
 
         return {
             "article_id": article_id,
+            "article_url": article_url(article_id),
             "article": article,
         }
 
@@ -560,6 +564,103 @@ async def request_fact_check(
         return {
             "error": f"Failed to request fact-check: {str(e)}",
             "article_id": article_id,
+        }
+
+
+async def submit_suspicious_message(
+    text: str,
+    reason: str,
+    source_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    File a suspicious message that is NOT yet in Cofacts into the database.
+
+    This is the only tool that creates something in Cofacts. Call it after
+    search_suspicious_messages found nothing the user recognises AND the user
+    has said yes to filing it. Never call it speculatively: the article becomes
+    a public page under the user's own account the moment this returns.
+
+    `text` MUST be the user's message verbatim — what they received, exactly as
+    they pasted it. Do not summarise it, translate it, tidy it up, or merge in
+    your own words. Cofacts matches reports against each other by their text, so
+    a rewritten report is a report that will never be recognised as the same
+    rumour again. If the user pasted a link, the link itself is the text:
+    rumors-api crawls it and fills in the title and summary on its own.
+
+    Filing the same text twice returns the same article, so a message the
+    database already holds cannot be duplicated by this tool.
+
+    Args:
+        text: The suspicious message, in the user's own words, verbatim.
+        reason: Why the user finds it suspicious, in their words. Goes to the
+            volunteer who eventually fact-checks it, and is almost always empty
+            on LINE-bot reports — so it is worth having asked. Do not invent
+            one, and keep personally identifying information out of it.
+        source_url: Where the message is circulating, if the user gave a link
+            (a Threads / Facebook / X post, a news page). Recorded as the
+            article's reference so we can tell which platforms rumours spread
+            on. Leave it out for text the user copied out of a chat app.
+
+    Returns:
+        {"success": True, "article_id": ..., "article_url": ...} — show the URL
+        to the user, it is the page they can now share. Or {"error": ...}.
+    """
+    auth_token = cofacts_token_var.get()
+    if not auth_token:
+        return {
+            "error": "not_authenticated",
+            "message": (
+                "[SYSTEM] Cannot file a message into the database without a "
+                "signed-in user. Ask the user to sign in and try again."
+            ),
+        }
+
+    try:
+        graphql_query = """
+        mutation SubmitSuspiciousMessage(
+          $text: String!
+          $reference: ArticleReferenceInput!
+          $reason: String
+        ) {
+          CreateArticle(text: $text, reference: $reference, reason: $reason) {
+            id
+          }
+        }
+        """
+
+        # ArticleReferenceTypeEnum only has URL and LINE, so a message copied
+        # out of any other app (IG, Discord, SMS, WhatsApp) can only be marked
+        # LINE. That is a known gap in rumors-api, tracked in the design doc's
+        # "reference type" section, and it means this field slightly overstates
+        # how much of Cofacts came from LINE.
+        reference: Dict[str, Any] = (
+            {"type": "URL", "permalink": source_url} if source_url else {"type": "LINE"}
+        )
+
+        result = await _execute_cofacts_graphql(
+            query=graphql_query,
+            variables={"text": text, "reference": reference, "reason": reason},
+            operation_name="submit suspicious message",
+            auth_token=auth_token,
+        )
+
+        if "error" in result:
+            return result
+
+        article = result["data"]["CreateArticle"]
+        if not article or not article.get("id"):
+            return {"error": "Cofacts accepted the request but returned no article"}
+
+        article_id = article["id"]
+        return {
+            "success": True,
+            "article_id": article_id,
+            "article_url": article_url(article_id),
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to submit suspicious message: {str(e)}",
         }
 
 

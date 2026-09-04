@@ -7,11 +7,12 @@ import {
   GoogleIcon,
 } from '@/components/icons/ProviderIcons'
 import { login } from '@/server/auth.functions'
+import { COFACTS_SITE_URL } from '@/lib/cofactsSite'
 
 const LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
 const EDITOR_FACEBOOK_GROUP =
   'https://www.facebook.com/groups/cofacts/permalink/1959641497601003/'
-const TERMS_URL = 'https://cofacts.tw/terms'
+const TERMS_URL = `${COFACTS_SITE_URL}/terms`
 
 interface ProviderConfig {
   id: 'facebook' | 'github' | 'google'

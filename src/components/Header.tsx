@@ -1,5 +1,6 @@
 import { LogOutIcon } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
+import { COFACTS_SITE_URL } from '@/lib/cofactsSite'
 import { UserAvatar } from '@/components/UserAvatar'
 import {
   DropdownMenu,
@@ -41,7 +42,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-text-muted">
           <a
             className="hover:text-primary transition-colors"
-            href="https://cofacts.tw"
+            href={COFACTS_SITE_URL}
             target="_blank"
             rel="noopener noreferrer"
           >

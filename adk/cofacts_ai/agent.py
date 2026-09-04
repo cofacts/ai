@@ -46,6 +46,7 @@ from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
+from .cofacts_site import COFACTS_SITE_URL
 from .receptionist import RECEPTIONIST_INSTRUCTION
 from .session_title import generate_session_title
 from .tools import (
@@ -56,6 +57,7 @@ from .tools import (
     search_cofacts_database,
     search_image_web,
     search_suspicious_messages,
+    submit_suspicious_message,
 )
 from .writer_citations import attach_citation, resolve_citations
 
@@ -822,13 +824,13 @@ ai_writer = LlmAgent(
 
     You do not take messages in off the street: `{AI_RECEPTIONIST_NAME}` runs the front desk and
     hands you a conversation once there is a Cofacts article to work on
-    (https://cofacts.tw/article/<articleId>).
+    ({COFACTS_SITE_URL}/article/<articleId>).
 
     **Your first action after taking over is ALWAYS `get_single_cofacts_article` for that article
     id.**
 
     If you somehow end up without an article id — the user opened straight into you and is asking
-    about a message that is not in Cofacts yet — do NOT demand a cofacts.tw URL and do not start
+    about a message that is not in Cofacts yet — do NOT demand a Cofacts article URL and do not start
     checking a bare pasted message. Transfer to `{AI_RECEPTIONIST_NAME}`, which knows how to search
     for it and take a report.
 
@@ -840,7 +842,7 @@ ai_writer = LlmAgent(
     message may not be in Cofacts at all, and you have no way to report one. When that happens,
     call `transfer_to_agent` with `{AI_RECEPTIONIST_NAME}`.
 
-    **Decide by what the user MEANS, never by whether a link is a cofacts.tw link.** Non-Cofacts
+    **Decide by what the user MEANS, never by whether a link is a Cofacts link.** Non-Cofacts
     URLs are overwhelmingly evidence, not new reports — treating a pattern as the trigger would
     shovel the user's own sources into the reporting flow:
 
@@ -1088,6 +1090,7 @@ ai_receptionist = LlmAgent(
         search_suspicious_messages,
         get_single_cofacts_article,
         request_fact_check,
+        submit_suspicious_message,
     ],
 )
 
