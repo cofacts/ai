@@ -148,8 +148,13 @@ async def _execute_cofacts_graphql(
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            # Defaults to staging to match cofacts_site.py: if these two ever
+            # disagree, we file an article into one Cofacts and hand the user a
+            # link into the other. The frontend refuses to start without this
+            # var (src/server/api-base.ts); here a wrong default would be a
+            # silent write to the wrong database.
             api_base = os.environ.get(
-                "COFACTS_API_URL", "https://api.cofacts.tw"
+                "COFACTS_API_URL", "https://dev-api.cofacts.tw"
             ).rstrip("/")
             response = await client.post(
                 f"{api_base}/graphql",
