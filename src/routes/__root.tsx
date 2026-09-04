@@ -29,11 +29,39 @@ export const Route = createRootRoute({
         content:
           'Cofacts.ai 是一個對話式 AI 查核協作平台，讓查核協作者可以透過 AI 輔助來查核可疑訊息、撰寫回應。',
       },
+      // Colours the Android toolbar once the app is installed; matches the
+      // white Header the user sees directly below it.
+      {
+        name: 'theme-color',
+        content: '#ffffff',
+      },
     ],
     links: [
       {
         rel: 'stylesheet',
         href: appCss,
+      },
+      // Without this link the manifest is never fetched, so the app is not
+      // installable — and an uninstalled app cannot be a Web Share Target, no
+      // matter what `share_target` says. public/manifest.json existed from the
+      // project template but was never referenced by the document.
+      {
+        rel: 'manifest',
+        href: '/manifest.json',
+      },
+      {
+        rel: 'icon',
+        href: '/icon.svg',
+        type: 'image/svg+xml',
+      },
+      {
+        rel: 'icon',
+        href: '/favicon.ico',
+        sizes: '48x48',
+      },
+      {
+        rel: 'apple-touch-icon',
+        href: '/icon-192.png',
       },
       {
         rel: 'preconnect',
