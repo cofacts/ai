@@ -210,6 +210,20 @@ export type AllTools = {
       | { error: string }
   }
   /**
+   * Reverse image search (Google Vision WEB_DETECTION). The match-image URL
+   * lists are dropped backend-side on purpose, so this is the whole shape.
+   */
+  search_image_web: {
+    args: { image_url?: string }
+    resp:
+      | {
+          bestGuessLabels: Array<string>
+          webEntities: Array<{ description: string; score: number }>
+          pagesWithMatchingImages: Array<{ url: string; pageTitle: string }>
+        }
+      | { error: string; image_url?: string }
+  }
+  /**
    * Files a message that is not in Cofacts yet — the receptionist's only
    * write that creates something. The article exists once this resolves.
    */
