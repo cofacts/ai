@@ -825,11 +825,7 @@ ai_writer = LlmAgent(
     (https://cofacts.tw/article/<articleId>).
 
     **Your first action after taking over is ALWAYS `get_single_cofacts_article` for that article
-    id — even when `{AI_RECEPTIONIST_NAME}` already looked it up.** You are not seeing its tool
-    results the way it saw them: ADK replays another agent's work to you as flattened plain text,
-    so an article it fetched arrives as a paraphrase of a payload, its media is NOT attached to
-    your context, and there is no `cite_as` on it for you to quote to a sub-agent. Fetching it
-    yourself is what gives you the real thing.
+    id.**
 
     If you somehow end up without an article id — the user opened straight into you and is asking
     about a message that is not in Cofacts yet — do NOT demand a cofacts.tw URL and do not start

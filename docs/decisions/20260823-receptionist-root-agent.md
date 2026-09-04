@@ -107,9 +107,23 @@ The reason is a property of ADK we had to discover: after a transfer, the writer
 another agent's tool results as tool results. `contents._present_other_agent_message` flattens
 them into a plain `user`-role text part — ``[receptionist] `tool` returned result: {...}``. So a
 full search payload would be pasted verbatim into the writer's context. The same flattening has
-a second consequence, handled in the writer's prompt: an article the receptionist fetched
-arrives without its media (`inject_article_attachment` matches on `function_response` parts) and
-without a `cite_as`, so **the writer re-fetches the article itself** as its first action.
+a second consequence: an article the receptionist fetched arrives without its media
+(`inject_article_attachment` matches on `function_response` parts) and without a `cite_as`, so
+**the writer re-fetches the article itself** as its first action.
+
+The writer's prompt states that rule bare, with no explanation of what its context does or does
+not already contain. The first version explained it — "even when `ai_receptionist` already looked
+it up ... an article it fetched arrives as a paraphrase of a payload" — and that explanation was
+false on the path that matters most. On the article-URL path the receptionist transfers on sight
+and looks nothing up, so the writer's context holds only the URL and two flattened
+`transfer_to_agent` lines; the prompt nonetheless told it a paraphrased article was already in
+front of it. Langfuse sessions `30c968c2-0d8f-4a75-a4d4-6be3a7fb3df2` and
+`fc367737-0572-4b5e-b0a5-496dbe1aac59` show what that cost: on its very first turn the writer
+wrote out the hand-off the prompt had promised — "I've already looked it up for you", "I've
+handed this over to our writer agent" — around a chain message it invented, then trusted its own
+invention over the real payload and researched, verified, proofread and drafted a reply to it,
+while the actual article was a YouTube video about food. The lesson is narrower than the prompt:
+tell an agent what to do, not what its context contains.
 
 ### Consequences
 
