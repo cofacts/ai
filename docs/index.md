@@ -46,20 +46,31 @@ flowchart LR
 
 ## The ADK multi-agent system
 
-The root agent is **`ai_writer`**, the orchestrator that composes fact-check replies. It
-invokes sub-agents wrapped as ADK `AgentTool`s (the writer cannot call built-in tools such as
-`google_search` / `url_context` alongside function tools in a single agent):
+The root agent is **`ai_receptionist`**, the front desk. It works out what a visitor wants and
+either handles it or hands over to **`ai_writer`**, the orchestrator that composes fact-check
+replies. `ai_writer` in turn invokes sub-agents wrapped as ADK `AgentTool`s (the writer cannot
+call built-in tools such as `google_search` / `url_context` alongside function tools in a single
+agent):
 
-| Agent                                        | Role                                                                                                                      |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `ai_writer`                                  | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Perceives **images** only. |
-| `ai_investigator`                            | **Discovers** candidate sources via `google_search`.                                                                      |
-| `ai_verifier`                                | **Confirms** which source backs which claim via `url_context`; the only agent that perceives **video / audio**.           |
-| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                   |
+| Agent                                        | Role                                                                                                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ai_receptionist`                            | **Root.** Routes report / fact-check / support intents; searches for an existing message and records a `+1` fact-check request. Cheap model, no research tools. |
+| `ai_writer`                                  | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Perceives **images** only.                                       |
+| `ai_investigator`                            | **Discovers** candidate sources via `google_search`.                                                                                                            |
+| `ai_verifier`                                | **Confirms** which source backs which claim via `url_context`; the only agent that perceives **video / audio**.                                                 |
+| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                                                         |
+
+`ai_writer` is a **`sub_agent`** of `ai_receptionist`, not an `AgentTool` — an `AgentTool` call
+is a single stateless message, which would cost the writer its multi-turn conversation. Control
+moves both ways through ADK's auto-flow `transfer_to_agent`, so `disallow_transfer_to_parent`
+must stay at its default `False`: it is what lets the writer hand a newly pasted suspicious
+message back, and also what makes ADK resume later turns at the writer instead of re-entering
+through the root every time.
+→ decision: [receptionist root agent](decisions/20260823-receptionist-root-agent.md).
 
 The `ai_` prefix is only the Python variable name in `adk/cofacts_ai/agent.py`; the ADK runtime
-names — the `name=` strings, mirrored in `src/lib/adk.ts` — drop it: `writer`, `investigator`,
-`verifier`, `proofreader_*`.
+names — the `name=` strings, mirrored in `src/lib/adk.ts` — drop it: `receptionist`, `writer`,
+`investigator`, `verifier`, `proofreader_*`.
 
 Agents exchange data through callbacks in `adk/cofacts_ai/agent.py` (a structured
 `{content, sources}` JSON contract), and media is injected as Gemini `FileData` through

@@ -1,18 +1,39 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import type { ReportSearch } from '@/lib/report'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import { ChatInput } from '@/components/ChatInput'
 import { WelcomeHero } from '@/components/WelcomeHero'
 import { isAuthExpiredError } from '@/lib/authExpired'
+import { buildReportPrefill } from '@/lib/report'
+
+// Share entry point. Android's Web Share Target, the iOS shortcut and the LINE
+// bot's hand-off links all arrive here rather than at a dedicated /report page:
+// when logged out, `_app.tsx` swaps the whole outlet for `LoggedOutLanding`
+// regardless of which route matched, and login returns to
+// `window.location.pathname + search`, so the parameters survive the round trip
+// on any route. One less URL to keep working, and it matches the shape the LINE
+// bot already links to (`cofacts.ai/?article=<id>`).
+//
+// Every field is optional and unknown parameters are ignored: this is the app's
+// most-linked URL and a stray `?utm_source=` must not break it.
+const validateSearch = (search: Record<string, unknown>): ReportSearch => ({
+  url: typeof search.url === 'string' ? search.url : undefined,
+  text: typeof search.text === 'string' ? search.text : undefined,
+  title: typeof search.title === 'string' ? search.title : undefined,
+})
 
 export const Route = createFileRoute('/_app/')({
   component: LandingPage,
+  validateSearch,
 })
 
 function LandingPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const search = Route.useSearch()
+  const prefill = buildReportPrefill(search)
 
   const sendMutation = useMutation({
     mutationFn: async ({
@@ -50,7 +71,8 @@ function LandingPage() {
       <ChatInput
         onSend={(text, files) => sendMutation.mutate({ text, files })}
         disabled={sendMutation.isPending}
-        placeholder="貼上想查核的訊息，或輸入 Cofacts 文章連結 (https://cofacts.tw/article/...)..."
+        initialValue={prefill}
+        placeholder="貼上可疑訊息、網址，或 Cofacts 文章連結 (https://cofacts.tw/article/...)..."
       />
       {inlineError && (
         <div className="mt-2 text-sm text-red-500 text-center">
