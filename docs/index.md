@@ -50,12 +50,12 @@ lives in exactly two places, `src/lib/cofactsSite.ts` and `adk/cofacts_ai/cofact
 day there is a production deployment they should read it from configuration instead, so the site
 and the API cannot disagree about which Cofacts they mean.
 
-The UI chrome is English and `<html lang>` is `en`, and the agents answer in whatever language the
-user writes in — falling back to English when the user has pasted a message and written nothing of
-their own. `adk/cofacts_ai/language.py` holds that rule for every agent, alongside a separate one
-that sends research at the _message's_ language: coverage of a rumour lives in the language it
-spreads in, so an English query against a non-English message finds none of it. There is no i18n
-layer; UI strings are literals.
+The UI chrome is English and `<html lang>` is `en`, and the agents write in English — pinned, not
+inferred. `adk/cofacts_ai/language.py` holds that rule for every agent and records why inference was
+withdrawn: the same input produced English twice and Traditional Chinese once, and a judgement call
+is not something prompt wording fixes. A separate rule there is deliberately _not_ pinned, and sends
+research at the **message's** language, since coverage of a rumour lives in the language it spreads
+in. There is no i18n layer; UI strings are literals.
 
 ## The ADK multi-agent system
 

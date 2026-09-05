@@ -4,35 +4,49 @@ Kept in one module rather than restated in eight prompts: the rules have to
 agree, or the receptionist answers in one language and the writer continues the
 same conversation in another.
 
-Two separate questions live here, and conflating them is the mistake this
-module exists to prevent:
+Two separate questions live here, and conflating them is a mistake this module
+exists to prevent:
 
-- **What language to answer in** is about the person reading the answer —
-  which includes the reader of anything the agents draft, not only chat turns.
-  Scoping this to "replies" once let the fact-check draft fall back to Chinese
-  while every other part of the same conversation was English.
-- **What language to search in** is about where the evidence is. A rumour
-  circulating in Thai is reported, debunked and argued about in Thai; an
-  English query finds none of that, and the research comes back empty on a
-  message that is in fact well covered.
+- **What language to write in** is about the person reading the answer, and on
+  this branch it is pinned (see below).
+- **What language to search in** is about where the evidence is, and is not
+  pinned. A rumour circulating in Thai is reported, debunked and argued about
+  in Thai; an English query finds none of that, and the research comes back
+  empty on a message that is in fact well covered.
+
+DEMO BRANCH: the output language is pinned to English rather than inferred.
+
+It used to be inferred — "write in the language the user writes in, English if
+they have written nothing of their own" — which is the nicer behaviour and the
+one to restore for real use. It was withdrawn because it is unreliable exactly
+where this branch needs it. At a booth the common input is a pasted link and no
+words at all, so the "written nothing of their own" branch is the one that runs,
+and it does not run consistently: three requests with the same URL and
+near-identical search results (Langfuse traces 8bf9de42, 733f64ab, de8234e9)
+produced English, English, then Traditional Chinese.
+
+Worth recording what that was NOT, because both are tempting and both are
+wrong. It was not the prompt being diluted by Chinese: the system instruction
+was 100% English and byte-identical across the calls, and the rule sat at
+character 64 of it. It was not the Chinese search results crowding it out
+either — the same 333 Han characters of unrelated Cofacts articles were in
+front of the model on the two runs that answered in English. What is left is
+run-to-run variance on a judgement call, and a judgement call is not something
+prompt wording fixes. Removing the judgement removes the variance.
 """
 
 CONVERSATION_LANGUAGE_RULE = """
 ## What language to write in
 
-Write in the language the user is writing to you in. **Everything** you produce,
-not just your side of the chat: reports back to another agent, and any document
-you draft for the user to review. A draft they cannot read is a draft they
-cannot review.
+**Write everything in English.** Every reply, every question you ask, every
+report to another agent, and every document you draft for the user to review.
 
-If they have not written anything of their own — they pasted a message and
-nothing else — answer in **English**. A pasted rumour tells you which language
-it circulates in, not which language its reader wants an answer in, and
-guessing wrong leaves them unable to read your reply at all. Switch the moment
-they write something themselves.
-
-The example wordings in this prompt are written in English so they can be read;
-they are not a script. Say the equivalent thing in the conversation's language.
+This holds whatever language the material around you is in. Cofacts is a
+Taiwanese database, so the messages you search, the articles you read and the
+transcripts you are given are mostly Traditional Chinese — that is the language
+of the data, not the language you write in. Quote a message's own words
+verbatim when the user needs to recognise which message it is, and write your
+own words around the quote in English.
 """
 
 RESEARCH_LANGUAGE_RULE = """
@@ -49,6 +63,6 @@ Widen to English only to reach international coverage (Reuters, AFP, WHO, the
 big fact-check networks), or when the local-language search genuinely comes back
 empty. An English-only search on a non-English message is a search that failed.
 
-Quote sources verbatim in their original language, and add a short translation
-when that is not the language of the conversation.
+Quote sources verbatim in their original language, and add a short English
+translation alongside.
 """
