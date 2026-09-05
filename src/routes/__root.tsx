@@ -29,6 +29,11 @@ export const Route = createRootRoute({
         content:
           'Cofacts.ai 是一個對話式 AI 查核協作平台，讓查核協作者可以透過 AI 輔助來查核可疑訊息、撰寫回應。',
       },
+      // Paints the Android status bar to match the header once installed.
+      {
+        name: 'theme-color',
+        content: '#ffffff',
+      },
     ],
     links: [
       {
@@ -51,6 +56,30 @@ export const Route = createRootRoute({
       {
         rel: 'stylesheet',
         href: 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap',
+      },
+      // Without this link the manifest is never fetched, the app is not
+      // installable, and Android's share sheet never lists it — which makes the
+      // share_target inside it dead weight. It existed in public/ all along,
+      // unreferenced.
+      {
+        rel: 'manifest',
+        href: '/manifest.json',
+      },
+      {
+        rel: 'icon',
+        type: 'image/svg+xml',
+        href: '/icon.svg',
+      },
+      // Browsers request /favicon.ico by convention whether or not it is linked;
+      // linking it makes the intent visible next to the others.
+      {
+        rel: 'icon',
+        sizes: '48x48',
+        href: '/favicon.ico',
+      },
+      {
+        rel: 'apple-touch-icon',
+        href: '/icon-192.png',
       },
     ],
   }),
