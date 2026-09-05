@@ -1,12 +1,13 @@
-"""Unit tests for the receptionist's two intake tools.
+"""Unit tests for the receptionist's intake tools.
 
-`search_suspicious_messages` and `request_fact_check` are the only tools the
-front desk has that the writer does not already share, and both are thin
-wrappers over `_execute_cofacts_graphql`. So the transport is patched out and
-what is tested is what the wrappers themselves decide: which fields survive
-into the writer-visible payload, and what happens on the failure paths that
-have a user-facing consequence (no signed-in user, a GraphQL error, a message
-that no longer exists).
+`search_suspicious_messages`, `request_fact_check` and
+`submit_suspicious_message` are the tools the front desk has that the writer
+does not already share, and all three are thin wrappers over
+`_execute_cofacts_graphql`. So the transport is patched out and what is tested
+is what the wrappers themselves decide: which fields survive into the
+writer-visible payload, and what happens on the failure paths that have a
+user-facing consequence (no signed-in user, a GraphQL error, a message that no
+longer exists).
 
 The auth token is a ContextVar rather than an argument, so tests set it
 explicitly and reset it; leaving it set would leak a signed-in user into the
@@ -21,10 +22,12 @@ import pytest
 
 from cofacts_ai import tools
 from cofacts_ai.auth_context import cofacts_token_var
+from cofacts_ai.cofacts_site import COFACTS_SITE_URL
 from cofacts_ai.tools import (
     _SEARCH_RESULT_TEXT_LIMIT,
     request_fact_check,
     search_suspicious_messages,
+    submit_suspicious_message,
 )
 
 
@@ -246,4 +249,104 @@ class TestRequestFactCheck:
         result = await request_fact_check("a1", "理由")
 
         assert result["article_id"] == "a1"
+        assert "boom" in result["error"]
+
+
+def created_article(article_id: str) -> dict:
+    return {"success": True, "data": {"CreateArticle": {"id": article_id}}}
+
+
+class TestSubmitSuspiciousMessage:
+    async def test_files_the_message_and_hands_back_a_link(
+        self, monkeypatch, signed_in
+    ):
+        mock = patch_graphql(monkeypatch, created_article("new1"))
+
+        result = await submit_suspicious_message(
+            "疫苗會讓人變成殭屍", "朋友群組轉的，沒有出處"
+        )
+
+        # `article_url` has to be in the return value, not left for the agent to
+        # assemble: after transfer the writer only sees this result flattened
+        # into plain text, and the user is about to be handed this link.
+        assert result == {
+            "success": True,
+            "article_id": "new1",
+            "article_url": f"{COFACTS_SITE_URL}/article/new1",
+        }
+        assert awaited_kwargs(mock)["auth_token"] == "jwt-token"
+
+    async def test_a_pasted_link_is_recorded_as_where_it_circulates(
+        self, monkeypatch, signed_in
+    ):
+        mock = patch_graphql(monkeypatch, created_article("new1"))
+
+        await submit_suspicious_message(
+            "https://www.threads.net/@someone/post/abc",
+            "看起來是假的",
+            source_url="https://www.threads.net/@someone/post/abc",
+        )
+
+        assert awaited_kwargs(mock)["variables"] == {
+            "text": "https://www.threads.net/@someone/post/abc",
+            "reference": {
+                "type": "URL",
+                "permalink": "https://www.threads.net/@someone/post/abc",
+            },
+            "reason": "看起來是假的",
+        }
+
+    async def test_text_without_a_source_falls_back_to_the_line_reference(
+        self, monkeypatch, signed_in
+    ):
+        # ArticleReferenceTypeEnum has no value for "some other chat app", so
+        # LINE is the only option. Asserted so the day rumors-api grows a
+        # generic value, this test is what points at the place to change.
+        mock = patch_graphql(monkeypatch, created_article("new1"))
+
+        await submit_suspicious_message("長輩群組轉來的一段話", "沒有出處")
+
+        assert awaited_kwargs(mock)["variables"]["reference"] == {"type": "LINE"}
+
+    async def test_refuses_without_a_signed_in_user_and_does_not_call_the_api(
+        self, monkeypatch, signed_out
+    ):
+        # The article would be created under nobody, and rumors-api rejects it
+        # anyway; stopping here lets the agent say "please sign in".
+        mock = patch_graphql(monkeypatch, created_article("new1"))
+
+        result = await submit_suspicious_message("一段話", "理由")
+
+        assert result["error"] == "not_authenticated"
+        assert "sign in" in result["message"]
+        mock.assert_not_awaited()
+
+    async def test_graphql_error_is_returned_verbatim(self, monkeypatch, signed_in):
+        patch_graphql(monkeypatch, {"error": "GraphQL errors: [forbidden]"})
+
+        result = await submit_suspicious_message("一段話", "理由")
+
+        assert result == {"error": "GraphQL errors: [forbidden]"}
+
+    async def test_a_missing_id_is_not_reported_as_success(
+        self, monkeypatch, signed_in
+    ):
+        # Claiming we filed it and then handing over a link to nothing is worse
+        # than admitting the write failed.
+        patch_graphql(monkeypatch, {"success": True, "data": {"CreateArticle": None}})
+
+        result = await submit_suspicious_message("一段話", "理由")
+
+        assert "error" in result
+        assert "success" not in result
+
+    async def test_transport_exception_is_caught(self, monkeypatch, signed_in):
+        monkeypatch.setattr(
+            tools,
+            "_execute_cofacts_graphql",
+            AsyncMock(side_effect=RuntimeError("boom")),
+        )
+
+        result = await submit_suspicious_message("一段話", "理由")
+
         assert "boom" in result["error"]

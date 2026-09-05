@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
  * RightDrawer as *tool* names, which is a different thing and still live.
  */
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
-  receptionist: 'Cofacts 小幫手',
+  receptionist: 'Cofacts Assistant',
 }
 
 interface AgentMessageProps {

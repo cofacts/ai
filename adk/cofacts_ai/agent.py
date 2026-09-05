@@ -46,6 +46,11 @@ from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
+from .cofacts_site import COFACTS_SITE_URL
+from .language import (
+    CONVERSATION_LANGUAGE_RULE,
+    RESEARCH_LANGUAGE_RULE,
+)
 from .receptionist import RECEPTIONIST_INSTRUCTION
 from .session_title import generate_session_title
 from .tools import (
@@ -56,6 +61,7 @@ from .tools import (
     search_cofacts_database,
     search_image_web,
     search_suspicious_messages,
+    submit_suspicious_message,
 )
 from .writer_citations import attach_citation, resolve_citations
 
@@ -301,7 +307,7 @@ ai_investigator = LlmAgent(
     instruction=f"""
     You are an AI Investigator for fact-checking. Search the web and faithfully report
     what search results say — do not draw conclusions or form opinions.
-
+{RESEARCH_LANGUAGE_RULE}{CONVERSATION_LANGUAGE_RULE}
     ## Reading Your Request
     Each call is a brand-new conversation: you see only this one request. Content the
     {AI_WRITER_NAME} wanted you to have is quoted in full at the top, as a block tagged with an id
@@ -356,7 +362,7 @@ ai_verifier = LlmAgent(
     instruction=f"""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
-
+{RESEARCH_LANGUAGE_RULE}{CONVERSATION_LANGUAGE_RULE}
     ## Reading Your Request
     Each call is a brand-new conversation: you see only this one request. Content the
     {AI_WRITER_NAME} wanted you to have is quoted in full at the top, as a block tagged with an id
@@ -399,14 +405,14 @@ ai_verifier = LlmAgent(
     **No training knowledge**: For video or media content, report ONLY what is directly visible or
     audible. Never use background knowledge to identify the event name, date, location, organizer,
     or a person's full identity. If the video does not explicitly state it, write
-    "影片未說明 / cannot be determined from this video."
+    "cannot be determined from this video."
 
     **When video or audio content is loaded in context**: You are the ONLY agent that
     can watch/listen — the {AI_WRITER_NAME} never sees the media and acts solely on what you report,
     so anything you omit is invisible to the whole pipeline. Report these layers in order:
-    - 「頁面 metadata（url_context 取得）」: uploadDate/publishedAt, uploader, title — quoted verbatim. uploadDate is REQUIRED: a video can show old footage while being recently uploaded, and only the page tells you when it was published online. (For Cofacts gs:// media there is no page — skip this layer.)
-    - 「影片標題/描述（上傳者提供）」: quote verbatim — treat as the uploader's claim, not confirmed fact
-    - 「可觀察內容 claim 清單」: an EXHAUSTIVE, numbered, atomic inventory of every distinct
+    - "Page metadata (from url_context)": uploadDate/publishedAt, uploader, title — quoted verbatim. uploadDate is REQUIRED: a video can show old footage while being recently uploaded, and only the page tells you when it was published online. (For Cofacts gs:// media there is no page — skip this layer.)
+    - "Video title / description (as given by the uploader)": quote verbatim — treat as the uploader's claim, not confirmed fact
+    - "Observable claims": an EXHAUSTIVE, numbered, atomic inventory of every distinct
       assertion the media makes — one assertion per line, covering BOTH the spoken/audio
       content AND the visual layer (on-screen text/captions, logos, locations, who appears,
       what they do). Paraphrase each claim in one clause rather than transcribing long
@@ -440,7 +446,8 @@ ai_proofreader_kmt = LlmAgent(
         )
     ),
     description="AI agent that provides KMT (國民黨) supporter perspective on messages, sources, and fact-check replies.",
-    instruction="""
+    instruction=CONVERSATION_LANGUAGE_RULE
+    + """
     You are an AI representative of KMT (國民黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
 
     1. **Network Messages**: Analyze how KMT supporters might perceive suspicious messages
@@ -479,7 +486,7 @@ ai_proofreader_kmt = LlmAgent(
     a `[^draft_factcheck_response-7f3e21]` marker in the prose points at that block. If the request
     refers to something you cannot see (e.g. "the draft above", "same as before", "this reply" without
     the actual text included), do NOT guess or answer based on fragments. Instead reply exactly with:
-    "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
+    "I did not receive the full content (the complete message, or the complete draft). Please include the full text and call me again."
 
     Provide respectful, measured analysis that helps ensure fact-checking is credible across political divides.
     """,
@@ -495,7 +502,8 @@ ai_proofreader_dpp = LlmAgent(
         )
     ),
     description="AI agent that provides DPP (民進黨) supporter perspective on messages, sources, and fact-check replies.",
-    instruction="""
+    instruction=CONVERSATION_LANGUAGE_RULE
+    + """
     You are an AI representative of DPP (民進黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
 
     1. **Network Messages**: Analyze how DPP supporters might perceive suspicious messages
@@ -534,7 +542,7 @@ ai_proofreader_dpp = LlmAgent(
     a `[^draft_factcheck_response-7f3e21]` marker in the prose points at that block. If the request
     refers to something you cannot see (e.g. "the draft above", "same as before", "this reply" without
     the actual text included), do NOT guess or answer based on fragments. Instead reply exactly with:
-    "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
+    "I did not receive the full content (the complete message, or the complete draft). Please include the full text and call me again."
 
     Provide engaged, democratic analysis that helps ensure fact-checking resonates with progressive audiences.
     """,
@@ -550,7 +558,8 @@ ai_proofreader_tpp = LlmAgent(
         )
     ),
     description="AI agent that provides TPP (民眾黨) supporter perspective on messages, sources, and fact-check replies.",
-    instruction="""
+    instruction=CONVERSATION_LANGUAGE_RULE
+    + """
     You are an AI representative of TPP (台灣民眾黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
 
     1. **Network Messages**: Analyze how TPP supporters might perceive suspicious messages
@@ -589,7 +598,7 @@ ai_proofreader_tpp = LlmAgent(
     a `[^draft_factcheck_response-7f3e21]` marker in the prose points at that block. If the request
     refers to something you cannot see (e.g. "the draft above", "same as before", "this reply" without
     the actual text included), do NOT guess or answer based on fragments. Instead reply exactly with:
-    "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
+    "I did not receive the full content (the complete message, or the complete draft). Please include the full text and call me again."
 
     Provide rational, balanced analysis that helps ensure fact-checking appeals to moderate voters seeking practical solutions.
     """,
@@ -605,7 +614,8 @@ ai_proofreader_minor_parties = LlmAgent(
         )
     ),
     description="AI agent that provides minor parties (時代力量、歐巴桑聯盟等) supporter perspective on messages, sources, and fact-check replies.",
-    instruction="""
+    instruction=CONVERSATION_LANGUAGE_RULE
+    + """
     You are an AI representative of Taiwan's minor parties supporters (時代力量、歐巴桑聯盟、台灣基進等). Your role is to provide insights from this political viewpoint on:
 
     1. **Network Messages**: Analyze how minor party supporters might perceive suspicious messages
@@ -644,7 +654,7 @@ ai_proofreader_minor_parties = LlmAgent(
     a `[^draft_factcheck_response-7f3e21]` marker in the prose points at that block. If the request
     refers to something you cannot see (e.g. "the draft above", "same as before", "this reply" without
     the actual text included), do NOT guess or answer based on fragments. Instead reply exactly with:
-    "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
+    "I did not receive the full content (the complete message, or the complete draft). Please include the full text and call me again."
 
     Provide engaged, civic-minded analysis that helps ensure fact-checking includes diverse voices and perspectives.
     """,
@@ -803,6 +813,7 @@ ai_writer = LlmAgent(
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
 
+{CONVERSATION_LANGUAGE_RULE}
     Your primary role is to SUPPORT and EMPOWER human fact-checkers in composing high-quality responses for suspicious messages on Cofacts.
     You are NOT here to replace human judgment, but to be a collaborative partner that helps people grow their fact-checking skills and provides experienced editors with powerful assistance.
 
@@ -822,13 +833,13 @@ ai_writer = LlmAgent(
 
     You do not take messages in off the street: `{AI_RECEPTIONIST_NAME}` runs the front desk and
     hands you a conversation once there is a Cofacts article to work on
-    (https://cofacts.tw/article/<articleId>).
+    ({COFACTS_SITE_URL}/article/<articleId>).
 
     **Your first action after taking over is ALWAYS `get_single_cofacts_article` for that article
     id.**
 
     If you somehow end up without an article id — the user opened straight into you and is asking
-    about a message that is not in Cofacts yet — do NOT demand a cofacts.tw URL and do not start
+    about a message that is not in Cofacts yet — do NOT demand a Cofacts article URL and do not start
     checking a bare pasted message. Transfer to `{AI_RECEPTIONIST_NAME}`, which knows how to search
     for it and take a report.
 
@@ -840,7 +851,7 @@ ai_writer = LlmAgent(
     message may not be in Cofacts at all, and you have no way to report one. When that happens,
     call `transfer_to_agent` with `{AI_RECEPTIONIST_NAME}`.
 
-    **Decide by what the user MEANS, never by whether a link is a cofacts.tw link.** Non-Cofacts
+    **Decide by what the user MEANS, never by whether a link is a Cofacts link.** Non-Cofacts
     URLs are overwhelmingly evidence, not new reports — treating a pattern as the trigger would
     shovel the user's own sources into the reporting flow:
 
@@ -1088,6 +1099,7 @@ ai_receptionist = LlmAgent(
         search_suspicious_messages,
         get_single_cofacts_article,
         request_fact_check,
+        submit_suspicious_message,
     ],
 )
 

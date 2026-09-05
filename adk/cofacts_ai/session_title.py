@@ -114,10 +114,10 @@ async def _generate_title(user_text: str, result_text: str) -> str:
 
 def _build_prompt(user_text: str, result_text: str) -> str:
     prompt = (
-        "Return ONLY a concise, meaningful session title in the same language "
-        "as the content. Use Traditional Chinese when the content is "
-        "Traditional Chinese. Keep it under 60 characters. Do not include "
-        "quotes or explanations.\n\n"
+        "Return ONLY a concise, meaningful session title, in English — not in "
+        "the language of the message being checked, which is often a rumour in "
+        "a language the user does not read. Keep it under 60 characters. Do "
+        "not include quotes or explanations.\n\n"
         f"User's first message:\n{_truncate_prompt_text(user_text)}"
     )
     if result_text:

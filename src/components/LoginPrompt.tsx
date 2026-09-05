@@ -14,7 +14,7 @@ export function LoginPrompt({ message }: LoginPromptProps) {
         onClick={() => login()}
         className="px-4 py-1.5 rounded-full bg-primary text-white text-sm font-medium hover:bg-primary/90 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
       >
-        登入 / 註冊
+        Sign in / Sign up
       </button>
     </div>
   )

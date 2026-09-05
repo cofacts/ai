@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
+import { cofactsArticleUrl } from '@/lib/cofactsSite'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -36,12 +37,12 @@ export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
 
 function toolDisplayName(name: string | null | undefined): string {
   if (!name) return 'Tool'
-  if (name === 'investigator') return 'AI 調查員'
-  if (name === 'verifier') return 'AI 查核員'
+  if (name === 'investigator') return 'AI Investigator'
+  if (name === 'verifier') return 'AI Verifier'
   if (name.startsWith('proofreader_'))
-    return `AI 讀者 (${name.replace('proofreader_', '').toUpperCase()})`
-  if (name === 'draft_factcheck_response') return '查核回應草稿'
-  if (name === 'get_single_cofacts_article') return 'Cofacts 訊息'
+    return `AI Reader (${name.replace('proofreader_', '').toUpperCase()})`
+  if (name === 'draft_factcheck_response') return 'Draft fact-check response'
+  if (name === 'get_single_cofacts_article') return 'Cofacts message'
   return name
 }
 
@@ -49,7 +50,7 @@ function toolTitle(invocation: ToolInvocation | null): string {
   if (!invocation) return 'Tool'
   if (invocation.name === 'get_single_cofacts_article') {
     const id = invocation.args.article_id ?? invocation.resp?.article_id
-    return id ? `Cofacts 訊息 ${id}` : 'Cofacts 訊息'
+    return id ? `Cofacts message ${id}` : 'Cofacts message'
   }
   return toolDisplayName(invocation.name)
 }
@@ -74,11 +75,11 @@ function DrawerHeader({
       <div className="flex items-center gap-1 shrink-0">
         {cofactsArticleId && (
           <a
-            href={`https://cofacts.tw/article/${cofactsArticleId}`}
+            href={cofactsArticleUrl(cofactsArticleId)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="在 Cofacts 查看"
+            aria-label="View on Cofacts"
           >
             <span className="material-symbols-outlined text-xl">
               open_in_new
@@ -88,7 +89,7 @@ function DrawerHeader({
         <button
           onClick={onClose}
           className="text-gray-400 hover:text-gray-600 transition-colors"
-          aria-label="關閉"
+          aria-label="Close"
         >
           <span className="material-symbols-outlined text-xl">close</span>
         </button>
@@ -157,7 +158,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function ToolErrorSection({ message }: { message: string }) {
   return (
     <section>
-      <SectionLabel>這次呼叫沒有成功</SectionLabel>
+      <SectionLabel>This call didn't succeed</SectionLabel>
       <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 whitespace-pre-wrap">
         {message}
       </p>
@@ -233,7 +234,7 @@ function InvestigatorContent({
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
       {args.request && (
         <section>
-          <SectionLabel>調查主題</SectionLabel>
+          <SectionLabel>Research topic</SectionLabel>
           <MarkdownSection content={args.request} />
         </section>
       )}
@@ -242,7 +243,7 @@ function InvestigatorContent({
 
       {content && (
         <section>
-          <SectionLabel>調查結果</SectionLabel>
+          <SectionLabel>Findings</SectionLabel>
           <MarkdownSection content={content} />
         </section>
       )}
@@ -251,7 +252,7 @@ function InvestigatorContent({
 
       {sources.length > 0 && (
         <section>
-          <SectionLabel>出處 ({sources.length})</SectionLabel>
+          <SectionLabel>Sources ({sources.length})</SectionLabel>
           <div className="space-y-2">
             {sources.map((s, i) => (
               <SourceCard key={i} source={s} index={i} />
@@ -261,7 +262,9 @@ function InvestigatorContent({
       )}
 
       {!content && !response && (
-        <p className="text-sm text-gray-400 text-center pt-8">等待調查結果…</p>
+        <p className="text-sm text-gray-400 text-center pt-8">
+          Waiting for research findings…
+        </p>
       )}
     </div>
   )
@@ -292,7 +295,7 @@ function VerifierContent({
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
       {args.request && (
         <section>
-          <SectionLabel>待查核聲明</SectionLabel>
+          <SectionLabel>Claims to check</SectionLabel>
           <MarkdownSection content={args.request} />
         </section>
       )}
@@ -301,14 +304,14 @@ function VerifierContent({
 
       {content && (
         <section>
-          <SectionLabel>查核報告</SectionLabel>
+          <SectionLabel>Verification report</SectionLabel>
           <MarkdownSection content={content} />
         </section>
       )}
 
       {sources.length > 0 && (
         <section>
-          <SectionLabel>參考來源 ({sources.length})</SectionLabel>
+          <SectionLabel>References ({sources.length})</SectionLabel>
           <div className="space-y-2">
             {sources.map((s, i) => (
               <SourceCard key={i} source={s} index={i} />
@@ -318,7 +321,9 @@ function VerifierContent({
       )}
 
       {!content && !response && (
-        <p className="text-sm text-gray-400 text-center pt-8">等待查核結果…</p>
+        <p className="text-sm text-gray-400 text-center pt-8">
+          Waiting for verification results…
+        </p>
       )}
     </div>
   )
@@ -340,7 +345,7 @@ function ProofreaderContent({
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
       {args.request && (
         <section>
-          <SectionLabel>詢問事項</SectionLabel>
+          <SectionLabel>Question</SectionLabel>
           <MarkdownSection content={args.request} />
         </section>
       )}
@@ -349,13 +354,15 @@ function ProofreaderContent({
 
       {result && (
         <section>
-          <SectionLabel>讀者視角回應</SectionLabel>
+          <SectionLabel>Reader's perspective</SectionLabel>
           <MarkdownSection content={result} />
         </section>
       )}
 
       {!result && !response && (
-        <p className="text-sm text-gray-400 text-center pt-8">等待回應…</p>
+        <p className="text-sm text-gray-400 text-center pt-8">
+          Waiting for a response…
+        </p>
       )}
     </div>
   )
@@ -375,7 +382,7 @@ function CopyButton({ value }: { value: string }) {
       onClick={handleCopy}
       disabled={!value}
       className="ml-auto text-gray-400 hover:text-gray-600 disabled:opacity-0 transition-colors"
-      aria-label="複製"
+      aria-label="Copy"
     >
       <span className="material-symbols-outlined text-base">
         {copied ? 'check' : 'content_copy'}
@@ -397,28 +404,28 @@ const CATEGORIES: Array<{
 }> = [
   {
     key: 'NOT_ARTICLE',
-    label: '不在查證範圍',
+    label: 'Not a suspicious message',
     icon: 'warning',
     colorClass: 'text-yellow-500',
     activeClass: 'bg-yellow-50 border-yellow-300 text-yellow-700',
   },
   {
     key: 'RUMOR',
-    label: '含有不實訊息',
+    label: 'Contains misinformation',
     icon: 'cancel',
     colorClass: 'text-red-500',
     activeClass: 'bg-red-50 border-red-300 text-red-700',
   },
   {
     key: 'NOT_RUMOR',
-    label: '含有正確訊息',
+    label: 'Contains true information',
     icon: 'check_circle',
     colorClass: 'text-green-500',
     activeClass: 'bg-green-50 border-green-300 text-green-700',
   },
   {
     key: 'OPINIONATED',
-    label: '含有個人意見',
+    label: 'Contains personal perspective',
     icon: 'comment',
     colorClass: 'text-blue-500',
     activeClass: 'bg-blue-50 border-blue-300 text-blue-700',
@@ -467,11 +474,11 @@ function DraftFactcheckContent({
       {/* Response text */}
       <div className="space-y-2">
         <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center">
-          回應內容
+          Response text
           <CopyButton value={text} />
         </label>
         <div className="w-full min-h-[11rem] p-3 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg leading-relaxed whitespace-pre-wrap">
-          {text || <span className="text-gray-300">（尚未產生）</span>}
+          {text || <span className="text-gray-300">(not yet generated)</span>}
         </div>
       </div>
 
@@ -479,11 +486,13 @@ function DraftFactcheckContent({
       <div className="space-y-2">
         <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1">
           <span className="material-symbols-outlined text-sm">link</span>
-          佐證資料
+          Supporting evidence
           <CopyButton value={references} />
         </label>
         <div className="w-full min-h-[8rem] p-3 text-sm font-mono text-gray-700 bg-white border border-gray-200 rounded-lg leading-relaxed whitespace-pre-wrap">
-          {references || <span className="text-gray-300">（尚未產生）</span>}
+          {references || (
+            <span className="text-gray-300">(not yet generated)</span>
+          )}
         </div>
       </div>
     </div>
@@ -500,19 +509,19 @@ type RelatedArticleNode =
 
 const REPLY_TYPE_INFO: Record<string, { label: string; className: string }> = {
   RUMOR: {
-    label: '含有不實訊息',
+    label: 'Contains misinformation',
     className: 'bg-red-50 text-red-700 border border-red-200',
   },
   NOT_RUMOR: {
-    label: '不含不實訊息',
+    label: 'No misinformation',
     className: 'bg-green-50 text-green-700 border border-green-200',
   },
   OPINIONATED: {
-    label: '含有個人意見',
+    label: 'Contains personal perspective',
     className: 'bg-blue-50 text-blue-700 border border-blue-200',
   },
   NOT_ARTICLE: {
-    label: '不是可查核的內容',
+    label: 'Not fact-checkable content',
     className: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
   },
 }
@@ -520,7 +529,7 @@ const REPLY_TYPE_INFO: Record<string, { label: string; className: string }> = {
 function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
   return (
     <a
-      href={`https://cofacts.tw/article/${article.id}`}
+      href={cofactsArticleUrl(article.id)}
       target="_blank"
       rel="noopener noreferrer"
       className="shrink-0 w-[210px] rounded-lg border border-gray-200 bg-gray-50 p-3 hover:bg-gray-100 transition-colors flex flex-col gap-2"
@@ -531,11 +540,11 @@ function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
       <div>
         {article.factCheckCount > 0 ? (
           <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.5">
-            {article.factCheckCount} 則查核
+            {article.factCheckCount} fact-checks
           </span>
         ) : (
           <span className="text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
-            待查核
+            Awaiting fact-check
           </span>
         )}
       </div>
@@ -568,10 +577,12 @@ function ArticleMedia({
     return <div className="w-full h-48 rounded-lg bg-gray-100 animate-pulse" />
   }
   if (isError || !url) {
-    return <p className="text-sm text-gray-400">附件載入失敗</p>
+    return <p className="text-sm text-gray-400">Failed to load attachment</p>
   }
   if (articleType === 'IMAGE') {
-    return <img src={url} alt="訊息附件" className="w-full rounded-lg" />
+    return (
+      <img src={url} alt="Message attachment" className="w-full rounded-lg" />
+    )
   }
   if (articleType === 'VIDEO') {
     return <video src={url} controls className="w-full rounded-lg" />
@@ -590,7 +601,7 @@ function CofactsArticleContent({
   if (!response) {
     return (
       <p className="text-sm text-gray-400 text-center pt-8 p-4">
-        等待資料載入…
+        Loading data…
       </p>
     )
   }
@@ -606,7 +617,9 @@ function CofactsArticleContent({
   const article = response.article
   if (!article) {
     return (
-      <p className="text-sm text-gray-400 text-center pt-8 p-4">找不到此訊息</p>
+      <p className="text-sm text-gray-400 text-center pt-8 p-4">
+        Message not found
+      </p>
     )
   }
 
@@ -616,7 +629,7 @@ function CofactsArticleContent({
     0,
   )
   const formattedDate = new Date(article.createdAt).toLocaleDateString(
-    'zh-TW',
+    'en-US',
     {
       year: 'numeric',
       month: 'long',
@@ -641,7 +654,7 @@ function CofactsArticleContent({
       {/* Text content */}
       {article.text && (
         <section>
-          <SectionLabel>{isMedia ? '逐字稿' : '訊息內文'}</SectionLabel>
+          <SectionLabel>{isMedia ? 'Transcript' : 'Message text'}</SectionLabel>
           <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
             {article.text}
           </p>
@@ -650,34 +663,36 @@ function CofactsArticleContent({
 
       {/* Metadata */}
       <section>
-        <SectionLabel>統計</SectionLabel>
+        <SectionLabel>Stats</SectionLabel>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-600">
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">
               calendar_today
             </span>
-            初次回報：{formattedDate}
+            First reported: {formattedDate}
           </span>
           {totalVisits > 0 && (
             <span className="flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">
                 trending_up
               </span>
-              近 90 天 {totalVisits.toLocaleString()} 次造訪
+              {totalVisits.toLocaleString()} visits in the last 90 days
             </span>
           )}
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">group</span>
-            {article.communityDemandCount} 人回報
+            {article.communityDemandCount} people reported this
           </span>
         </div>
       </section>
 
       {/* Fact-check responses */}
       <section>
-        <SectionLabel>查核回應（{article.factCheckCount}）</SectionLabel>
+        <SectionLabel>
+          Fact-check responses ({article.factCheckCount})
+        </SectionLabel>
         {article.factCheckResponses.length === 0 ? (
-          <p className="text-sm text-gray-400">尚無查核回應</p>
+          <p className="text-sm text-gray-400">No fact-check response yet</p>
         ) : (
           <div className="space-y-3">
             {article.factCheckResponses.map((ar, i) => {
@@ -729,7 +744,7 @@ function CofactsArticleContent({
       {relatedEdges.length > 0 && (
         <section>
           <SectionLabel>
-            相似可疑訊息（{article.relatedArticles.totalCount}）
+            Similar suspicious messages ({article.relatedArticles.totalCount})
           </SectionLabel>
           <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
             {relatedEdges.map(({ node }) => (

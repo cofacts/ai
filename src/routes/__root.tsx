@@ -22,12 +22,12 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'Cofacts.ai — AI 協助公民查核',
+        title: 'Cofacts.ai — AI-Assisted Citizen Fact-Checking',
       },
       {
         name: 'description',
         content:
-          'Cofacts.ai 是一個對話式 AI 查核協作平台，讓查核協作者可以透過 AI 輔助來查核可疑訊息、撰寫回應。',
+          'Cofacts.ai is a conversational AI fact-checking collaboration platform, letting fact-checkers use AI assistance to check suspicious messages and draft responses.',
       },
       // Colours the Android toolbar once the app is installed; matches the
       // white Header the user sees directly below it.
@@ -90,7 +90,7 @@ export const Route = createRootRoute({
 function RootDocument({ children }: { children: React.ReactNode }) {
   const { serverLoadedUser } = Route.useLoaderData()
   return (
-    <html lang="zh-TW">
+    <html lang="en">
       <head>
         <HeadContent />
       </head>
