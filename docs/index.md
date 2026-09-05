@@ -28,6 +28,14 @@ flowchart LR
    is an HttpOnly `cofacts_session` cookie — the JWT never reaches browser JavaScript. The
    BFF proxies to the ADK backend and to `rumors-api`.
    → decision: [BFF auth](decisions/20260509-bff-auth-httponly-cookie.md).
+
+   It serves two entry points. `/` is the chat: a session with the multi-agent system below.
+   **`/report`** is a form that talks to `rumors-api` directly and never touches the agents —
+   paste a circulating message, see whether Cofacts already has it, add a +1 or file it, then
+   open a chat about the resulting article if you want one. It is also the app's Web Share
+   Target, so it is where Android's share sheet lands.
+   → decision: [Report through a form](decisions/20260905-report-form-page.md).
+
 2. **ADK agent backend** — a self-contained Python Google-ADK project under `adk/` (its own
    `pyproject.toml` / `Dockerfile`). A hierarchical multi-agent system (see below).
 

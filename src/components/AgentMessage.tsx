@@ -4,6 +4,21 @@ import { SearchSuggestions } from './SearchSuggestions'
 import type { ChatMessage } from '@/lib/adk'
 import { cn } from '@/lib/utils'
 
+/**
+ * Every agent the frontend can see shows the same name.
+ *
+ * Only an agent that runs inside the persisted session can author an event the
+ * frontend renders, and today that is the writer alone. An `AgentTool`
+ * sub-agent (investigator, verifier, the proofreaders) runs in a throwaway
+ * in-memory session of its own and only its last message comes back, as a tool
+ * result — so it never authors an event here. This used to branch on
+ * `investigator` / `verifier` as authors; those branches could not fire.
+ *
+ * Their names do still appear in this file and in RightDrawer as *tool* names,
+ * which is a different thing and still live.
+ */
+const AGENT_DISPLAY_NAME = 'Cofacts AI Agent'
+
 interface AgentMessageProps {
   message: ChatMessage
   showAvatar?: boolean
@@ -28,11 +43,7 @@ export function AgentMessage({
             </span>
           </div>
           <span className="text-sm font-semibold text-gray-900">
-            {message.author === 'investigator'
-              ? 'AI Investigator'
-              : message.author === 'verifier'
-                ? 'AI Verifier'
-                : 'Cofacts AI Agent'}
+            {AGENT_DISPLAY_NAME}
           </span>
         </div>
       )}
