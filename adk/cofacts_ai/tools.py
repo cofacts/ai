@@ -708,6 +708,14 @@ async def submit_cofacts_reply(
         }
 
 
+# The language rule is restated in `text`'s own rules rather than left to
+# language.py's CONVERSATION_LANGUAGE_RULE, because that rule says "write to the
+# user" and this body is, by the description below, aimed at whoever encounters
+# the message on Cofacts — so the model reads it as out of scope and falls back
+# to Chinese, which is what Cofacts means to it. On this demo branch the
+# reviewer and the eventual reader are the same person in the room, so the
+# conversation's language wins. If replies ever actually get submitted, whose
+# language this should be is a real question again.
 def draft_factcheck_response(
     classification: str,
     text: str,
@@ -731,11 +739,16 @@ def draft_factcheck_response(
 
     Args:
         classification: One of:
-            - "RUMOR" (含有不實訊息): The message contains misinformation.
-            - "NOT_RUMOR" (含有正確訊息): The message contains true information.
-            - "OPINIONATED" (含有個人意見): The message contains personal perspective.
-            - "NOT_ARTICLE" (不在查證範圍): The message is not within the scope of fact-checking.
+            - "RUMOR": The message contains misinformation.
+            - "NOT_RUMOR": The message contains true information.
+            - "OPINIONATED": The message contains personal perspective.
+            - "NOT_ARTICLE": The message is not within the scope of fact-checking.
         text: The fact-check response body. Rules:
+            - Write it in the same language as the rest of the conversation, and
+              in English when the user has written nothing of their own. The
+              user is being asked to review this draft, and a reply they cannot
+              read is not a reply they can review. Do NOT switch to Chinese
+              because Cofacts is a Taiwanese database.
             - Plain text only — no Markdown, no URLs, no reference citations.
             - Emojis at the start of paragraphs are encouraged for readability.
             - Neutral, educational tone aimed at people who shared or received the message.
