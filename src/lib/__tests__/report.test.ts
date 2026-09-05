@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { buildReportPrefill, findFirstUrl } from '../report'
+import { buildReportPrefill, findFirstUrl, isJustLinks } from '../report'
 
 // Android's Web Share Target and the iOS shortcut both hand off through the
 // query string on `/`, and neither is consistent about which field holds the
@@ -109,5 +109,26 @@ describe('findFirstUrl', () => {
 
   test('ignores a non-http scheme', () => {
     expect(findFirstUrl('javascript:alert(1)')).toBeNull()
+  })
+})
+
+describe('isJustLinks', () => {
+  test('a shared link on its own is just a link', () => {
+    expect(isJustLinks('https://www.facebook.com/share/p/1HSNRpimmH/')).toBe(
+      true,
+    )
+    expect(
+      isJustLinks('  https://example.com/a\nhttps://example.com/b  '),
+    ).toBe(true)
+  })
+
+  test('a link the reporter wrote around is not', () => {
+    expect(isJustLinks('後座沒綁安全帶罰六千 https://example.com/a')).toBe(
+      false,
+    )
+  })
+
+  test('no text at all counts as no prose', () => {
+    expect(isJustLinks('')).toBe(true)
   })
 })

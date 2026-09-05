@@ -89,3 +89,13 @@ export function buildReportPrefill(search: ReportSearch | undefined): string {
 export function findFirstUrl(text: string): string | null {
   return firstUrl(text)
 }
+
+/**
+ * True when the submission is links and punctuation — no words of the user's own.
+ *
+ * This is the normal shape of a share-sheet handoff, and it changes how the
+ * message has to be searched for: see `findSimilarReports`.
+ */
+export function isJustLinks(text: string): boolean {
+  return text.replace(URL_RE, ' ').trim() === ''
+}
