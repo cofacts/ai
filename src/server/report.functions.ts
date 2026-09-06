@@ -46,8 +46,7 @@ export const requestFactCheck = createServerFn({ method: 'POST' })
 
 export const createArticleReport = createServerFn({ method: 'POST' })
   .inputValidator((input: CreateArticleReportInput) => {
-    if (!input.text.trim()) throw new Error('text is required')
-    if (!input.permalink) throw new Error('permalink is required')
+    if (!input.url.trim()) throw new Error('url is required')
     return input
   })
   .handler(({ data }) => fileArticleReport(data))

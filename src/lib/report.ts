@@ -1,23 +1,29 @@
 /**
- * Turning a share-sheet handoff into text for the composer.
+ * Reading a share-sheet handoff.
  *
  * Android's Web Share Target and the iOS shortcut both land on `/report` with
  * the shared content in the query string, and neither is consistent about which
  * field holds what: Threads and Facebook sometimes put the link in `text` and
  * leave `url` empty, sometimes the reverse, and often repeat the link inside a
- * longer `text`. So both fields are scanned and the result is assembled from
- * whatever is actually there.
+ * longer `text`. So both fields are scanned for the link.
  *
  * Observed on Android: sharing a post from Facebook arrives as
  * `?text=https%3A%2F%2Fwww.facebook.com%2Fshare%2Fp%2F...` — the link in `text`,
- * no `url`, no `title`. A bare link with no prose of the user's own is the
- * normal case for share-sheet traffic, not an edge case.
+ * no `url`, no `title`.
  *
- * The output is a draft for the user to review, never something auto-sent —
- * they usually want to add "my mum forwarded me this" before sending.
+ * The link is all the form takes, so the link is all that is read here. Prose
+ * that came with it is dropped rather than prefilled: a report is a URL plus
+ * the reporter's own reason, and someone else's share text is neither.
  */
 
-/** Query parameters accepted on `/report` from a share target or shortcut. */
+/**
+ * Query parameters accepted on `/report` from a share target or shortcut.
+ *
+ * `title` is declared in the manifest's `share_target` and accepted here even
+ * though nothing reads it. Declaring it is what makes Android put the page
+ * title in `title` instead of prepending it to `text` — so the field earns its
+ * place by keeping `text` clean, not by being used.
+ */
 export interface ReportSearch {
   url?: string
   text?: string
@@ -50,38 +56,9 @@ function firstUrl(...candidates: Array<string | undefined>): string | null {
 }
 
 /**
- * Builds the composer draft for a shared item.
- *
- * Rules, in order of what the user gets out of them:
- * - The shared prose is the body, because that is the suspicious message.
- * - A link is appended only when the prose does not already contain it, so the
- *   common "text repeats the url" case does not produce it twice.
- * - `title` is dropped when the prose already exists (share sheets pass the page
- *   title, which is rarely the message) and used as the body only when nothing
- *   else is available.
- *
- * Returns an empty string when there is nothing to prefill, which leaves the
- * composer showing its normal placeholder.
- */
-export function buildReportPrefill(search: ReportSearch | undefined): string {
-  if (!search) return ''
-
-  const text = search.text?.trim() ?? ''
-  const url = search.url?.trim() ?? ''
-  const title = search.title?.trim() ?? ''
-
-  const link = firstUrl(url, text)
-  const body = text || title
-
-  if (!body) return link ?? ''
-  if (link && !body.includes(link)) return `${body}\n${link}`
-  return body
-}
-
-/**
  * The first http(s) URL in a block of text, or null when there is none.
  *
- * The report form requires one. An article has to point at something anyone can
+ * The report form needs one. An article has to point at something anyone can
  * open — that is what makes "this message is really circulating" checkable by
  * someone other than the reporter — and `ArticleReferenceInput` has no honest
  * value for "typed from memory" anyway.
@@ -90,12 +67,8 @@ export function findFirstUrl(text: string): string | null {
   return firstUrl(text)
 }
 
-/**
- * True when the submission is links and punctuation — no words of the user's own.
- *
- * This is the normal shape of a share-sheet handoff, and it changes how the
- * message has to be searched for: see `findSimilarReports`.
- */
-export function isJustLinks(text: string): boolean {
-  return text.replace(URL_RE, ' ').trim() === ''
+/** The shared link, wherever the sending app decided to put it. */
+export function findSharedUrl(search: ReportSearch | undefined): string | null {
+  if (!search) return null
+  return firstUrl(search.url, search.text)
 }

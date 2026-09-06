@@ -26,7 +26,7 @@ import { FactCheckReplyCard } from '@/components/cofacts/FactCheckReplyCard'
 import { SuspiciousMessageCard } from '@/components/cofacts/SuspiciousMessageCard'
 import { useAuth } from '@/lib/auth'
 import { isAuthExpiredError } from '@/lib/authExpired'
-import { buildReportPrefill, findFirstUrl } from '@/lib/report'
+import { findFirstUrl, findSharedUrl } from '@/lib/report'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import {
@@ -81,8 +81,8 @@ function ReportPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const prefill = buildReportPrefill(search)
-  const [text, setText] = useState(prefill)
+  const sharedUrl = findSharedUrl(search)
+  const [url, setUrl] = useState(sharedUrl ?? '')
   const [reason, setReason] = useState('')
   const [noLink, setNoLink] = useState(false)
   const [candidates, setCandidates] = useState<Array<SearchCandidate> | null>(
@@ -91,14 +91,11 @@ function ReportPage() {
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const reasonRef = useRef<HTMLTextAreaElement>(null)
 
-  // A share sheet usually hands over a bare link and nothing else — Facebook on
-  // Android sends `?text=<the link>` with no prose and no title. The link is
-  // then the whole submission, and "what made this look suspicious to you" is
-  // the only thing left that a machine cannot fill in, so put the cursor there.
-  const sharedOnlyALink = prefill !== '' && prefill === findFirstUrl(prefill)
+  // A share sheet fills the only field the machine can fill, which leaves the
+  // reason as the one thing still worth the reporter's attention.
   useEffect(() => {
-    if (sharedOnlyALink && user) reasonRef.current?.focus()
-  }, [sharedOnlyALink, user])
+    if (sharedUrl && user) reasonRef.current?.focus()
+  }, [sharedUrl, user])
 
   // Search first, always. Filing straight away is what produces the duplicates
   // that make the database harder to search for everyone after you.
@@ -113,10 +110,8 @@ function ReportPage() {
       if (result.candidates.length > 0) {
         return { kind: 'candidates', candidates: result.candidates }
       }
-      const permalink = findFirstUrl(submitted)
-      if (!permalink) throw new Error('沒有找到連結')
       const created = await createArticleReport({
-        data: { text: submitted, permalink, reason },
+        data: { url: submitted, reason },
       })
       return { kind: 'created', articleUrl: created.articleUrl }
     },
@@ -141,11 +136,7 @@ function ReportPage() {
   })
 
   const fileNew = useMutation({
-    mutationFn: async () => {
-      const permalink = findFirstUrl(text)
-      if (!permalink) throw new Error('沒有找到連結')
-      return createArticleReport({ data: { text, permalink, reason } })
-    },
+    mutationFn: () => createArticleReport({ data: { url, reason } }),
     onSuccess: ({ articleUrl }) => setOutcome({ kind: 'created', articleUrl }),
   })
 
@@ -178,14 +169,17 @@ function ReportPage() {
   )
 
   function submit() {
-    const submitted = text.trim()
-    if (!submitted) return
-    if (!findFirstUrl(submitted)) {
+    // Forgiving about a paste that brought prose with it: keep the link and put
+    // it back in the field, so the reporter sees exactly what will be filed
+    // rather than having their words silently dropped on the way to Cofacts.
+    const found = findFirstUrl(url)
+    if (!found) {
       setNoLink(true)
       return
     }
     setNoLink(false)
-    startReport.mutate(submitted)
+    setUrl(found)
+    startReport.mutate(found)
   }
 
   function startOver() {
@@ -206,7 +200,7 @@ function ReportPage() {
               幫忙攔下正在傳的假訊息
             </h1>
             <p className="text-sm text-text-muted">
-              貼上訊息的網址，或連同你收到的文字一起貼上
+              貼上訊息的網址 —— 有連結，大家才能確認它真的在流傳
             </p>
           </div>
 
@@ -228,9 +222,9 @@ function ReportPage() {
             />
           ) : (
             <ReportForm
-              text={text}
-              onTextChange={(value) => {
-                setText(value)
+              url={url}
+              onUrlChange={(value) => {
+                setUrl(value)
                 setNoLink(false)
               }}
               reason={reason}
@@ -266,8 +260,8 @@ function ReportPage() {
 }
 
 function ReportForm({
-  text,
-  onTextChange,
+  url,
+  onUrlChange,
   reason,
   onReasonChange,
   reasonRef,
@@ -275,8 +269,8 @@ function ReportForm({
   busy,
   noLink,
 }: {
-  text: string
-  onTextChange: (value: string) => void
+  url: string
+  onUrlChange: (value: string) => void
   reason: string
   onReasonChange: (value: string) => void
   reasonRef: React.RefObject<HTMLTextAreaElement | null>
@@ -287,25 +281,29 @@ function ReportForm({
   return (
     <form
       className="flex flex-col gap-4"
+      // Our own message, not the browser's bubble: a paste that brought prose
+      // along with the link is something we accept and tidy up, and native
+      // validation would reject it before the submit handler ever runs.
+      noValidate
       onSubmit={(e) => {
         e.preventDefault()
         onSubmit()
       }}
     >
-      <textarea
-        value={text}
-        onChange={(e) => onTextChange(e.target.value)}
-        rows={5}
-        placeholder="在此輸入，記得附上訊息的網址"
-        className="w-full rounded-lg border border-border-subtle p-3 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-primary"
+      <input
+        type="url"
+        value={url}
+        onChange={(e) => onUrlChange(e.target.value)}
+        placeholder="https://www.facebook.com/share/p/..."
+        className="w-full rounded-lg border border-border-subtle p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
       />
 
       {noLink && (
         <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 flex flex-col gap-1">
-          <p className="font-medium">還缺一個連結</p>
+          <p className="font-medium">這裡要放訊息的網址</p>
           <p>
             回報需要一個大家都點得開的網址，別人才能確認這則訊息真的在流傳。
-            如果你是在 LINE 上收到、沒有網址可以附，請改用{' '}
+            如果是在 LINE 上收到、沒有網址可以附，請改用{' '}
             <a
               href="https://line.me/R/ti/p/%40cofacts"
               target="_blank"
@@ -319,18 +317,24 @@ function ReportForm({
         </div>
       )}
 
+      {/*
+        Wording taken verbatim from the LINE bot's ReplyRequestForm
+        (rumors-line-bot src/liff/components/ReplyRequestForm.svelte, zh_TW).
+        Cofacts has asked this exact question for years; its own copy names who
+        reads the answer, which is what makes people write one.
+      */}
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-text-main">
-          你覺得哪裡可疑？
-        </span>
-        <span className="text-xs text-text-muted">
-          選填，但這句話是機器補不上的——它會告訴接手查核的志工，該從哪裡查起。
+          為了協助查證，請告訴闢謠志工：
+          <br />
+          為何您覺得這是謠言？
         </span>
         <textarea
           ref={reasonRef}
           value={reason}
           onChange={(e) => onReasonChange(e.target.value)}
-          rows={2}
+          rows={3}
+          placeholder="例：我用 OO 關鍵字查詢 Facebook，發現⋯⋯ / 我在 XX 官網上找到不一樣的說法如下⋯⋯"
           className="w-full rounded-lg border border-border-subtle p-3 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </label>
@@ -342,7 +346,7 @@ function ReportForm({
 
       <button
         type="submit"
-        disabled={busy || !text.trim()}
+        disabled={busy || !url.trim()}
         className="self-center px-6 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
       >
         回報此訊息
@@ -369,7 +373,7 @@ function CandidateView({
           有人回報過類似的訊息
         </h2>
         <p className="text-sm text-text-muted">
-          哪一則是你看到的？選錯了會多出一筆重複紀錄，所以看清楚再挑。
+          哪一則是剛才看到的訊息？選錯了會多出一筆重複紀錄，所以看清楚再挑。
         </p>
       </div>
       {candidates.map(({ node }) => (

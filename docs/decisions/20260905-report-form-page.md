@@ -59,24 +59,33 @@ the hardest things in option A to verify, none of which now exist.
 A receptionist becomes worth building again only if cofacts.ai ever opens a free-text entry
 point that is not this form.
 
-### A report must come with a link
+### The form takes a URL, and only a URL
 
 `ArticleReferenceInput` has only `LINE | URL`, so a Threads or WhatsApp forward filed without a
-link can only be labelled `LINE`, overstating how much of Cofacts came from LINE. Requiring a
-link removes that problem at this entry point instead of waiting for a new enum value.
+link can only be labelled `LINE`, overstating how much of Cofacts came from LINE. Accepting only
+a link removes that problem at this entry point instead of waiting for a new enum value.
 
 It is also an anti-abuse property, which is the better reason: a public link is what lets
 somebody other than the reporter confirm the message is really circulating. Nothing can be
-conjured into the database from memory. The cost is real and stated on the page: a pure LINE
-forward with no link cannot be reported here, and is sent to the LINE bot, which can take it.
+conjured into the database from memory.
 
-### Searching a bare link needs a different threshold from searching prose
+The input is a single URL field rather than a text area, because the first version offered a
+five-row box for pasted text and then quietly kept only the link out of it — inviting exactly
+the input it was about to discard. The URL is the article's `text` and its `reference.permalink`
+alike, one value that cannot drift, and rumors-api resolves the link at creation to fill in
+`hyperlinks.title/summary`, which is what a reader actually sees. Pasting prose along with a
+link still works: the link is kept and put back in the field, so the reporter sees what will be
+filed rather than having their words silently dropped.
 
-Sharing a Facebook post from Android arrives as `?text=<the link>` and nothing else — measured
-on a preview deployment — so a submission with no prose of the user's own is the normal case.
-rumors-api's `minimumShouldMatch` default of `10<70%` is tuned for prose: a URL tokenises into
-`https`, `www`, `facebook`, `com`, `share` and one unique id, and every Facebook link shares all
-but the last of those. Measured against `dev-api.cofacts.tw`:
+The cost is real and stated on the page: a pure LINE forward with no link cannot be reported
+here, and is sent to the LINE bot, which can take it.
+
+### Searching a link needs a different threshold from searching prose
+
+Every query from this page is a bare link, and rumors-api's `minimumShouldMatch` default of
+`10<70%` is tuned for prose: a URL tokenises into `https`, `www`, `facebook`, `com`, `share` and
+one unique id, and every Facebook link shares all but the last of those. Measured against
+`dev-api.cofacts.tw`:
 
 | query                              | minimumShouldMatch | result                                             |
 | ---------------------------------- | ------------------ | -------------------------------------------------- |
@@ -86,9 +95,9 @@ but the last of those. Measured against `dev-api.cofacts.tw`:
 | share link **in** the database     | 80%                | 50                                                 |
 | prose                              | default            | 1, the right one                                   |
 
-So the threshold switches on whether the submission is links only. A candidate list of
-confident-looking noise is worse than an empty one, because it invites the reporter to +1 a
-stranger's unrelated message.
+So the query is pinned at 90%, which asks the question actually being asked — has anyone posted
+this same link? A candidate list of confident-looking noise is worse than an empty one, because
+it invites the reporter to +1 a stranger's unrelated message.
 
 This is worth knowing about `ListArticles(moreLikeThis:)` generally: it already resolves the
 URLs in the query through url-resolver, folds the resulting title/summary into the `like` set,
@@ -115,6 +124,14 @@ cannot resolve, which is why the threshold still has to change.
   the existing one; only "都不是" splits them.
 - Neutral, because attachments are not accepted yet. `CreateMediaArticle` needs a URL rumors-api
   can fetch, and cofacts.ai's upload path produces only a private artifact.
+
+### The reason field uses the LINE bot's wording
+
+「為了協助查證，請告訴闢謠志工：為何您覺得這是謠言？」, with its example placeholder, is taken
+verbatim from `ReplyRequestForm` in rumors-line-bot. Cofacts has been asking exactly this
+question for years, and its own copy names who reads the answer — which is what gets one
+written. The first version of this page paraphrased it and read like an interface explaining
+itself.
 
 ## Confirmation
 

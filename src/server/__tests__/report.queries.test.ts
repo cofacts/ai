@@ -40,7 +40,7 @@ function lastCall(): { query: string; variables: Record<string, unknown> } {
 }
 
 describe('findSimilarReports', () => {
-  test('demands a near-exact match when the submission is only a link', async () => {
+  test('demands a near-exact match, because the query is always a link', async () => {
     // Measured on dev: at rumors-api's prose default this query returns 54
     // unrelated Facebook posts scoring an identical 225.5, because every share
     // link shares every token but the id. At 90% it returns the one right
@@ -55,16 +55,6 @@ describe('findSimilarReports', () => {
     expect(variables.minimumShouldMatch).toBe('90%')
     expect(variables.like).toBe('https://www.facebook.com/share/p/1HSNRpimmH/')
     expect(variables.first).toBe(5)
-  })
-
-  test('leaves prose to the default, which was tuned for prose', async () => {
-    mockedExec.mockResolvedValueOnce({
-      ListArticles: { totalCount: 0, edges: [] },
-    })
-
-    await findSimilarReports('後座沒綁安全帶罰六千 https://example.com/a')
-
-    expect(lastCall().variables.minimumShouldMatch).toBeNull()
   })
 
   test('returns the edges with their scores', async () => {
@@ -157,12 +147,11 @@ describe('recordFactCheckRequest', () => {
 })
 
 describe('fileArticleReport', () => {
-  test('files verbatim text with a URL reference', async () => {
+  test('files the link as both the article text and its reference', async () => {
     mockedExec.mockResolvedValueOnce({ CreateArticle: { id: 'new1' } })
 
     const result = await fileArticleReport({
-      text: '我媽傳這個 https://example.com/a',
-      permalink: 'https://example.com/a',
+      url: 'https://example.com/a',
       reason: '看起來像業配',
     })
 
@@ -171,9 +160,9 @@ describe('fileArticleReport', () => {
       articleUrl: 'https://dev.cofacts.tw/article/new1',
     })
     const { variables } = lastCall()
-    expect(variables.text).toBe('我媽傳這個 https://example.com/a')
-    // URL, never LINE: this entry point only takes messages that came with a
-    // link, so it never has to mislabel one.
+    expect(variables.text).toBe('https://example.com/a')
+    // URL, never LINE: this entry point only takes a link, so it never has to
+    // mislabel one.
     expect(variables.reference).toEqual({
       type: 'URL',
       permalink: 'https://example.com/a',
@@ -184,7 +173,7 @@ describe('fileArticleReport', () => {
     mockedAuth.mockRejectedValueOnce(new Error(AUTH_EXPIRED_MESSAGE))
 
     await expect(
-      fileArticleReport({ text: 'x', permalink: 'https://example.com/a' }),
+      fileArticleReport({ url: 'https://example.com/a' }),
     ).rejects.toThrowError(AUTH_EXPIRED_MESSAGE)
     expect(mockedExec).not.toHaveBeenCalled()
   })
@@ -192,7 +181,7 @@ describe('fileArticleReport', () => {
   test('does not report success when no id comes back', async () => {
     mockedExec.mockResolvedValueOnce({ CreateArticle: null })
     await expect(
-      fileArticleReport({ text: 'x', permalink: 'https://example.com/a' }),
+      fileArticleReport({ url: 'https://example.com/a' }),
     ).rejects.toThrowError(/article id/i)
   })
 })

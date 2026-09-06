@@ -21,7 +21,6 @@ import type {
   ReportOutcomeArticleQuery,
   SearchSuspiciousMessagesQuery,
 } from './gql/graphql'
-import { isJustLinks } from '@/lib/report'
 import { cofactsExec } from '@/lib/cofactsExec'
 
 /**
@@ -127,12 +126,12 @@ export interface SearchResult {
 const CANDIDATE_LIMIT = 5
 
 /**
- * How much of a bare pasted link has to match, when the submission is nothing
- * but a link.
+ * How much of the pasted link has to match.
  *
- * rumors-api's default (`10<70%`) is tuned for prose and is actively wrong here.
- * A URL tokenises into `https`, `www`, `facebook`, `com`, `share` and one
- * unique id, and every Facebook link shares all but the last of those — so on
+ * The report form only accepts a URL, so `like` is always a bare link — and
+ * rumors-api's default (`10<70%`) is tuned for prose and actively wrong for
+ * one. A URL tokenises into `https`, `www`, `facebook`, `com`, `share` and one
+ * unique id, and every Facebook link shares all but the last of those, so on
  * dev, searching for a share link nobody has reported returns 54 unrelated
  * Facebook posts, all scoring an identical 225.5. A candidate list of
  * confident-looking noise is worse than an empty one: it invites the reporter
@@ -142,8 +141,6 @@ const CANDIDATE_LIMIT = 5
  * question actually being asked — "has anyone posted this same link?" — and it
  * answers correctly in both directions: 1 hit for a link that is in the
  * database, 0 for one that is not. 80% is already back in the noise (50 hits).
- *
- * Prose is searched with the default, which is what it was tuned for.
  */
 const BARE_LINK_MIN_SHOULD_MATCH = '90%'
 
@@ -151,7 +148,7 @@ export async function findSimilarReports(like: string): Promise<SearchResult> {
   const data = await cofactsExec(SearchSuspiciousMessagesDocument, {
     like,
     first: CANDIDATE_LIMIT,
-    minimumShouldMatch: isJustLinks(like) ? BARE_LINK_MIN_SHOULD_MATCH : null,
+    minimumShouldMatch: BARE_LINK_MIN_SHOULD_MATCH,
   })
   const connection = data.ListArticles
   return {
@@ -201,10 +198,8 @@ export async function recordFactCheckRequest(
 }
 
 export interface CreateArticleReportInput {
-  /** Filed verbatim: what the reporter pasted, not a cleaned-up version. */
-  text: string
-  /** A link taken from `text`, so someone else can check the message exists. */
-  permalink: string
+  /** Where the message is circulating. Also the article's own text. */
+  url: string
   reason?: string
 }
 
@@ -213,12 +208,14 @@ export async function fileArticleReport(
 ): Promise<{ articleId: string; articleUrl: string }> {
   await resolveAdkUserIdOrThrow()
   const result = await cofactsExec(CreateArticleReportDocument, {
-    text: input.text,
-    // Always URL. This entry point only accepts messages that arrive with a
-    // link, so every report it files can be described honestly — it never hits
-    // the missing enum value that forces other non-LINE sources to be
-    // labelled LINE.
-    reference: { type: 'URL', permalink: input.permalink },
+    // The URL is the article body and the reference alike — one value, so the
+    // two cannot drift apart. rumors-api resolves the link at creation and
+    // fills in `hyperlinks.title/summary`, which is what a reader sees.
+    text: input.url,
+    // Always URL. This entry point only accepts a link, so every report it
+    // files can be described honestly — it never hits the missing enum value
+    // that forces other non-LINE sources to be labelled LINE.
+    reference: { type: 'URL', permalink: input.url },
     reason: input.reason?.trim() || null,
   })
   const articleId = result.CreateArticle?.id
