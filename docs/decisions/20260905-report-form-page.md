@@ -10,11 +10,16 @@ consulted: Cofacts working group, Cofacts designer
 ## Context and Problem Statement
 
 Cofacts' LINE bot has seen a long decline in queries without a matching decline in newly
-reported messages: generative AI now answers "is this true?" on the spot, but nothing answers
-"I saw something strange and want people to know it is circulating". The strategy that follows
-is to make cofacts.ai a place to **report**, not only a place to check — it is the only front
-end still under active development that already has login, a chat UI, and access to the Cofacts
-database.
+reported messages — an observation from the working group's own
+[2026-08-04 meeting](https://github.com/cofacts/kb/blob/main/src/meetings/2026/20260804.md#cofactsai)
+(cofacts/kb): request counts were falling while new-article counts were not, and the meeting's
+proposal was exactly this — report suspicious messages through cofacts.ai. That observation
+traces back to research in
+[Cofacts 擴大社群策略](https://docs.google.com/document/d/1N7224PVdAqGXeQAXUawIfZVF0MkWu-ANyw9W-9Q0OkA/edit).
+Generative AI now answers "is this true?" on the spot, but nothing answers "I saw something
+strange and want people to know it is circulating". The strategy that follows is to make
+cofacts.ai a place to **report**, not only a place to check — it is the only front end still
+under active development that already has login, a chat UI, and access to the Cofacts database.
 
 The blocker was `ai_writer`. As the root agent its prompt opens with "Users should ALWAYS
 provide a Cofacts suspicious message URL", so pasting a Threads link got the user told to go
@@ -149,11 +154,14 @@ itself.
 
 ## More Information
 
-- Driving design doc: 可疑訊息回報：cofacts.ai 作為回報入口 in
-  [cofacts/kb](https://github.com/cofacts/kb/pull/16) — background, the mailbox categories
-  A–H, the `reference` enum gap (§6.3), LINE-bot drainage (§9) and the heat-metric analysis
-  (§10). It describes the conversational flow (option A), which this record supersedes for the
-  reporting path.
+- Driving design doc: 可疑訊息回報：cofacts.ai 作為回報入口,
+  [cofacts/kb#16](https://github.com/cofacts/kb/pull/16) — **closed, not merged**; MrOrz closed
+  it as
+  ["superseded by design decision in ai#138"](https://github.com/cofacts/kb/pull/16#issuecomment-5604875201),
+  i.e. this record. Its branch still holds the file for reference. Background, the mailbox
+  categories A–H, the `reference` enum gap (§6.3), LINE-bot drainage (§9) and the heat-metric
+  analysis (§10). It describes the conversational flow (option A), which this record supersedes
+  for the reporting path. Sourced from the same upstream research and meeting cited above.
 - Option A as built: [#130](https://github.com/cofacts/ai/pull/130), which carries its own
   decision record on that branch. Nothing is superseded here, because it never landed on
   `master`.
