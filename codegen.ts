@@ -12,6 +12,12 @@ const config: CodegenConfig = {
     },
   },
   ignoreNoDocuments: true,
+  // `pnpm exec prettier --check .` covers src/server/gql, and codegen's own
+  // output does not match our config — so format it here rather than leaving
+  // every regeneration to fail lint until someone notices.
+  hooks: {
+    afterAllFileWrite: ['prettier --write'],
+  },
 }
 
 export default config

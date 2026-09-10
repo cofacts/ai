@@ -10,7 +10,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 interface HeaderProps {
-  onToggleSidebar: () => void
+  /**
+   * Omitted on pages that have no sidebar to toggle (the report form), which
+   * also hides the hamburger rather than leaving a button that does nothing.
+   */
+  onToggleSidebar?: () => void
 }
 
 export function Header({ onToggleSidebar }: HeaderProps) {
@@ -20,12 +24,14 @@ export function Header({ onToggleSidebar }: HeaderProps) {
     <header className="h-14 md:h-16 bg-white border-b border-border-subtle flex items-center justify-between px-4 shrink-0 z-30 relative shadow-sm">
       <div className="flex items-center gap-4 md:gap-6">
         {/* Mobile hamburger */}
-        <button
-          onClick={onToggleSidebar}
-          className="p-2 -ml-2 text-text-muted hover:text-text-main md:hidden"
-        >
-          <span className="material-symbols-outlined">menu</span>
-        </button>
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="p-2 -ml-2 text-text-muted hover:text-text-main md:hidden"
+          >
+            <span className="material-symbols-outlined">menu</span>
+          </button>
+        )}
 
         {/* Logo */}
         <a className="flex items-center gap-2" href="/">
