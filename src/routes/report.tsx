@@ -60,7 +60,7 @@ export const Route = createFileRoute('/report')({
 
 /** What the reporter ends up looking at. */
 type Outcome =
-  | { kind: 'created'; articleUrl: string }
+  | { kind: 'created'; articleUrl: string; repliesUrl: string }
   | {
       kind: 'matched'
       articleUrl: string
@@ -68,12 +68,6 @@ type Outcome =
       /** True when we added their +1 because nobody had answered it yet. */
       requested: boolean
     }
-
-/** `https://dev.cofacts.tw/article/xyz` -> `https://dev.cofacts.tw`. */
-function siteBaseFrom(articleUrl: string): string {
-  const at = articleUrl.indexOf('/article/')
-  return at === -1 ? articleUrl : articleUrl.slice(0, at)
-}
 
 function ReportPage() {
   const search = Route.useSearch()
@@ -104,20 +98,20 @@ function ReportPage() {
       submitted: string,
     ): Promise<
       | { kind: 'candidates'; candidates: Array<SearchCandidate> }
-      | { kind: 'created'; articleUrl: string }
+      | { kind: 'created'; articleUrl: string; repliesUrl: string }
     > => {
       const result = await searchSuspiciousMessages({ data: submitted })
       if (result.candidates.length > 0) {
         return { kind: 'candidates', candidates: result.candidates }
       }
-      const created = await createArticleReport({
+      const { articleUrl, repliesUrl } = await createArticleReport({
         data: { url: submitted, reason },
       })
-      return { kind: 'created', articleUrl: created.articleUrl }
+      return { kind: 'created', articleUrl, repliesUrl }
     },
     onSuccess: (result) => {
       if (result.kind === 'candidates') setCandidates(result.candidates)
-      else setOutcome({ kind: 'created', articleUrl: result.articleUrl })
+      else setOutcome(result)
     },
   })
 
@@ -137,7 +131,8 @@ function ReportPage() {
 
   const fileNew = useMutation({
     mutationFn: () => createArticleReport({ data: { url, reason } }),
-    onSuccess: ({ articleUrl }) => setOutcome({ kind: 'created', articleUrl }),
+    onSuccess: ({ articleUrl, repliesUrl }) =>
+      setOutcome({ kind: 'created', articleUrl, repliesUrl }),
   })
 
   // Hands the article to ai_writer the way it already expects to receive one —
@@ -409,15 +404,13 @@ function OutcomeView({
   onStartOver: () => void
   busy: boolean
 }) {
-  const site = siteBaseFrom(outcome.articleUrl)
-
   if (outcome.kind === 'created') {
     return (
       <OutcomeShell
         title="感謝回報，你是第一個發現他的！"
         subtitle="資料庫裡沒有相符的紀錄，這則訊息已經收進來，等待查核。"
         primary={{ label: '與 Cofacts AI 討論', onClick: onDiscuss, busy }}
-        secondaryHref={`${site}/replies`}
+        secondaryHref={outcome.repliesUrl}
         secondaryLabel="看看最新查核"
         onStartOver={onStartOver}
       />

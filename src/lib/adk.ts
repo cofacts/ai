@@ -155,41 +155,13 @@ export type AllTools = {
       article?: CofactsArticle | null
     }
   }
-  search_cofacts_database: {
-    args: {
-      query?: string
-      article_ids?: Array<string>
-      limit?: number
-      after?: string
-      reply_count_max?: number
-      days_back?: number
-      order_by?: string
-    }
-    resp:
-      | {
-          data: {
-            totalCount: number
-            // Cursors are opaque strings, and null on an empty result set.
-            pageInfo: {
-              firstCursor: string | null
-              lastCursor: string | null
-            }
-            edges: Array<{
-              node: CofactsArticle
-              score: number
-              cursor: string
-            }>
-          }
-        }
-      | { error: string }
-  }
 }
 
 /**
  * One Cofacts article as the agent's tools return it — the `COMMON_ARTICLE_FIELDS`
  * fragment in `adk/cofacts_ai/tools.py`, narrowed to the fields the UI reads.
- * Shared by `get_single_cofacts_article` and `search_cofacts_database`, which
- * select the same fragment.
+ * Selected by `get_single_cofacts_article`, and extracted so RightDrawer can
+ * name the shape it renders.
  */
 export type CofactsArticle = {
   id: string

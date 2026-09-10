@@ -47,3 +47,8 @@ export function getSiteBase(): string {
 export function getArticleUrl(articleId: string): string {
   return `${getSiteBase()}/article/${articleId}`
 }
+
+/** Where the newest fact-checks are listed, for a reporter with time to read. */
+export function getRepliesUrl(): string {
+  return `${getSiteBase()}/replies`
+}

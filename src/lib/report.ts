@@ -37,38 +37,32 @@ export interface ReportSearch {
  * ("看看這個 https://example.com/a。") would otherwise absorb the full stop and
  * stop resolving.
  */
-const URL_RE = /https?:\/\/[^\s<>"']+/g
+const URL_RE = /https?:\/\/[^\s<>"']+/
 
 /** Sentence punctuation that cannot be the last character of a shared link. */
 const TRAILING_PUNCT = /[.,;:!?。，、；：！？)\]}）】》」』]+$/
 
-function firstUrl(...candidates: Array<string | undefined>): string | null {
-  for (const candidate of candidates) {
-    if (!candidate) continue
-    const matches = candidate.match(URL_RE)
-    if (!matches) continue
-    for (const match of matches) {
-      const cleaned = match.replace(TRAILING_PUNCT, '')
-      if (cleaned) return cleaned
-    }
-  }
-  return null
-}
-
 /**
- * The first http(s) URL in a block of text, or null when there is none.
+ * The first http(s) URL across the given candidates, or null when there is none.
  *
  * The report form needs one. An article has to point at something anyone can
  * open — that is what makes "this message is really circulating" checkable by
  * someone other than the reporter — and `ArticleReferenceInput` has no honest
  * value for "typed from memory" anyway.
  */
-export function findFirstUrl(text: string): string | null {
-  return firstUrl(text)
+export function findFirstUrl(
+  ...candidates: Array<string | undefined>
+): string | null {
+  for (const candidate of candidates) {
+    const match = candidate?.match(URL_RE)
+    // Every match starts with `http`, so trimming trailing punctuation can
+    // never empty it — the first match is the answer.
+    if (match) return match[0].replace(TRAILING_PUNCT, '')
+  }
+  return null
 }
 
 /** The shared link, wherever the sending app decided to put it. */
 export function findSharedUrl(search: ReportSearch | undefined): string | null {
-  if (!search) return null
-  return firstUrl(search.url, search.text)
+  return findFirstUrl(search?.url, search?.text)
 }

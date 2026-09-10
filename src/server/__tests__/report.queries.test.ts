@@ -158,6 +158,7 @@ describe('fileArticleReport', () => {
     expect(result).toEqual({
       articleId: 'new1',
       articleUrl: 'https://dev.cofacts.tw/article/new1',
+      repliesUrl: 'https://dev.cofacts.tw/replies',
     })
     const { variables } = lastCall()
     expect(variables.text).toBe('https://example.com/a')
