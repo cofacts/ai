@@ -395,9 +395,16 @@ async def inject_resolved_url_content(
 
     try:
         urls, target_content = _extract_web_urls(llm_request)
-        urls = [url for url in urls if not _url_already_injected(llm_request, url)]
         if not urls or target_content is None or target_content.parts is None:
             return None
+        # URLs whose parts are already in the request from an earlier model
+        # call this turn. They must not be injected twice -- but they still
+        # have to re-enter resolved_meta below, or the final call of the turn
+        # would report only url_context's grounding and silently drop every
+        # page the resolver fetched from `sources`.
+        already_injected = {
+            url for url in urls if _url_already_injected(llm_request, url)
+        }
 
         resolved_meta: dict[str, dict] = {}
         injected_parts: list[genai_types.Part] = []
@@ -418,11 +425,19 @@ async def inject_resolved_url_content(
                 text, title, canonical = _decode_resolved_artifact(
                     cached.inline_data.data
                 )
+                if url in already_injected:
+                    # Meta only: the [RESOLVED PAGE] part is already there.
+                    resolved_meta[url] = {
+                        "status": ResolveStatus.RESOLVED.value,
+                        "title": title or url,
+                        "canonical": canonical,
+                    }
+                    continue
                 full_texts[url] = text
                 lengths[url] = len(text)
                 titles[url] = title or url
                 canonicals[url] = canonical
-            else:
+            elif url not in already_injected:
                 to_fetch.append(url)
 
         if to_fetch:
@@ -539,9 +554,8 @@ async def inject_resolved_url_content(
                 )
             )
 
-        if not injected_parts:
-            return None
-        target_content.parts = list(target_content.parts) + injected_parts
+        if injected_parts:
+            target_content.parts = list(target_content.parts) + injected_parts
         # Unconditional: an empty dict is the correct answer when this call
         # resolved nothing, and must not leave the pre-call value standing.
         callback_context.state[RESOLVED_META_STATE_KEY] = resolved_meta

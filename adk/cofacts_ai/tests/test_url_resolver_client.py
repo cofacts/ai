@@ -16,6 +16,7 @@ a resolver outage must not falsely brand good links as dead), and each
 RESOLVER_CANT_FETCH (resolver limitation, url_context may still succeed).
 """
 
+import os
 from unittest.mock import AsyncMock, patch
 
 import grpc
@@ -145,10 +146,9 @@ class TestResolveUrlsHappyPath:
             ]
         )
         p1, p2 = patched_client(call)
-        with p1, p2:
+        with p1, p2, patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "2"}):
             results = await resolve_urls(
-                ["https://a.com", "https://a.com", "https://b.com", "https://c.com"],
-                max_urls=2,
+                ["https://a.com", "https://a.com", "https://b.com", "https://c.com"]
             )
 
         assert [r.url for r in results] == ["https://a.com", "https://b.com"]

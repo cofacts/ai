@@ -228,17 +228,6 @@ class TestInjectResolvedUrlContent:
         # TestResolvedMetaDoesNotLeakAcrossCalls).
         assert context.state[RESOLVED_META_STATE_KEY] == {}
 
-    async def test_youtube_url_excluded_from_resolution(self):
-        request = make_request(user_text("https://youtu.be/abc123"))
-        context = make_context()
-        resolve_mock = AsyncMock(return_value=[])
-
-        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
-            await inject_resolved_url_content(context, request)
-
-        resolve_mock.assert_not_called()
-        assert text_parts(request.contents[0]) == ["https://youtu.be/abc123"]
-
     async def test_cofacts_media_url_excluded_from_resolution(self):
         url = "https://storage.googleapis.com/cofacts-media-collection/production/video/x/original"
         request = make_request(user_text(url))
@@ -266,33 +255,6 @@ class TestInjectResolvedUrlContent:
         # duplicate part appended.
         resolve_mock.assert_awaited_once()
         assert request.contents[0].parts == parts_after_first
-
-    async def test_second_call_reuses_artifact_cache_not_network(self):
-        request1 = make_request(user_text("https://good.com"))
-        store = FakeArtifactStore()
-        context1 = make_context(store)
-        resolve_mock = AsyncMock(
-            return_value=[resolved("https://good.com", title="Cached Title")]
-        )
-
-        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
-            await inject_resolved_url_content(context1, request1)
-
-        # A brand new request/session-turn context sharing the same artifact
-        # store (simulating a later turn in the same session) should hit the
-        # cache instead of calling resolve_urls again.
-        request2 = make_request(user_text("https://good.com"))
-        context2 = make_context(store)
-        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
-            await inject_resolved_url_content(context2, request2)
-
-        resolve_mock.assert_awaited_once()
-        [part] = [
-            t
-            for t in text_parts(request2.contents[0])
-            if t.startswith("[RESOLVED PAGE]")
-        ]
-        assert "Cached Title" in part
 
     async def test_no_urls_in_request_is_a_noop(self):
         request = make_request(user_text("沒有連結的訊息"))
@@ -508,7 +470,9 @@ class TestUrlExtraction:
 
     def test_youtube_and_cofacts_media_are_still_excluded(self):
         assert self.urls(
-            "https://www.youtube.com/watch?v=abc123 和 https://example.com/x"
+            "https://www.youtube.com/watch?v=abc123 和 "
+            "https://storage.googleapis.com/cofacts-media-collection/production/"
+            "video/x/original 和 https://example.com/x"
         ) == ["https://example.com/x"]
 
 
@@ -552,6 +516,38 @@ class TestResolvedMetaDoesNotLeakAcrossCalls:
             await inject_resolved_url_content(context, request)
 
         assert context.state[RESOLVED_META_STATE_KEY] == {}
+
+    async def test_second_model_call_keeps_meta_for_already_injected_urls(self):
+        """Regression: clearing the key must not erase what the turn read.
+
+        The callbacks re-run on every model call of a turn, and the 2nd call
+        already has the [RESOLVED PAGE] parts in the rebuilt request. Skipping
+        those URLs entirely left the key empty on the call that produces the
+        final response, so append_verifier_sources emitted only url_context
+        grounding -- dropping every resolver-fetched page from `sources`.
+        """
+        store = FakeArtifactStore()
+        request = make_request(user_text("https://good.com"))
+        resolve_mock = AsyncMock(
+            return_value=[resolved("https://good.com", title="Cached Title")]
+        )
+        context = make_context(store)
+
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
+            await inject_resolved_url_content(context, request)
+            first_meta = dict(context.state[RESOLVED_META_STATE_KEY])
+            parts_after_first = list(request.contents[0].parts or [])
+
+            # 2nd model call of the same turn: same request, state carried over.
+            await inject_resolved_url_content(context, request)
+
+        resolve_mock.assert_awaited_once()  # served from the artifact cache
+        assert request.contents[0].parts == parts_after_first  # no duplicates
+        assert context.state[RESOLVED_META_STATE_KEY] == first_meta
+        assert (
+            context.state[RESOLVED_META_STATE_KEY]["https://good.com"]["title"]
+            == "Cached Title"
+        )
 
     async def test_exception_path_does_not_inherit_previous_meta(self):
         context = make_context(state=dict(self.STALE))

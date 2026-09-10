@@ -124,17 +124,11 @@ def _reply_to_resolved_url(reply: url_resolver_pb2.UrlReply) -> ResolvedUrl:
     )
 
 
-async def resolve_urls(
-    urls: list[str],
-    *,
-    address: Optional[str] = None,
-    max_urls: Optional[int] = None,
-    timeout: Optional[float] = None,
-) -> list[ResolvedUrl]:
+async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
     """Resolves each URL to its cleaned main body text via url-resolver.
 
-    Dedups and caps `urls` to `max_urls` (preserving order), then streams
-    `ResolveUrl` replies and joins them back to the request by `reply.url`
+    Dedups and caps `urls` to `URL_RESOLVER_MAX_URLS` (preserving order), then
+    streams `ResolveUrl` replies and joins them back to the request by `reply.url`
     (the server stream is not guaranteed to preserve request order). Any
     requested URL not answered by the time the stream ends is `TIMEOUT`. If
     the whole call fails before any reply arrives (resolver down/unreachable),
@@ -144,11 +138,9 @@ async def resolve_urls(
 
     `html` is never read off the reply — it must never reach an LLM.
     """
-    address = address or os.environ.get("URL_RESOLVER_ADDRESS", DEFAULT_ADDRESS)
-    max_urls = max_urls or int(
-        os.environ.get("URL_RESOLVER_MAX_URLS", DEFAULT_MAX_URLS)
-    )
-    timeout = timeout or float(os.environ.get("URL_RESOLVER_TIMEOUT", DEFAULT_TIMEOUT))
+    address = os.environ.get("URL_RESOLVER_ADDRESS", DEFAULT_ADDRESS)
+    max_urls = int(os.environ.get("URL_RESOLVER_MAX_URLS", DEFAULT_MAX_URLS))
+    timeout = float(os.environ.get("URL_RESOLVER_TIMEOUT", DEFAULT_TIMEOUT))
 
     deduped_urls: list[str] = []
     seen = set()
