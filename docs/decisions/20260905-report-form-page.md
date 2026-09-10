@@ -147,8 +147,6 @@ itself.
   every deployment points at `dev-api.cofacts.tw`, so a `cofacts.tw` link would 404.
 - `src/lib/__tests__/report.test.ts` covers the share-sheet payload shapes, including the real
   Facebook-on-Android one, and the link-required predicate.
-- The manifest, the icon links and the four icon files were checked against a running dev
-  server, not just read.
 - Not covered by tests: the outcome screens themselves. This repo has no React component test
   harness, and standing one up was out of scope here.
 
