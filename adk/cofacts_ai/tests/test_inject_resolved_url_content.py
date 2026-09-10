@@ -266,7 +266,13 @@ class TestInjectResolvedUrlContent:
             await inject_resolved_url_content(context, second)
 
         resolve_mock.assert_awaited_once()  # served from the artifact cache
-        assert text_parts(second.contents[0]) == text_parts(first.contents[0])
+        # Pin the content, not just that the two calls agree: comparing the
+        # requests to each other alone would still pass if injection stopped
+        # entirely, since both would then hold the bare user text.
+        second_parts = text_parts(second.contents[0])
+        assert second_parts == text_parts(first.contents[0])
+        assert len(second_parts) == 2
+        assert second_parts[1].startswith("[RESOLVED PAGE] https://good.com\n")
 
     async def test_unparsable_char_budget_raises(self):
         """A misconfigured budget is our bug, not a resolver outage, so it must
