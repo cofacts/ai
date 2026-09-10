@@ -324,13 +324,14 @@ investigator-originated ones downstream while keeping each agent's role intact.
 
 ## Confirmation
 
-- 33 new unit tests across three files (65 in the suite, all passing), network-free by faking the
+- 59 new unit tests across four files (148 in the suite, all passing), network-free by faking the
   gRPC channel/stub and the artifact store. They pin the invariants that matter rather than the
   implementation: `html` never leaves the client; results join by URL, not stream order; each
   `ResolveError` value lands in the right bucket; a transport failure marks every URL
-  `RESOLVER_UNAVAILABLE` and **never** `DEAD`; `RESOLVER_CANT_FETCH` injects nothing; the
-  callback is idempotent across a turn and hits the artifact cache on a second turn; and a dead
-  URL never appears in `sources` while a `url_context`-grounded PDF still does.
+  `RESOLVER_UNAVAILABLE` and **never** `DEAD`; `RESOLVER_CANT_FETCH` injects nothing; a
+  misconfigured char budget raises rather than degrading to url_context-only; the second model
+  call of a turn re-injects the page but is served from the artifact cache, not the network; and a
+  dead URL never appears in `sources` while a `url_context`-grounded PDF still does.
 - `ruff check`, `ruff format --check` and `ty check` clean; protoc-generated stubs are excluded
   from both via `pyproject.toml`.
 - Still open: the end-to-end check against a live url-resolver (Docker on `:4000`) confirming a

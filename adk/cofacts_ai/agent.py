@@ -188,12 +188,24 @@ async def append_verifier_sources(
         return None
 
     resolved_meta = callback_context.state.get(RESOLVED_META_STATE_KEY) or {}
-    sources_list = [
-        {"title": meta.get("title") or url, "url": meta.get("canonical") or url}
-        for url, meta in resolved_meta.items()
-        if meta.get("status") == ResolveStatus.RESOLVED.value
-    ]
-    seen_urls = {s["url"] for s in sources_list}
+    sources_list = []
+    seen_urls: set[str] = set()
+    for url, meta in resolved_meta.items():
+        if meta.get("status") != ResolveStatus.RESOLVED.value:
+            continue
+        canonical = meta.get("canonical")
+        sources_list.append(
+            {"title": meta.get("title") or url, "url": canonical or url}
+        )
+        # Claim BOTH identities of the page, not just the one being listed:
+        # url_context keys its grounding chunks by the URL that was requested,
+        # while a resolved page is listed under its canonical. Registering only
+        # the canonical lets a page that redirects -- or declares a different
+        # canonical -- come back through the loop below and enter `sources` a
+        # second time under its requested URL.
+        seen_urls.add(url)
+        if canonical:
+            seen_urls.add(canonical)
 
     metadata = llm_response.grounding_metadata
     chunks = metadata.grounding_chunks if metadata else None

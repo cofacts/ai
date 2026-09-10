@@ -123,6 +123,37 @@ class TestAppendVerifierSources:
         assert len(sources) == 1
         assert sources[0]["title"] == "Resolver Title"
 
+    async def test_dedups_when_canonical_differs_from_requested_url(self):
+        """One page, one entry -- even when the two paths name it differently.
+
+        The resolver lists a page under its canonical, while url_context keys
+        its grounding chunks by the URL that was requested. A page that
+        redirects (or declares a different canonical) is the same page under
+        two names, and must not be presented to a reader as two sources.
+        """
+        context = make_context(
+            {
+                "https://a.com/?utm_source=line": {
+                    "status": "resolved",
+                    "title": "Resolver Title",
+                    "canonical": "https://a.com/article",
+                }
+            }
+        )
+        response = make_response(
+            grounding_chunks=[
+                web_chunk("https://a.com/?utm_source=line", "Grounding Title")
+            ]
+        )
+
+        result = await append_verifier_sources(context, response)
+
+        assert result is not None
+        sources = sources_of(result)
+        assert len(sources) == 1
+        assert sources[0]["url"] == "https://a.com/article"
+        assert sources[0]["title"] == "Resolver Title"
+
     async def test_wraps_response_even_without_grounding_metadata(self):
         # A lazy/misbehaving model that skipped url_context should not also
         # lose the deterministically-fetched resolver sources.

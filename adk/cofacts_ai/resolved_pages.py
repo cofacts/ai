@@ -334,26 +334,6 @@ def _extract_web_urls(
     return urls, target_content
 
 
-def _url_already_injected(llm_request: LlmRequest, url: str) -> bool:
-    """True if a [RESOLVED PAGE]/[LINK NOT FOUND]/[NOTE] part for this URL is
-    already present anywhere in the request. The verifier's before_model
-    callbacks re-run on every model call in a turn (the request is rebuilt
-    from conversation history each time), so without this check we'd
-    re-inject the same page text on every call — mirrors the `seen` dedup in
-    inject_cofacts_media_filedata."""
-    markers = (
-        f"{_RESOLVED_PAGE_PREFIX}{url}\n",
-        f"{_ARCHIVED_PAGE_PREFIX}{url}\n",
-        f"{_LINK_NOT_FOUND_PREFIX}{url}:",
-        f"{_RESOLVER_CANT_FETCH_PREFIX}{url} (",
-    )
-    for content in llm_request.contents:
-        for part in content.parts or []:
-            if part.text and part.text.startswith(markers):
-                return True
-    return False
-
-
 async def inject_resolved_url_content(
     callback_context: CallbackContext, llm_request: LlmRequest
 ) -> None:
@@ -376,6 +356,15 @@ async def inject_resolved_url_content(
     UI-visible record of exactly what the system was able to read. Only
     successfully resolved text is cached; dead/unfetchable results are cheap
     to re-attempt and are not persisted.
+
+    Every model call of a turn re-injects, by design. ADK rebuilds
+    `llm_request.contents` from session events with `copy.deepcopy`
+    (flows/llm_flows/contents.py), so parts appended here mutate the request
+    only and are gone by the next call — the page text has to be re-sent or
+    the call that writes the final answer would not have it. Deduping against
+    the request cannot work for the same reason, and deduping against state
+    would starve exactly that last call. The artifact cache keeps this from
+    costing a re-fetch; it does cost re-sent tokens.
     """
     # Clear first, so every exit below -- the early returns, the `except`, and
     # the normal path -- leaves this key describing only the current call.
@@ -393,30 +382,33 @@ async def inject_resolved_url_content(
     # the after-model callback, which cannot see the injected request parts.
     callback_context.state[RESOLVED_META_STATE_KEY] = {}
 
+    urls, target_content = _extract_web_urls(llm_request)
+    if not urls or target_content is None or target_content.parts is None:
+        return None
+
+    # Parsed up front, outside the guard below: a malformed
+    # URL_RESOLVER_TOTAL_CHAR_BUDGET is a misconfiguration and should crash
+    # loudly, not read as "this message had no links".
+    budget = int(
+        os.environ.get("URL_RESOLVER_TOTAL_CHAR_BUDGET", _DEFAULT_TOTAL_CHAR_BUDGET)
+    )
+
+    resolved_meta: dict[str, dict] = {}
+    injected_parts: list[genai_types.Part] = []
+    archived: dict[str, dict] = {}
+    cofacts_links = callback_context.state.get(COFACTS_HYPERLINKS_STATE_KEY) or {}
+    if not isinstance(cofacts_links, dict):
+        cofacts_links = {}
+    lengths: dict[str, int] = {}
+    full_texts: dict[str, str] = {}
+    titles: dict[str, str] = {}
+    canonicals: dict[str, Optional[str]] = {}
+
+    # Only the network call and artifact I/O are guarded. A resolver
+    # outage must degrade to url_context rather than fail the turn, but a
+    # bug in extraction, budgeting or part assembly is ours and must be
+    # visible instead of masquerading as a message with no links.
     try:
-        urls, target_content = _extract_web_urls(llm_request)
-        if not urls or target_content is None or target_content.parts is None:
-            return None
-        # URLs whose parts are already in the request from an earlier model
-        # call this turn. They must not be injected twice -- but they still
-        # have to re-enter resolved_meta below, or the final call of the turn
-        # would report only url_context's grounding and silently drop every
-        # page the resolver fetched from `sources`.
-        already_injected = {
-            url for url in urls if _url_already_injected(llm_request, url)
-        }
-
-        resolved_meta: dict[str, dict] = {}
-        injected_parts: list[genai_types.Part] = []
-        archived: dict[str, dict] = {}
-        cofacts_links = callback_context.state.get(COFACTS_HYPERLINKS_STATE_KEY) or {}
-        if not isinstance(cofacts_links, dict):
-            cofacts_links = {}
-        lengths: dict[str, int] = {}
-        full_texts: dict[str, str] = {}
-        titles: dict[str, str] = {}
-        canonicals: dict[str, Optional[str]] = {}
-
         to_fetch: list[str] = []
         for url in urls:
             filename = _resolved_artifact_filename(url)
@@ -425,22 +417,11 @@ async def inject_resolved_url_content(
                 text, title, canonical = _decode_resolved_artifact(
                     cached.inline_data.data
                 )
-                if url in already_injected:
-                    # Meta only: the [RESOLVED PAGE] part is already there.
-                    # A cache hit precedes the fetch, so a URL with an artifact
-                    # cannot also have produced a [LINK NOT FOUND]/[NOTE] marker
-                    # in this session -- the hit is always the resolved one.
-                    resolved_meta[url] = {
-                        "status": ResolveStatus.RESOLVED.value,
-                        "title": title or url,
-                        "canonical": canonical,
-                    }
-                    continue
                 full_texts[url] = text
                 lengths[url] = len(text)
                 titles[url] = title or url
                 canonicals[url] = canonical
-            elif url not in already_injected:
+            else:
                 to_fetch.append(url)
 
         if to_fetch:
@@ -504,66 +485,62 @@ async def inject_resolved_url_content(
                     # this stays silent on purpose: a resolver hiccup must never
                     # be mistaken for proof that a URL is dead.
                     _stage_archived(r.url, cofacts_links, archived, lengths)
-
-        budget = int(
-            os.environ.get("URL_RESOLVER_TOTAL_CHAR_BUDGET", _DEFAULT_TOTAL_CHAR_BUDGET)
-        )
-        allocation = _water_fill(lengths, budget)
-        for url, full_text in full_texts.items():
-            allowed = allocation.get(url, len(full_text))
-            truncated = allowed < len(full_text)
-            body = full_text if not truncated else full_text[:allowed]
-            text = f"{_RESOLVED_PAGE_PREFIX}{url}\nTITLE: {titles[url]}\n---\n{body}"
-            if truncated:
-                text += (
-                    f"\n---(truncated from {len(full_text)} chars; full text "
-                    f"in artifact {_resolved_artifact_filename(url)})"
-                )
-            injected_parts.append(genai_types.Part(text=text))
-            resolved_meta[url] = {
-                "status": ResolveStatus.RESOLVED.value,
-                "title": titles[url],
-                "canonical": canonicals[url],
-            }
-
-        # Archived copies share the same char budget -- they cost the same
-        # context as a fresh page -- but are rendered under their own marker and
-        # are POINTEDLY ABSENT from resolved_meta. That omission is the safety
-        # property: resolved_meta is what append_verifier_sources turns into
-        # `sources`, so a page nobody could fetch this turn can never be
-        # presented to a reader as a source the verifier read.
-        for url, entry in archived.items():
-            full_text = entry["summary"]
-            allowed = allocation.get(url, len(full_text))
-            body = full_text if allowed >= len(full_text) else full_text[:allowed]
-            fetched = entry.get("fetchedAt")
-            when = (
-                f"on {fetched[:10]}"
-                if isinstance(fetched, str)
-                else "at some earlier date"
-            )
-            injected_parts.append(
-                genai_types.Part(
-                    text=(
-                        f"{_ARCHIVED_PAGE_PREFIX}{url}\n"
-                        f"TITLE: {entry.get('title') or url}\n"
-                        f"url-resolver could not reach this page just now. The text "
-                        f"below is what Cofacts crawled {when}, NOT what the page "
-                        f"says today — it may have changed or gone. Use it as "
-                        f"background only: do not treat it as confirmation that "
-                        f"this link currently supports a claim, and prefer "
-                        f"url_context if that can still read the page.\n---\n{body}"
-                    )
-                )
-            )
-
-        if injected_parts:
-            target_content.parts = list(target_content.parts) + injected_parts
-        # Unconditional: an empty dict is the correct answer when this call
-        # resolved nothing, and must not leave the pre-call value standing.
-        callback_context.state[RESOLVED_META_STATE_KEY] = resolved_meta
     except Exception:
         logger.exception(
             "inject_resolved_url_content failed; skipping url-resolver injection"
         )
+        return None
+
+    allocation = _water_fill(lengths, budget)
+    for url, full_text in full_texts.items():
+        allowed = allocation.get(url, len(full_text))
+        truncated = allowed < len(full_text)
+        body = full_text if not truncated else full_text[:allowed]
+        text = f"{_RESOLVED_PAGE_PREFIX}{url}\nTITLE: {titles[url]}\n---\n{body}"
+        if truncated:
+            text += (
+                f"\n---(truncated from {len(full_text)} chars; full text "
+                f"in artifact {_resolved_artifact_filename(url)})"
+            )
+        injected_parts.append(genai_types.Part(text=text))
+        resolved_meta[url] = {
+            "status": ResolveStatus.RESOLVED.value,
+            "title": titles[url],
+            "canonical": canonicals[url],
+        }
+
+    # Archived copies share the same char budget -- they cost the same
+    # context as a fresh page -- but are rendered under their own marker and
+    # are POINTEDLY ABSENT from resolved_meta. That omission is the safety
+    # property: resolved_meta is what append_verifier_sources turns into
+    # `sources`, so a page nobody could fetch this turn can never be
+    # presented to a reader as a source the verifier read.
+    for url, entry in archived.items():
+        full_text = entry["summary"]
+        allowed = allocation.get(url, len(full_text))
+        body = full_text if allowed >= len(full_text) else full_text[:allowed]
+        fetched = entry.get("fetchedAt")
+        when = (
+            f"on {fetched[:10]}" if isinstance(fetched, str) else "at some earlier date"
+        )
+        injected_parts.append(
+            genai_types.Part(
+                text=(
+                    f"{_ARCHIVED_PAGE_PREFIX}{url}\n"
+                    f"TITLE: {entry.get('title') or url}\n"
+                    f"url-resolver could not reach this page just now. The text "
+                    f"below is what Cofacts crawled {when}, NOT what the page "
+                    f"says today — it may have changed or gone. Use it as "
+                    f"background only: do not treat it as confirmation that "
+                    f"this link currently supports a claim, and prefer "
+                    f"url_context if that can still read the page.\n---\n{body}"
+                )
+            )
+        )
+
+    if injected_parts:
+        target_content.parts = list(target_content.parts) + injected_parts
+    # Unconditional: an empty dict is the correct answer when this call
+    # resolved nothing, and must not leave the pre-call value standing.
+    callback_context.state[RESOLVED_META_STATE_KEY] = resolved_meta
     return None

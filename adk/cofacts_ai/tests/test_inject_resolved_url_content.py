@@ -12,14 +12,18 @@ Coverage: a resolved URL gets a `[RESOLVED PAGE]` part; a dead URL (DNS
 failure) gets an advisory `[LINK NOT FOUND]` note, not a ban; a URL the
 resolver merely couldn't fetch (e.g. a PDF) gets nothing injected so
 url_context gets a clean shot at it; YouTube and Cofacts-media URLs are
-excluded (handled elsewhere via FileData); re-running the callback on the
-same request is a no-op (idempotency); a resolver outage injects nothing; and
+excluded (handled elsewhere via FileData); the next model call of a turn
+re-injects from the artifact cache without re-fetching; a misconfigured char
+budget raises instead of degrading silently; a resolver outage injects nothing; and
 the artifact cache round-trips page text plus title/canonical without the
 version API, including for artifacts written before that envelope existed.
 """
 
+import os
 from typing import cast
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
@@ -239,22 +243,46 @@ class TestInjectResolvedUrlContent:
 
         resolve_mock.assert_not_called()
 
-    async def test_rerunning_on_same_request_is_idempotent(self):
-        request = make_request(user_text("https://good.com"))
+    async def test_second_model_call_reinjects_from_the_artifact_cache(self):
+        """The next model call of a turn re-injects, and that is correct.
+
+        ADK rebuilds `llm_request.contents` from session events with
+        `copy.deepcopy`, so the parts this callback appends are gone by the
+        next call -- the page text has to be re-sent or the call that writes
+        the final answer would not have it. What must not repeat is the
+        *fetch*. Each call therefore gets a fresh request, as production does;
+        re-using one mutated request across both would test a situation that
+        never occurs.
+        """
         context = make_context()
         resolve_mock = AsyncMock(return_value=[resolved("https://good.com")])
 
         with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
-            await inject_resolved_url_content(context, request)
+            first = make_request(user_text("https://good.com"))
+            await inject_resolved_url_content(context, first)
             resolve_mock.assert_awaited_once()
-            parts_after_first = list(request.contents[0].parts or [])
 
+            second = make_request(user_text("https://good.com"))
+            await inject_resolved_url_content(context, second)
+
+        resolve_mock.assert_awaited_once()  # served from the artifact cache
+        assert text_parts(second.contents[0]) == text_parts(first.contents[0])
+
+    async def test_unparsable_char_budget_raises(self):
+        """A misconfigured budget is our bug, not a resolver outage, so it must
+        surface rather than read as "this message had no links"."""
+        context = make_context()
+        request = make_request(user_text("https://good.com"))
+
+        with (
+            patch(
+                "cofacts_ai.resolved_pages.resolve_urls",
+                AsyncMock(return_value=[resolved("https://good.com")]),
+            ),
+            patch.dict(os.environ, {"URL_RESOLVER_TOTAL_CHAR_BUDGET": "lots"}),
+            pytest.raises(ValueError),
+        ):
             await inject_resolved_url_content(context, request)
-
-        # Second call found the URL already injected -- no new resolve, no
-        # duplicate part appended.
-        resolve_mock.assert_awaited_once()
-        assert request.contents[0].parts == parts_after_first
 
     async def test_no_urls_in_request_is_a_noop(self):
         request = make_request(user_text("沒有連結的訊息"))
@@ -517,32 +545,35 @@ class TestResolvedMetaDoesNotLeakAcrossCalls:
 
         assert context.state[RESOLVED_META_STATE_KEY] == {}
 
-    async def test_second_model_call_keeps_meta_for_already_injected_urls(self):
-        """Regression: clearing the key must not erase what the turn read.
+    async def test_second_model_call_keeps_meta_for_cached_urls(self):
+        """Regression: clearing the key on entry must not erase what the turn
+        read.
 
         The callbacks re-run on every model call of a turn, and the 2nd call
-        already has the [RESOLVED PAGE] parts in the rebuilt request. Skipping
-        those URLs entirely left the key empty on the call that produces the
-        final response, so append_verifier_sources emitted only url_context
-        grounding -- dropping every resolver-fetched page from `sources`.
+        serves the page from the artifact cache rather than the network. Its
+        meta has to be rebuilt from that cache hit -- leaving the key empty on
+        the call that produces the final response made append_verifier_sources
+        emit only url_context grounding, dropping every resolver-fetched page
+        from `sources`.
         """
         store = FakeArtifactStore()
-        request = make_request(user_text("https://good.com"))
         resolve_mock = AsyncMock(
             return_value=[resolved("https://good.com", title="Cached Title")]
         )
         context = make_context(store)
 
         with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
-            await inject_resolved_url_content(context, request)
+            await inject_resolved_url_content(
+                context, make_request(user_text("https://good.com"))
+            )
             first_meta = dict(context.state[RESOLVED_META_STATE_KEY])
-            parts_after_first = list(request.contents[0].parts or [])
 
-            # 2nd model call of the same turn: same request, state carried over.
-            await inject_resolved_url_content(context, request)
+            # 2nd model call of the same turn: fresh request, state carried over.
+            await inject_resolved_url_content(
+                context, make_request(user_text("https://good.com"))
+            )
 
         resolve_mock.assert_awaited_once()  # served from the artifact cache
-        assert request.contents[0].parts == parts_after_first  # no duplicates
         assert context.state[RESOLVED_META_STATE_KEY] == first_meta
         assert (
             context.state[RESOLVED_META_STATE_KEY]["https://good.com"]["title"]
