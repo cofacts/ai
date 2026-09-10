@@ -427,6 +427,9 @@ async def inject_resolved_url_content(
                 )
                 if url in already_injected:
                     # Meta only: the [RESOLVED PAGE] part is already there.
+                    # A cache hit precedes the fetch, so a URL with an artifact
+                    # cannot also have produced a [LINK NOT FOUND]/[NOTE] marker
+                    # in this session -- the hit is always the resolved one.
                     resolved_meta[url] = {
                         "status": ResolveStatus.RESOLVED.value,
                         "title": title or url,
