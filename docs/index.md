@@ -8,7 +8,8 @@ Langfuse (observability + feedback).
 
 This page is the **current-state overview**. The _why_ behind each choice lives in
 [`decisions/`](decisions/index.md) as MADRs — this page links out to them rather than
-repeating them. See [`AGENTS.md`](../AGENTS.md) for how to keep both up to date.
+repeating them. Background research that informs those choices without being one lives in
+[`research/`](research/index.md). See [`AGENTS.md`](../AGENTS.md) for how to keep both up to date.
 
 ## Two services
 

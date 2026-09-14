@@ -12,6 +12,9 @@ system and the reasoning behind it from `docs/` alone. When you work in this rep
 - **[`docs/decisions/`](docs/decisions/index.md)** — the _why_: one
   [MADR](https://adr.github.io/madr) per significant decision. Its `index.md` is the log and
   the how-to (adding and superseding records); `adr-template.md` is the template.
+- **[`docs/research/`](docs/research/index.md)** — dated background research notes (surveys of
+  other products, prototype findings). Not current-state and not a decision; a snapshot of what
+  informed one.
 - Not in `docs/`, but related: the top-level **[`README.md`](README.md)** is the developer
   quickstart (how to set up and run); `docs/index.md` covers the architecture.
 
