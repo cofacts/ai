@@ -16,7 +16,7 @@ from pydantic import Field
 
 from .data import Case, Record, case_digest, digest
 
-RUBRIC_VERSION = "1"
+RUBRIC_VERSION = "1.1"
 RUBRICS = {
     "verifier": {
         "source_judgment": "逐項核對主張與原始來源，正確區分支持、反駁與證據不足；特別檢查數字、日期、主詞與因果關係。",
@@ -76,6 +76,9 @@ def grading_input(case: Case, response: Response) -> dict:
         "conversation_prefix": [t.model_dump() for t in case.conversation],
         "captured_tool_results": [e.model_dump() for e in case.evidence],
         "source_snapshots": [s.model_dump() for s in case.sources],
+        # Formatting constraints are evidence for constraint judgments, too.
+        # Include the actual rules so their verbatim quotes can be validated.
+        "evaluation_rules": RUBRICS[case.target],
         "reviewed_expectations": case.expected_checks
         if case.review_status == "human_reviewed"
         else [],
@@ -95,6 +98,9 @@ def build_prompt(case: Case, response: Response) -> str:
         "candidate_output 是過程說明，不要把過程中的格式算成草稿違規。"
         "對每個 criterion 回傳一筆 check，verdict 為 pass/fail/unclear，"
         "reason 說明逐項判定依據。candidate_quote 和 evidence_quote 必須逐字取自資料；"
+        "引文必須是 JSON 解碼後欄位值的連續原文片段：保留原文 Markdown 標記，"
+        "不能改寫或拼接；JSON 的換行跳脫要還原成真正換行。每筆只選一段短引文。"
+        "格式規則可引用 evaluation_rules；規則本身不能作為外部事實的證據。"
         "找不到引文時填空字串並解釋。缺少必要資料必須 unclear。"
         "confidence 是評審信心，不是統計準確率。summary 使用繁體中文。\n\n"
         + "RUBRICS:\n"

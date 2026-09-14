@@ -129,3 +129,18 @@ def test_writer_must_produce_a_draft(writer_case):
     result = score(writer_case, response)
     assert not result["judge_called"]
     assert {c["verdict"] for c in result["checks"]} == {"fail"}
+
+
+def test_format_rule_is_valid_evidence_for_constraint_judgment(writer_case):
+    result = judgment(writer_case)
+    check = next(c for c in result.checks if c.criterion == "constraint_adherence")
+    check.evidence_quote = "草稿 text 須純文字、不含 Markdown、URL 或引文標記"
+    assert validate_judgment(writer_case, recorded(writer_case), result) is result
+
+
+@pytest.mark.parametrize("quote", ["已確認", "共 12 件。\\n請保留限制。"])
+def test_rewritten_markup_and_literal_newline_quotes_are_rejected(writer_case, quote):
+    writer_case.evidence[0].output = {"content": "已**確認**：共 12 件。\n請保留限制。"}
+    result = judgment(writer_case, evidence_quote=quote)
+    with pytest.raises(ValueError, match="evidence quote"):
+        validate_judgment(writer_case, recorded(writer_case), result)

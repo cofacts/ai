@@ -112,7 +112,10 @@ proof of an error during the original execution.
 
 Each criterion returns `pass`, `fail` or `unclear`, with a reason, candidate quote,
 evidence quote and confidence. Quote validation rejects text absent from the
-supplied material. Missing/duplicate criteria, malformed judge output and backend
+supplied material. Quotes must be contiguous substrings of decoded field values,
+preserving Markdown markers and actual newlines. Evaluation rules are included in
+the grading payload so a format constraint can be quoted as its own rule; they
+cannot establish external facts. Missing/duplicate criteria, malformed judge output and backend
 errors cannot silently pass.
 
 | Target   | Criterion              | What it checks                                                                                 |
