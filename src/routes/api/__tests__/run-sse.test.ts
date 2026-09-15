@@ -136,4 +136,37 @@ describe('withHeartbeat', () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect((await readPromise2).value).toEqual(HEARTBEAT_CHUNK)
   })
+
+  test('counts trailing newlines correctly when the "\\n\\n" boundary itself arrives as two single-byte chunks', async () => {
+    const { stream, controller } = controllableStream()
+    const reader = withHeartbeat(stream, 1000).getReader()
+
+    // Non-newline content first, so trailingNewlines starts this scenario
+    // at 0, not at the initial "nothing sent yet" value of 2.
+    const body = encoder.encode('data: x')
+    controller.enqueue(body)
+    expect((await reader.read()).value).toEqual(body)
+
+    // First '\n' byte on its own -- only ONE trailing newline so far, not
+    // yet a safe boundary.
+    const nl1 = encoder.encode('\n')
+    controller.enqueue(nl1)
+    expect((await reader.read()).value).toEqual(nl1)
+
+    // Interval elapses with count == 1 -- must be withheld. Confirmed by
+    // feeding the second '\n' byte right after and checking the pending
+    // read resolves with that byte, not a heartbeat.
+    const readPromise = reader.read()
+    await vi.advanceTimersByTimeAsync(1000)
+    const nl2 = encoder.encode('\n')
+    controller.enqueue(nl2)
+    expect((await readPromise).value).toEqual(nl2)
+
+    // Two consecutive '\n' bytes have now been forwarded -- across two
+    // separate single-byte chunks -- so count == 2 and a further silence
+    // is a safe boundary to heartbeat at.
+    const readPromise2 = reader.read()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect((await readPromise2).value).toEqual(HEARTBEAT_CHUNK)
+  })
 })
