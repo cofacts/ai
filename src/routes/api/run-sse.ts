@@ -91,6 +91,12 @@ export function withHeartbeat(
           outcome = await Promise.race([pendingRead, timeout])
         } catch (err) {
           clearTimeout(timer!)
+          // pendingRead only ever rejects once `upstream` itself has already
+          // transitioned to "errored" (we never call reader.releaseLock()),
+          // so there's no live connection left to release here -- per the
+          // Streams spec, cancelling an already-errored reader is a no-op
+          // that skips the underlying source's own cancel() entirely
+          // (verified: Node never invokes it in this case). Just propagate.
           controller.error(err)
           return
         }

@@ -91,6 +91,17 @@ describe('withHeartbeat', () => {
     expect(done).toBe(true)
   })
 
+  test('propagates an upstream read error to the output stream', async () => {
+    const { stream, controller } = controllableStream()
+    const reader = withHeartbeat(stream, 1000).getReader()
+
+    const readPromise = reader.read()
+    const boom = new Error('boom')
+    controller.error(boom)
+
+    await expect(readPromise).rejects.toThrow('boom')
+  })
+
   test('propagates cancellation to the upstream reader', async () => {
     const { stream, wasCancelledWith } = controllableStream()
     const wrapped = withHeartbeat(stream, 1000)
