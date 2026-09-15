@@ -408,6 +408,9 @@ ai_verifier = LlmAgent(
     about; do NOT treat it as evidence that the page says this today, and never cite it as
     a source you read. If url_context can still read the page, that reading wins over the
     archived text wherever the two disagree.
+    A `[NOT PRE-FETCHED] <url>` note means this request had more URLs than the system
+    pre-fetches in one turn, so this one was never sent to the fetcher at all — it says
+    nothing about the URL itself. Treat it exactly like a URL with no note.
     A URL with none of these notes simply means the system's fetcher could not get it
     (e.g. a PDF) and no archived copy exists — fall back to url_context exactly as for any
     other URL.

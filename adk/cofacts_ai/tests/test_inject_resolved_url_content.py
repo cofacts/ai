@@ -11,7 +11,10 @@ cache and to persist the full page text for the UI. That fake's
 Coverage: a resolved URL gets a `[RESOLVED PAGE]` part; a dead URL (DNS
 failure) gets an advisory `[LINK NOT FOUND]` note, not a ban; a URL the
 resolver merely couldn't fetch (e.g. a PDF) gets nothing injected so
-url_context gets a clean shot at it; YouTube and Cofacts-media URLs are
+url_context gets a clean shot at it; a URL dropped by the `URL_RESOLVER_MAX_URLS`
+cap gets an explicit `[NOT PRE-FETCHED]` note (the one no-signal bucket that
+is never silent, since its cause is certain rather than a hiccup); YouTube
+and Cofacts-media URLs are
 excluded (handled elsewhere via FileData); the next model call of a turn
 re-injects from the artifact cache without re-fetching; a misconfigured char
 budget raises instead of degrading silently; a resolver outage injects nothing; and
@@ -30,6 +33,7 @@ from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
 from cofacts_ai.resolved_pages import (
+    COFACTS_HYPERLINKS_STATE_KEY,
     RESOLVED_META_STATE_KEY,
     _extract_web_urls,
     _resolved_artifact_filename,
@@ -154,6 +158,21 @@ def unavailable(url: str) -> ResolvedUrl:
     )
 
 
+def not_attempted(
+    url: str,
+    error: str = "dropped: more than URL_RESOLVER_MAX_URLS=20 URLs in this request",
+) -> ResolvedUrl:
+    return ResolvedUrl(
+        url=url,
+        canonical=None,
+        title=None,
+        summary=None,
+        http_status=None,
+        status=ResolveStatus.NOT_ATTEMPTED,
+        error=error,
+    )
+
+
 class TestInjectResolvedUrlContent:
     async def test_resolved_url_injects_resolved_page_part(self):
         request = make_request(user_text("請查核 https://good.com/article"))
@@ -214,6 +233,59 @@ class TestInjectResolvedUrlContent:
         # A one-line advisory note is fine, but nothing that bans the URL.
         for p in parts:
             assert "do NOT claim" not in p
+
+    async def test_not_attempted_injects_an_explicit_note_unlike_unavailable(self):
+        request = make_request(user_text("https://dropped.example"))
+        context = make_context()
+
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(return_value=[not_attempted("https://dropped.example")]),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        [part] = [
+            t
+            for t in text_parts(request.contents[0])
+            if t.startswith("[NOT PRE-FETCHED]")
+        ]
+        assert "https://dropped.example" in part
+        assert "url_context" in part
+        # Unlike RESOLVER_UNAVAILABLE/TIMEOUT (a hiccup that might be
+        # mistaken for a dead link if surfaced), the cap is a known, certain
+        # cause -- so this is the one no-signal bucket that is never silent.
+
+    async def test_not_attempted_prefers_an_archived_copy_over_the_note(self):
+        """Mirrors RESOLVER_CANT_FETCH: an archived copy, when Cofacts has
+        one, wins over the bare advisory note -- same as every other
+        no-signal bucket that reaches `_stage_archived`."""
+        url = "https://dropped.example"
+        request = make_request(user_text(url))
+        context = make_context(
+            state={
+                COFACTS_HYPERLINKS_STATE_KEY: {
+                    url: {
+                        "summary": "archived body text",
+                        "title": "Archived Title",
+                        "fetchedAt": "2020-01-01T00:00:00Z",
+                    }
+                }
+            }
+        )
+
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(return_value=[not_attempted(url)]),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        parts = text_parts(request.contents[0])
+        assert not any(p.startswith("[NOT PRE-FETCHED]") for p in parts)
+        [archived_part] = [p for p in parts if p.startswith("[ARCHIVED PAGE]")]
+        assert "archived body text" in archived_part
+        # Same safety property as the other no-signal buckets: an archived
+        # copy must never be presented as something this turn actually read.
+        assert context.state[RESOLVED_META_STATE_KEY] == {}
 
     async def test_resolver_unavailable_injects_nothing(self):
         request = make_request(user_text("https://good.com"))

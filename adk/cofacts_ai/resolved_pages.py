@@ -172,6 +172,7 @@ def harvest_cofacts_hyperlinks(
 _RESOLVED_PAGE_PREFIX = "[RESOLVED PAGE] "
 _LINK_NOT_FOUND_PREFIX = "[LINK NOT FOUND] "
 _RESOLVER_CANT_FETCH_PREFIX = "[NOTE] url-resolver couldn't fetch "
+_NOT_ATTEMPTED_PREFIX = "[NOT PRE-FETCHED] "
 
 # Deliberately a different marker from [RESOLVED PAGE]. This text was not read
 # in this turn and may describe a page that has since changed or gone, so the
@@ -459,11 +460,13 @@ async def inject_resolved_url_content(
                             )
                         )
                     )
-                # Everything below is "the resolver failed, the page probably
-                # didn't": RESOLVER_CANT_FETCH (PDF, blocked, TLS) and the two
-                # no-signal buckets. These are the cases where Cofacts' own
-                # older crawl of the same URL is worth having, so try it before
-                # falling through to url_context alone.
+                # Everything below is "no signal from url-resolver, for
+                # different reasons": RESOLVER_CANT_FETCH (PDF, blocked, TLS)
+                # and TIMEOUT/RESOLVER_UNAVAILABLE mean it tried and failed;
+                # NOT_ATTEMPTED means it was never asked (batch cap). All are
+                # cases where Cofacts' own older crawl of the same URL is
+                # worth having, so try it before falling through to
+                # url_context alone.
                 #
                 # DEAD is deliberately excluded: there the URL itself does not
                 # resolve, and pairing "this link is broken" with the text it
@@ -477,6 +480,21 @@ async def inject_resolved_url_content(
                                     f"{_RESOLVER_CANT_FETCH_PREFIX}{r.url} "
                                     f"({r.error}) — may be a PDF or blocked; "
                                     "rely on url_context."
+                                )
+                            )
+                        )
+                elif r.status == ResolveStatus.NOT_ATTEMPTED:
+                    # Unlike TIMEOUT/RESOLVER_UNAVAILABLE below, this is never
+                    # silent: the cause (too many URLs in one request) is
+                    # certain, not a hiccup that might be mistaken for a dead
+                    # link, so the verifier can be told outright rather than
+                    # left to assume url_context alone already covers it.
+                    if not _stage_archived(r.url, cofacts_links, archived, lengths):
+                        injected_parts.append(
+                            genai_types.Part(
+                                text=(
+                                    f"{_NOT_ATTEMPTED_PREFIX}{r.url} "
+                                    f"({r.error}); rely on url_context."
                                 )
                             )
                         )

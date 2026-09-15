@@ -161,24 +161,38 @@ flowchart LR
     S -->|"DEAD<br/>DNS failure · malformed"| O2["[LINK NOT FOUND] url: reason<br/>advisory: verify with url_context,<br/>withhold support only if that fails too"]
     S -->|"RESOLVER_CANT_FETCH<br/>PDF · blocked · TLS"| A
     S -->|"TIMEOUT<br/>RESOLVER_UNAVAILABLE"| A
+    S -->|"NOT_ATTEMPTED<br/>dropped past URL_RESOLVER_MAX_URLS"| A6
 
     A{"Cofacts already<br/>crawled this URL?"}
     A -->|"yes"| O5["[ARCHIVED PAGE] url<br/>states the crawl date<br/>background only"]
     A -->|"no · CANT_FETCH"| O3["[NOTE] couldn't fetch url<br/>rely on url_context"]
     A -->|"no · no signal"| O4["nothing injected at all<br/>url_context handles it"]
 
+    A6{"Cofacts already<br/>crawled this URL?"}
+    A6 -->|"yes"| O5
+    A6 -->|"no"| O6["[NOT PRE-FETCHED] url<br/>never sent to url-resolver;<br/>rely on url_context (always shown)"]
+
     O1 --> S1["in sources<br/>the verifier read this text"]
     O2 --> S2["absent from sources<br/>neither path fetched it"]
     O5 --> S4["never a source<br/>nobody fetched it this turn"]
     O3 --> S3["in sources only if<br/>url_context grounds it"]
     O4 --> S3
+    O6 --> S3
 
     style O1 fill:#d1fae5,stroke:#047857
     style O2 fill:#fee2e2,stroke:#b91c1c
     style O5 fill:#dbeafe,stroke:#1d4ed8
     style O3 fill:#fef3c7,stroke:#b45309
     style O4 fill:#f3f4f6,stroke:#6b7280
+    style O6 fill:#fef3c7,stroke:#b45309
 ```
+
+`NOT_ATTEMPTED` (added in review, after the initial "as shipped" list below) is a fifth cause,
+distinct from the other three "no signal" buckets: it means url-resolver was never asked, because
+`URL_RESOLVER_MAX_URLS` capped the request before this URL's turn — not that it tried and failed.
+Unlike `TIMEOUT`/`RESOLVER_UNAVAILABLE` (a hiccup, kept silent so it is never mistaken for a dead
+link), the cause here is certain, so `[NOT PRE-FETCHED]` is always shown when there is no archived
+copy, never suppressed.
 
 The right-hand column is the self-correcting property: no ban list decides what may be cited.
 A dead URL is fetched by neither path, so it is simply absent; a PDF the resolver cannot read
@@ -196,7 +210,22 @@ As shipped in #118:
    `NAME_NOT_RESOLVED` / `INVALID_URL` become `DEAD` (the URL itself is bad). Everything else —
    `UNSUPPORTED` (a PDF), `NOT_REACHABLE`, `HTTPS_ERROR`, scrap/unfurl errors — becomes
    `RESOLVER_CANT_FETCH`, meaning _the resolver_ failed, not the page; `url_context` may still
-   read it. A whole-call failure yields `RESOLVER_UNAVAILABLE` for every URL, never `DEAD`.
+   read it. A whole-call failure yields `RESOLVER_UNAVAILABLE` for every URL, never `DEAD`. A URL
+   dropped by the `URL_RESOLVER_MAX_URLS` cap is `NOT_ATTEMPTED` (never sent at all) rather than
+   silently indistinguishable from a URL the resolver tried and failed on — a review comment on
+   #118 pointed out the original code returned no `ResolvedUrl` for it whatsoever.
+   Review also flagged that the per-call gRPC deadline (`URL_RESOLVER_TIMEOUT`, default 30s) is
+   one deadline for the _whole_ streaming call, not per URL — real production traffic goes through
+   url-resolver's own fast path first (`parseMeta()`, a plain HTTP fetch) and only pays for a real
+   headless-browser navigation (Cloudflare Browser Rendering per #123) on URLs whose page lacks
+   enough `<meta>` tags to answer with, so a batch with several such URLs could exhaust a flat 30s
+   budget and silently degrade the rest to `TIMEOUT` → `url_context`-only. `resolve_urls()` now
+   scales the deadline with the number of URLs actually sent (`DEFAULT_PER_URL_TIMEOUT` each,
+   floor the original 30s) unless `URL_RESOLVER_TIMEOUT` is set explicitly — verified manually
+   against #123's preview deployment: a URL structurally unable to satisfy `parseMeta()` (no
+   `meta description`/`og:description`, e.g. a Wikipedia article) does exercise the real browser
+   path and returns full Readability-extracted body text, confirming the browser fallback this
+   timeout budgets for is real, not hypothetical.
 3. **`inject_resolved_url_content` as a third `before_model_callback`** on `ai_verifier`,
    alongside the existing `inject_youtube_filedata` / `inject_cofacts_media_filedata`. The whole
    pipeline — CJK-aware URL extraction, the artifact envelope, budgeting and the callback itself
@@ -324,19 +353,30 @@ investigator-originated ones downstream while keeping each agent's role intact.
 
 ## Confirmation
 
-- 59 new unit tests across four files (148 in the suite, all passing), network-free by faking the
-  gRPC channel/stub and the artifact store. They pin the invariants that matter rather than the
-  implementation: `html` never leaves the client; results join by URL, not stream order; each
-  `ResolveError` value lands in the right bucket; a transport failure marks every URL
-  `RESOLVER_UNAVAILABLE` and **never** `DEAD`; `RESOLVER_CANT_FETCH` injects nothing; a
-  misconfigured char budget raises rather than degrading to url_context-only; the second model
-  call of a turn re-injects the page but is served from the artifact cache, not the network; and a
-  dead URL never appears in `sources` while a `url_context`-grounded PDF still does.
+- Unit tests, network-free by faking the gRPC channel/stub and the artifact store. They pin the
+  invariants that matter rather than the implementation: `html` never leaves the client; results
+  join by URL, not stream order; each `ResolveError` value lands in the right bucket; a transport
+  failure marks every URL `RESOLVER_UNAVAILABLE` and **never** `DEAD`; `RESOLVER_CANT_FETCH`
+  injects nothing; a misconfigured char budget raises rather than degrading to url_context-only;
+  the second model call of a turn re-injects the page but is served from the artifact cache, not
+  the network; a dead URL never appears in `sources` while a `url_context`-grounded PDF still
+  does; a URL dropped by `URL_RESOLVER_MAX_URLS` becomes `NOT_ATTEMPTED` rather than vanishing
+  (including when it coincides with a whole-call `RESOLVER_UNAVAILABLE` failure), the timeout
+  scales with the number of URLs actually sent (not the pre-cap count) unless
+  `URL_RESOLVER_TIMEOUT` is set, and `NOT_ATTEMPTED`'s advisory note is suppressed exactly when
+  an archived copy exists, matching `RESOLVER_CANT_FETCH`.
 - `ruff check`, `ruff format --check` and `ty check` clean; protoc-generated stubs are excluded
   from both via `pyproject.toml`.
-- Still open: the end-to-end check against a live url-resolver (Docker on `:4000`) confirming a
-  known-dead URL is reported unreachable rather than supported, and that a good URL's report
-  quotes text present in the injected `[RESOLVED PAGE]` part.
+- The end-to-end check against a live resolver is done, against #123's real preview deployment
+  (Cloudflare Browser Rendering backend) rather than local Docker: a real CNA news URL resolved
+  via url-resolver's `parseMeta()` fast path (plain HTTP, matching the page's own
+  `<meta name="description">` exactly) without ever reaching the browser, while a URL that
+  structurally cannot satisfy that fast path (a Wikipedia article — no meta description, no
+  `og:description`) did exercise the real Puppeteer/Cloudflare `scrap()` path and returned full
+  Readability-extracted body text (16.5k chars, correct enough that the verifier caught a
+  deliberately-wrong claim in a test message). Traces:
+  [CNA / fast path](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/traces/d11d76db142bf9fb26019ef398eb4d16),
+  [Wikipedia / real browser path](https://langfuse.cofacts.tw/project/cmm0emerr0001qi07eugd0760/traces/c0914364409e974baf4eeb6fac680715).
 - The real measure is the feedback rate this record opens with: the share of `user-thumbs`
   downvotes citing 「提供不存在的出處」/「出處摘要錯誤」/「回應文字與出處不符」 should fall from
   its ~34% baseline. That is only observable in production over weeks, and is the reason this
