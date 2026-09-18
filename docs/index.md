@@ -92,6 +92,15 @@ Langfuse scores (the secret key stays server-side, proxied through the BFF). Tra
 debugging is the team's standard workflow — most decisions here cite the trace that exposed
 the problem.
 
+## Evaluation
+
+An independent suite under `adk/cofacts_eval/` evaluates Verifier source judgment
+and Writer evidence integration and instruction following, using portable local
+cases curated from historical traces. It supports historical-output grading and current
+agents run against frozen evidence. The initial fixtures are pending human review;
+their publication is not yet authorized. Missing source captures produce `unclear`, not a pass.
+→ [Evaluation scope, data, rubrics and commands](evaluation.md).
+
 ## Invariant
 
 `src/lib/adk.ts` (`AllTools`, the frontend's tool-name → args/response map) must be kept in
