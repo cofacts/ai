@@ -11,7 +11,7 @@ export const Route = createFileRoute('/_app')({
 
 function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { user } = useAuth()
+  const { authenticated } = useAuth()
 
   const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), [])
 
@@ -22,7 +22,7 @@ function AppLayout() {
 
       {/* Main content */}
       <main className="flex-1 flex overflow-hidden bg-white">
-        {!user ? (
+        {!authenticated ? (
           <LoggedOutLanding />
         ) : (
           <>

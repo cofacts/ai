@@ -23,27 +23,58 @@ import { useServerFn } from '@tanstack/react-start'
 import { AUTH_EXPIRED_EVENT } from './authExpired'
 import { chatCacheKey } from './chatCache'
 import type { QueryClient } from '@tanstack/react-query'
+import type { AuthStatus } from '@/server/auth.status.functions'
 import type { CofactsUser } from '@/server/me.functions'
 import { logout as logoutServerFn } from '@/server/auth.functions'
+import {
+  UNAUTHENTICATED,
+  getAuthStatusServerFn,
+} from '@/server/auth.status.functions'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 import { LoginModal } from '@/components/LoginModal'
 
 export type { CofactsUser }
 
+// Authoritative gate: JWT-only, never calls rumors-api. staleTime: Infinity
+// because a session's validity doesn't change client-side; AUTH_EXPIRED_EVENT
+// (dispatched on a 401 from any server fn) is what invalidates it.
+const AUTH_QUERY_KEY = ['auth'] as const
+// Cosmetic profile: independent of the auth gate, safe to be null, and
+// allowed to retry/refetch on its own schedule without affecting whether the
+// user is considered logged in.
 const ME_QUERY_KEY = ['me'] as const
+const ME_STALE_TIME_MS = 60_000
 
 // Drop user-scoped caches so the previous user's session list and chat
-// messages cannot be read by an anonymous viewer in the same tab. Both
-// queries use staleTime/gcTime: Infinity, so removeQueries (not invalidate)
-// is required for immediate eviction.
+// messages cannot be read by an anonymous viewer in the same tab. All
+// queries use staleTime/gcTime: Infinity (or are keyed out here explicitly),
+// so removeQueries/setQueryData (not invalidate) is required for immediate
+// eviction.
 export function clearUserScopedCache(queryClient: QueryClient) {
+  queryClient.setQueryData(AUTH_QUERY_KEY, UNAUTHENTICATED)
   queryClient.setQueryData(ME_QUERY_KEY, null)
   queryClient.removeQueries({ queryKey: ['sessions'] })
   queryClient.removeQueries({ queryKey: chatCacheKey() })
   queryClient.removeQueries({ queryKey: ['feedback'] })
 }
 
+// The AUTH_EXPIRED_EVENT reaction, factored out of the useEffect below so it
+// can be unit-tested without rendering <AuthProvider>: clear user-scoped
+// caches, then hand the current pathname to the pendingRedirect setter —
+// AuthProvider derives `isLoginModalOpen` from `pendingRedirect !== null`, so
+// this call is what opens LoginModal.
+export function handleAuthExpiredForProvider(
+  queryClient: QueryClient,
+  pathname: string,
+  setPendingRedirect: (path: string) => void,
+) {
+  clearUserScopedCache(queryClient)
+  setPendingRedirect(pathname)
+}
+
 interface AuthState {
+  authenticated: boolean
+  userId: string | null
   user: CofactsUser | null
   isLoading: boolean
   login: (redirectTo?: string) => void
@@ -54,9 +85,11 @@ const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({
   children,
+  serverLoadedAuth,
   serverLoadedUser,
 }: {
   children: React.ReactNode
+  serverLoadedAuth?: AuthStatus
   serverLoadedUser?: CofactsUser | null
 }) {
   const queryClient = useQueryClient()
@@ -64,21 +97,36 @@ export function AuthProvider({
   const callLogout = useServerFn(logoutServerFn)
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null)
 
-  const { data: user, isFetching } = useQuery<CofactsUser | null>({
+  const { data: authStatus, isFetching: isAuthFetching } = useQuery<AuthStatus>(
+    {
+      queryKey: AUTH_QUERY_KEY,
+      queryFn: () => getAuthStatusServerFn(),
+      initialData: serverLoadedAuth ?? UNAUTHENTICATED,
+      staleTime: Infinity,
+    },
+  )
+
+  const authenticated = authStatus.authenticated
+
+  const { data: user } = useQuery<CofactsUser | null>({
     queryKey: ME_QUERY_KEY,
     queryFn: () => getCurrentUserServerFn(),
     initialData: serverLoadedUser ?? null,
-    staleTime: Infinity,
+    enabled: authenticated,
+    staleTime: ME_STALE_TIME_MS,
+    retry: 2,
   })
 
   // Owns the AUTH_EXPIRED_EVENT reaction: clear user-scoped caches and
   // open LoginModal anchored to the current pathname so re-auth lands the
   // user back where they were.
   useEffect(() => {
-    const onAuthExpired = () => {
-      clearUserScopedCache(queryClient)
-      setPendingRedirect(router.state.location.pathname)
-    }
+    const onAuthExpired = () =>
+      handleAuthExpiredForProvider(
+        queryClient,
+        router.state.location.pathname,
+        setPendingRedirect,
+      )
     window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
   }, [router, queryClient])
@@ -97,8 +145,15 @@ export function AuthProvider({
   }, [callLogout, queryClient])
 
   const value = useMemo<AuthState>(
-    () => ({ user: user ?? null, isLoading: isFetching, login, logout }),
-    [user, isFetching, login, logout],
+    () => ({
+      authenticated,
+      userId: authStatus.userId,
+      user: user ?? null,
+      isLoading: isAuthFetching,
+      login,
+      logout,
+    }),
+    [authenticated, authStatus.userId, user, isAuthFetching, login, logout],
   )
 
   const isLoginModalOpen = pendingRedirect !== null
