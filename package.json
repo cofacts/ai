@@ -14,7 +14,9 @@
     "check": "prettier --write . && eslint --fix",
     "install:agent": "uv sync --project adk",
     "typegen": "openapi-typescript http://localhost:8000/openapi.json -o src/lib/adk-types.d.ts && sed -i '' 's/: unknown/: {}/g' src/lib/adk-types.d.ts",
-    "codegen": "graphql-codegen"
+    "codegen": "graphql-codegen",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -50,6 +52,8 @@
   "devDependencies": {
     "@graphql-codegen/cli": "^7.0.0",
     "@graphql-codegen/client-preset": "^6.0.0",
+    "@storybook/addon-docs": "10.5.10",
+    "@storybook/react-vite": "10.5.10",
     "@tanstack/devtools-vite": "^0.3.11",
     "@tanstack/eslint-config": "^0.3.0",
     "@tanstack/react-query-devtools": "^5.99.2",
@@ -65,6 +69,7 @@
     "jsdom": "^27.0.0",
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.5.3",
+    "storybook": "10.5.10",
     "typescript": "^5.7.2",
     "vite": "^7.1.7",
     "vitest": "^3.0.5",
