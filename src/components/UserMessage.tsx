@@ -36,7 +36,7 @@ function AttachmentPart({ part }: { part: AdkPart }) {
   if (inline?.data) {
     const name = inline.displayName
       ? stripUploadPrefix(inline.displayName)
-      : '附件'
+      : 'Attachment'
     if (inline.mimeType?.startsWith('image/')) {
       return (
         <img
@@ -58,7 +58,7 @@ function AttachmentPart({ part }: { part: AdkPart }) {
         name={
           file.displayName
             ? stripUploadPrefix(file.displayName)
-            : (file.fileUri.split('/').pop() ?? '附件')
+            : (file.fileUri.split('/').pop() ?? 'Attachment')
         }
         mimeType={file.mimeType}
       />
@@ -87,7 +87,7 @@ export function UserMessage({ message }: UserMessageProps) {
           return null
         })}
       </div>
-      <span className="text-xs text-text-muted mt-1 mr-1">使用者輸入</span>
+      <span className="text-xs text-text-muted mt-1 mr-1">You</span>
     </div>
   )
 }

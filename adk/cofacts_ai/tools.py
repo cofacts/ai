@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from google.cloud import vision
 from .auth_context import cofacts_token_var
+from .cofacts_site import article_url
 from .media_filedata import signed_url_to_gs
 
 # GraphQL fragment for common Article fields
@@ -147,8 +148,13 @@ async def _execute_cofacts_graphql(
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            # Defaults to staging to match cofacts_site.py: if these two ever
+            # disagree, we file an article into one Cofacts and hand the user a
+            # link into the other. The frontend refuses to start without this
+            # var (src/server/api-base.ts); here a wrong default would be a
+            # silent write to the wrong database.
             api_base = os.environ.get(
-                "COFACTS_API_URL", "https://api.cofacts.tw"
+                "COFACTS_API_URL", "https://dev-api.cofacts.tw"
             ).rstrip("/")
             response = await client.post(
                 f"{api_base}/graphql",
@@ -322,7 +328,8 @@ async def get_single_cofacts_article(
     Returns the same detailed article information as search_cofacts_database, but for a single specific article.
     For detailed field descriptions, see search_cofacts_database function documentation.
 
-    The article ID can be used to construct Cofacts URLs: https://cofacts.tw/article/{article_id}
+    The result's `article_url` is the page a human can open to read this
+    message on Cofacts — link to that rather than building a URL yourself.
 
     The result carries a `cite_as` id — cite it to let a sub-agent read the suspicious
     message in full instead of retyping or paraphrasing it.
@@ -331,7 +338,8 @@ async def get_single_cofacts_article(
         article_id: The Cofacts article ID to retrieve
 
     Returns:
-        Detailed article information from Cofacts (same structure as search_cofacts_database results)
+        Detailed article information from Cofacts (same structure as
+        search_cofacts_database results), plus `article_url` for linking.
     """
     try:
         graphql_query = f"""
@@ -376,6 +384,7 @@ async def get_single_cofacts_article(
 
         return {
             "article_id": article_id,
+            "article_url": article_url(article_id),
             "article": article,
         }
 
@@ -383,6 +392,280 @@ async def get_single_cofacts_article(
         return {
             "error": f"Failed to get Cofacts article: {str(e)}",
             "article_id": article_id,
+        }
+
+
+# Trimmed text length for search results. The receptionist only needs enough
+# for the user to recognise which message is theirs; the full text arrives with
+# get_single_cofacts_article once they pick one.
+_SEARCH_RESULT_TEXT_LIMIT = 150
+
+
+async def search_suspicious_messages(
+    query: str,
+    limit: int = 5,
+) -> Dict[str, Any]:
+    """
+    Search Cofacts for suspicious messages similar to what the user pasted.
+
+    Use this to find out whether a message has already been reported, so the
+    user can pick the one they mean instead of reporting a duplicate. Present
+    the results as a short numbered list and let the user choose; then call
+    get_single_cofacts_article for the one they picked.
+
+    Deliberately returns far less per article than search_cofacts_database: no
+    existing fact-check replies, no popularity stats, no related articles. Two
+    reasons. Choosing from a list only needs enough text to recognise the
+    message, and — because everything this agent does is replayed to the writer
+    as flattened plain text once control transfers — a full article payload per
+    hit would be pasted into the writer's context verbatim.
+
+    Args:
+        query: The suspicious message text, or the URL the user pasted.
+        limit: How many candidates to return (default 5).
+
+    Returns:
+        {"data": {"totalCount": int, "results": [
+            {id, text, articleType, createdAt, factCheckCount, communityDemandCount}
+        ]}} — `factCheckCount` of 0 means nobody has fact-checked it yet, which
+        is the branch where you offer request_fact_check. Or {"error": ...}.
+    """
+    try:
+        graphql_query = """
+        query SearchSuspiciousMessages($filter: ListArticleFilter!, $first: Int!) {
+          ListArticles(
+            filter: $filter
+            orderBy: [{ _score: DESC }]
+            first: $first
+          ) {
+            totalCount
+            edges {
+              node {
+                id
+                text
+                articleType
+                createdAt
+                factCheckCount: replyCount
+                communityDemandCount: replyRequestCount
+              }
+            }
+          }
+        }
+        """
+
+        result = await _execute_cofacts_graphql(
+            query=graphql_query,
+            variables={
+                "filter": {"moreLikeThis": {"like": query, "minimumShouldMatch": "0"}},
+                "first": limit,
+            },
+            operation_name="search suspicious messages",
+            auth_token=cofacts_token_var.get(),
+        )
+
+        if "error" in result:
+            return result
+
+        list_articles = result["data"]["ListArticles"]
+        results = []
+        for edge in list_articles.get("edges") or []:
+            node = dict(edge.get("node") or {})
+            text = node.get("text") or ""
+            if len(text) > _SEARCH_RESULT_TEXT_LIMIT:
+                node["text"] = text[:_SEARCH_RESULT_TEXT_LIMIT] + "..."
+            results.append(node)
+
+        return {
+            "data": {
+                "totalCount": list_articles.get("totalCount", 0),
+                "results": results,
+            }
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to search suspicious messages: {str(e)}",
+        }
+
+
+async def request_fact_check(
+    article_id: str,
+    reason: str,
+) -> Dict[str, Any]:
+    """
+    Add the user's +1 to an existing Cofacts message that has no fact-check yet.
+
+    This is how cofacts.ai feeds Cofacts' main popularity signal
+    (`replyRequestCount`): it records that one more real person wants this
+    message checked, and `reason` tells the volunteer who eventually picks it up
+    why the user found it suspicious — a field that is almost always empty for
+    LINE-bot reports, so it is worth actually asking for.
+
+    Call this only after the user has picked a specific message from
+    search_suspicious_messages AND that message has no fact-check response yet
+    (factCheckCount == 0). For a message that already has responses, walk the
+    user through the existing answer instead — do not call this.
+
+    Ask the user "why did this look suspicious to you?" and pass their own words
+    as `reason`. Do not invent one, and do not put personally identifying
+    information (names, phone numbers, addresses, order numbers) in it.
+
+    This is create-or-*update*, scoped to the logged-in user: the same person
+    +1-ing the same message twice updates their existing request rather than
+    inflating the count, so a repeat call is safe but pointless.
+
+    Args:
+        article_id: The Cofacts article ID the user picked.
+        reason: Why the user thinks the message is suspicious, in their words.
+
+    Returns:
+        {"success": True, "article_id": ..., "communityDemandCount": int} — the
+        count already includes this request. Or {"error": ...}.
+    """
+    auth_token = cofacts_token_var.get()
+    if not auth_token:
+        return {
+            "error": "not_authenticated",
+            "message": (
+                "[SYSTEM] Cannot record a fact-check request without a signed-in "
+                "user. Ask the user to sign in and try again."
+            ),
+        }
+
+    try:
+        graphql_query = """
+        mutation RequestFactCheck($articleId: String!, $reason: String) {
+          CreateOrUpdateReplyRequest(articleId: $articleId, reason: $reason) {
+            id
+            replyRequestCount
+          }
+        }
+        """
+
+        result = await _execute_cofacts_graphql(
+            query=graphql_query,
+            variables={"articleId": article_id, "reason": reason},
+            operation_name="request fact-check",
+            auth_token=auth_token,
+        )
+
+        if "error" in result:
+            return result
+
+        article = result["data"]["CreateOrUpdateReplyRequest"]
+        if not article:
+            return {
+                "error": "Article not found",
+                "article_id": article_id,
+            }
+
+        return {
+            "success": True,
+            "article_id": article.get("id", article_id),
+            "communityDemandCount": article.get("replyRequestCount"),
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to request fact-check: {str(e)}",
+            "article_id": article_id,
+        }
+
+
+async def submit_suspicious_message(
+    text: str,
+    reason: str,
+    source_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    File a suspicious message that is NOT yet in Cofacts into the database.
+
+    This is the only tool that creates something in Cofacts. Call it after
+    search_suspicious_messages found nothing the user recognises AND the user
+    has said yes to filing it. Never call it speculatively: the article becomes
+    a public page under the user's own account the moment this returns.
+
+    `text` MUST be the user's message verbatim — what they received, exactly as
+    they pasted it. Do not summarise it, translate it, tidy it up, or merge in
+    your own words. Cofacts matches reports against each other by their text, so
+    a rewritten report is a report that will never be recognised as the same
+    rumour again. If the user pasted a link, the link itself is the text:
+    rumors-api crawls it and fills in the title and summary on its own.
+
+    Filing the same text twice returns the same article, so a message the
+    database already holds cannot be duplicated by this tool.
+
+    Args:
+        text: The suspicious message, in the user's own words, verbatim.
+        reason: Why the user finds it suspicious, in their words. Goes to the
+            volunteer who eventually fact-checks it, and is almost always empty
+            on LINE-bot reports — so it is worth having asked. Do not invent
+            one, and keep personally identifying information out of it.
+        source_url: Where the message is circulating, if the user gave a link
+            (a Threads / Facebook / X post, a news page). Recorded as the
+            article's reference so we can tell which platforms rumours spread
+            on. Leave it out for text the user copied out of a chat app.
+
+    Returns:
+        {"success": True, "article_id": ..., "article_url": ...} — show the URL
+        to the user, it is the page they can now share. Or {"error": ...}.
+    """
+    auth_token = cofacts_token_var.get()
+    if not auth_token:
+        return {
+            "error": "not_authenticated",
+            "message": (
+                "[SYSTEM] Cannot file a message into the database without a "
+                "signed-in user. Ask the user to sign in and try again."
+            ),
+        }
+
+    try:
+        graphql_query = """
+        mutation SubmitSuspiciousMessage(
+          $text: String!
+          $reference: ArticleReferenceInput!
+          $reason: String
+        ) {
+          CreateArticle(text: $text, reference: $reference, reason: $reason) {
+            id
+          }
+        }
+        """
+
+        # ArticleReferenceTypeEnum only has URL and LINE, so a message copied
+        # out of any other app (IG, Discord, SMS, WhatsApp) can only be marked
+        # LINE. That is a known gap in rumors-api, tracked in the design doc's
+        # "reference type" section, and it means this field slightly overstates
+        # how much of Cofacts came from LINE.
+        reference: Dict[str, Any] = (
+            {"type": "URL", "permalink": source_url} if source_url else {"type": "LINE"}
+        )
+
+        result = await _execute_cofacts_graphql(
+            query=graphql_query,
+            variables={"text": text, "reference": reference, "reason": reason},
+            operation_name="submit suspicious message",
+            auth_token=auth_token,
+        )
+
+        if "error" in result:
+            return result
+
+        article = result["data"]["CreateArticle"]
+        if not article or not article.get("id"):
+            return {"error": "Cofacts accepted the request but returned no article"}
+
+        article_id = article["id"]
+        return {
+            "success": True,
+            "article_id": article_id,
+            "article_url": article_url(article_id),
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to submit suspicious message: {str(e)}",
         }
 
 
@@ -425,6 +708,14 @@ async def submit_cofacts_reply(
         }
 
 
+# The language rule is restated in `text`'s own rules rather than left to
+# language.py alone: this body is, by the description below, aimed at whoever
+# encounters the message on Cofacts rather than at the person in the chat, so a
+# rule about what to write "to the user" reads as out of scope — and the
+# fallback is Chinese, which is what Cofacts means to a model. On this demo
+# branch the reviewer and the eventual reader are the same person in the room.
+# If replies ever actually get submitted to Cofacts, whose language this should
+# be is a real question again, and the answer may not be English.
 def draft_factcheck_response(
     classification: str,
     text: str,
@@ -448,11 +739,16 @@ def draft_factcheck_response(
 
     Args:
         classification: One of:
-            - "RUMOR" (含有不實訊息): The message contains misinformation.
-            - "NOT_RUMOR" (含有正確訊息): The message contains true information.
-            - "OPINIONATED" (含有個人意見): The message contains personal perspective.
-            - "NOT_ARTICLE" (不在查證範圍): The message is not within the scope of fact-checking.
+            - "RUMOR": The message contains misinformation.
+            - "NOT_RUMOR": The message contains true information.
+            - "OPINIONATED": The message contains personal perspective.
+            - "NOT_ARTICLE": The message is not within the scope of fact-checking.
         text: The fact-check response body. Rules:
+            - Write it in English, like everything else on this deployment.
+              The user is being asked to review this draft, and a reply they
+              cannot read is not a reply they can review. Do NOT switch to
+              Chinese because Cofacts is a Taiwanese database or because the
+              message you are checking is in Chinese.
             - Plain text only — no Markdown, no URLs, no reference citations.
             - Emojis at the start of paragraphs are encouraged for readability.
             - Neutral, educational tone aimed at people who shared or received the message.

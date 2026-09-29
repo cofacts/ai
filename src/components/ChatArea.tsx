@@ -75,7 +75,7 @@ export function ChatArea({
 
         {isStreaming && (
           <p className="flex items-center gap-2 text-gray-500 mt-2">
-            正在思考中
+            Thinking
             <span className="typing-indicator ml-1">
               <span />
               <span />

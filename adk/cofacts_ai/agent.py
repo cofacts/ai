@@ -38,6 +38,7 @@ from .agent_names import (
     AI_PROOFREADER_MINOR_PARTIES_NAME,
     AI_PROOFREADER_NAMES,
     AI_PROOFREADER_TPP_NAME,
+    AI_RECEPTIONIST_NAME,
     AI_VERIFIER_NAME,
     AI_WRITER_NAME,
 )
@@ -45,13 +46,22 @@ from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
+from .cofacts_site import COFACTS_SITE_URL
+from .language import (
+    CONVERSATION_LANGUAGE_RULE,
+    RESEARCH_LANGUAGE_RULE,
+)
+from .receptionist import RECEPTIONIST_INSTRUCTION
 from .session_title import generate_session_title
 from .tools import (
     draft_factcheck_response,
     get_single_cofacts_article,
+    request_fact_check,
     resolve_vertex_redirect,
     search_cofacts_database,
     search_image_web,
+    search_suspicious_messages,
+    submit_suspicious_message,
 )
 from .writer_citations import attach_citation, resolve_citations
 
@@ -67,7 +77,15 @@ SESSION_LAST_EVENT_TIME_KEY = "lastEventTime"
 
 
 async def update_last_event_time(callback_context: CallbackContext) -> None:
-    """Records the current time in session state after each ai_writer agent turn."""
+    """Records the current time in session state after an agent turn.
+
+    Mounted on BOTH ai_receptionist and ai_writer, not on the root alone. ADK
+    only runs an agent's after_agent_callback when that agent actually ran
+    (BaseAgent.run_async), and once the receptionist has transferred, later
+    turns resume straight at the writer with the root never running
+    (Runner._find_agent_to_run) -- so a root-only callback would silently stop
+    updating for the whole rest of a fact-check.
+    """
     callback_context.state[SESSION_LAST_EVENT_TIME_KEY] = time.time()
 
 
@@ -289,7 +307,7 @@ ai_investigator = LlmAgent(
     instruction=f"""
     You are an AI Investigator for fact-checking. Search the web and faithfully report
     what search results say — do not draw conclusions or form opinions.
-
+{RESEARCH_LANGUAGE_RULE}{CONVERSATION_LANGUAGE_RULE}
     ## Reading Your Request
     Each call is a brand-new conversation: you see only this one request. Content the
     {AI_WRITER_NAME} wanted you to have is quoted in full at the top, as a block tagged with an id
@@ -344,7 +362,7 @@ ai_verifier = LlmAgent(
     instruction=f"""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
-
+{RESEARCH_LANGUAGE_RULE}{CONVERSATION_LANGUAGE_RULE}
     ## Reading Your Request
     Each call is a brand-new conversation: you see only this one request. Content the
     {AI_WRITER_NAME} wanted you to have is quoted in full at the top, as a block tagged with an id
@@ -387,14 +405,14 @@ ai_verifier = LlmAgent(
     **No training knowledge**: For video or media content, report ONLY what is directly visible or
     audible. Never use background knowledge to identify the event name, date, location, organizer,
     or a person's full identity. If the video does not explicitly state it, write
-    "影片未說明 / cannot be determined from this video."
+    "cannot be determined from this video."
 
     **When video or audio content is loaded in context**: You are the ONLY agent that
     can watch/listen — the {AI_WRITER_NAME} never sees the media and acts solely on what you report,
     so anything you omit is invisible to the whole pipeline. Report these layers in order:
-    - 「頁面 metadata（url_context 取得）」: uploadDate/publishedAt, uploader, title — quoted verbatim. uploadDate is REQUIRED: a video can show old footage while being recently uploaded, and only the page tells you when it was published online. (For Cofacts gs:// media there is no page — skip this layer.)
-    - 「影片標題/描述（上傳者提供）」: quote verbatim — treat as the uploader's claim, not confirmed fact
-    - 「可觀察內容 claim 清單」: an EXHAUSTIVE, numbered, atomic inventory of every distinct
+    - "Page metadata (from url_context)": uploadDate/publishedAt, uploader, title — quoted verbatim. uploadDate is REQUIRED: a video can show old footage while being recently uploaded, and only the page tells you when it was published online. (For Cofacts gs:// media there is no page — skip this layer.)
+    - "Video title / description (as given by the uploader)": quote verbatim — treat as the uploader's claim, not confirmed fact
+    - "Observable claims": an EXHAUSTIVE, numbered, atomic inventory of every distinct
       assertion the media makes — one assertion per line, covering BOTH the spoken/audio
       content AND the visual layer (on-screen text/captions, logos, locations, who appears,
       what they do). Paraphrase each claim in one clause rather than transcribing long
@@ -428,7 +446,8 @@ ai_proofreader_kmt = LlmAgent(
         )
     ),
     description="AI agent that provides KMT (國民黨) supporter perspective on messages, sources, and fact-check replies.",
-    instruction="""
+    instruction=CONVERSATION_LANGUAGE_RULE
+    + """
     You are an AI representative of KMT (國民黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
 
     1. **Network Messages**: Analyze how KMT supporters might perceive suspicious messages
@@ -467,7 +486,7 @@ ai_proofreader_kmt = LlmAgent(
     a `[^draft_factcheck_response-7f3e21]` marker in the prose points at that block. If the request
     refers to something you cannot see (e.g. "the draft above", "same as before", "this reply" without
     the actual text included), do NOT guess or answer based on fragments. Instead reply exactly with:
-    "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
+    "I did not receive the full content (the complete message, or the complete draft). Please include the full text and call me again."
 
     Provide respectful, measured analysis that helps ensure fact-checking is credible across political divides.
     """,
@@ -483,7 +502,8 @@ ai_proofreader_dpp = LlmAgent(
         )
     ),
     description="AI agent that provides DPP (民進黨) supporter perspective on messages, sources, and fact-check replies.",
-    instruction="""
+    instruction=CONVERSATION_LANGUAGE_RULE
+    + """
     You are an AI representative of DPP (民進黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
 
     1. **Network Messages**: Analyze how DPP supporters might perceive suspicious messages
@@ -522,7 +542,7 @@ ai_proofreader_dpp = LlmAgent(
     a `[^draft_factcheck_response-7f3e21]` marker in the prose points at that block. If the request
     refers to something you cannot see (e.g. "the draft above", "same as before", "this reply" without
     the actual text included), do NOT guess or answer based on fragments. Instead reply exactly with:
-    "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
+    "I did not receive the full content (the complete message, or the complete draft). Please include the full text and call me again."
 
     Provide engaged, democratic analysis that helps ensure fact-checking resonates with progressive audiences.
     """,
@@ -538,7 +558,8 @@ ai_proofreader_tpp = LlmAgent(
         )
     ),
     description="AI agent that provides TPP (民眾黨) supporter perspective on messages, sources, and fact-check replies.",
-    instruction="""
+    instruction=CONVERSATION_LANGUAGE_RULE
+    + """
     You are an AI representative of TPP (台灣民眾黨) supporter perspective in Taiwan. Your role is to provide insights from this political viewpoint on:
 
     1. **Network Messages**: Analyze how TPP supporters might perceive suspicious messages
@@ -577,7 +598,7 @@ ai_proofreader_tpp = LlmAgent(
     a `[^draft_factcheck_response-7f3e21]` marker in the prose points at that block. If the request
     refers to something you cannot see (e.g. "the draft above", "same as before", "this reply" without
     the actual text included), do NOT guess or answer based on fragments. Instead reply exactly with:
-    "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
+    "I did not receive the full content (the complete message, or the complete draft). Please include the full text and call me again."
 
     Provide rational, balanced analysis that helps ensure fact-checking appeals to moderate voters seeking practical solutions.
     """,
@@ -593,7 +614,8 @@ ai_proofreader_minor_parties = LlmAgent(
         )
     ),
     description="AI agent that provides minor parties (時代力量、歐巴桑聯盟等) supporter perspective on messages, sources, and fact-check replies.",
-    instruction="""
+    instruction=CONVERSATION_LANGUAGE_RULE
+    + """
     You are an AI representative of Taiwan's minor parties supporters (時代力量、歐巴桑聯盟、台灣基進等). Your role is to provide insights from this political viewpoint on:
 
     1. **Network Messages**: Analyze how minor party supporters might perceive suspicious messages
@@ -632,7 +654,7 @@ ai_proofreader_minor_parties = LlmAgent(
     a `[^draft_factcheck_response-7f3e21]` marker in the prose points at that block. If the request
     refers to something you cannot see (e.g. "the draft above", "same as before", "this reply" without
     the actual text included), do NOT guess or answer based on fragments. Instead reply exactly with:
-    "我沒有收到完整的內容（訊息全文或草稿全文），請附上完整文字再呼叫我一次。"
+    "I did not receive the full content (the complete message, or the complete draft). Please include the full text and call me again."
 
     Provide engaged, civic-minded analysis that helps ensure fact-checking includes diverse voices and perspectives.
     """,
@@ -745,10 +767,12 @@ def handle_writer_tool_error(
     tool_context: Any,
     error: Exception,
 ) -> Optional[dict]:
-    """on_tool_error_callback for ai_writer.
+    """on_tool_error_callback for ai_writer and ai_receptionist.
 
-    Catches any exception thrown by a tool so the writer turn does not crash.
-    Returns a structured error dict the writer can read and react to.
+    Catches any exception thrown by a tool so the agent turn does not crash.
+    Returns a structured error dict the agent can read and react to. Nothing in
+    it is writer-specific; the name is kept for the sessions and tests that
+    already refer to it.
     """
     return {
         "error": type(error).__name__,
@@ -783,10 +807,13 @@ ai_writer = LlmAgent(
     before_tool_callback=resolve_citations,
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,
-    after_agent_callback=[update_last_event_time, generate_session_title],
+    # generate_session_title is NOT here: it only ever runs on the first turn,
+    # and the first turn always starts at the root. See its docstring.
+    after_agent_callback=[update_last_event_time],
     instruction=f"""
     You are an AI Writer and orchestrator for the Cofacts fact-checking system. Today is {datetime.now().strftime("%Y-%m-%d")}.
 
+{CONVERSATION_LANGUAGE_RULE}
     Your primary role is to SUPPORT and EMPOWER human fact-checkers in composing high-quality responses for suspicious messages on Cofacts.
     You are NOT here to replace human judgment, but to be a collaborative partner that helps people grow their fact-checking skills and provides experienced editors with powerful assistance.
 
@@ -804,12 +831,35 @@ ai_writer = LlmAgent(
 
     ## Getting Started:
 
-    Users should ALWAYS provide a Cofacts suspicious message URL (https://cofacts.tw/article/<articleId>) to start the conversation.
+    You do not take messages in off the street: `{AI_RECEPTIONIST_NAME}` runs the front desk and
+    hands you a conversation once there is a Cofacts article to work on
+    ({COFACTS_SITE_URL}/article/<articleId>).
 
-    If the user doesn't provide a Cofacts URL or seems unsure how to use this system:
-    - Ask them to provide a specific Cofacts article URL (https://cofacts.tw/article/<articleId>)
-    - Explain that you need the URL to access message details, popularity data, and existing responses
-    - Guide them to browse https://cofacts.tw/ to find messages that need fact-checking
+    **Your first action after taking over is ALWAYS `get_single_cofacts_article` for that article
+    id.**
+
+    If you somehow end up without an article id — the user opened straight into you and is asking
+    about a message that is not in Cofacts yet — do NOT demand a Cofacts article URL and do not start
+    checking a bare pasted message. Transfer to `{AI_RECEPTIONIST_NAME}`, which knows how to search
+    for it and take a report.
+
+    ## Handing a Conversation Back to `{AI_RECEPTIONIST_NAME}`:
+
+    A session is a workspace, not one message. Users who finish one message often send another —
+    frequently a variant — and keeping that in this session is what lets you reuse the
+    `{AI_VERIFIER_NAME}` reports and `{AI_INVESTIGATOR_NAME}` findings you already have. But a new
+    message may not be in Cofacts at all, and you have no way to report one. When that happens,
+    call `transfer_to_agent` with `{AI_RECEPTIONIST_NAME}`.
+
+    **Decide by what the user MEANS, never by whether a link is a Cofacts link.** Non-Cofacts
+    URLs are overwhelmingly evidence, not new reports — treating a pattern as the trigger would
+    shovel the user's own sources into the reporting flow:
+
+    | What the user is saying | What you do |
+    | --- | --- |
+    | "here's another suspicious message I received" | transfer to `{AI_RECEPTIONIST_NAME}` |
+    | "here's a source / the original post, take a look" | stay, and verify it as usual |
+    | you genuinely cannot tell | **ask one question.** Do not guess, and do not transfer on a hunch |
 
     ## Citing Tool Results Instead of Retyping Them:
 
@@ -1008,8 +1058,53 @@ ai_writer = LlmAgent(
     ],
 )
 
+# Front desk — the root agent, with ai_writer as its only sub_agent.
+#
+# Why a second agent rather than more rules in ai_writer: the writer's prompt is
+# long and trace-tuned around "the user already has a cofacts.tw article URL",
+# and folding reporting intake plus the support-desk traffic an open text box
+# attracts into it risked the fact-checking pipeline we already have working.
+#
+# Why sub_agents (transfer) rather than AgentTool: an AgentTool call is a
+# stateless single-message session, which would cost ai_writer its multi-turn
+# conversation entirely.
+#
+# `disallow_transfer_to_parent` is left at its default False on BOTH agents, and
+# that single default buys two separate things:
+#   - the writer can hand a NEW suspicious message back here, instead of the
+#     user having to open another session and lose the research context;
+#   - Runner._find_agent_to_run resumes later turns straight at the writer
+#     (it only returns a sub-agent that is transferable all the way up), so a
+#     fact-check does not pay for a receptionist turn on every message.
+# Setting it True would silently cost both.
+#
+# No after_tool/resolve_citations here on purpose: the citation machinery exists
+# for stateless AgentTool sub-agents, and this agent has none.
+ai_receptionist = LlmAgent(
+    name=AI_RECEPTIONIST_NAME,
+    # Classifying intent and taking a report needs neither a frontier model nor
+    # deep thinking, and this agent sits in front of every single message.
+    model="gemini-3.1-flash-lite",
+    description="Cofacts front desk: works out whether a visitor wants to report a suspicious message, fact-check one, or something else entirely, and routes them.",
+    generate_content_config=genai_types.GenerateContentConfig(
+        thinking_config=genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel.LOW
+        )
+    ),
+    on_tool_error_callback=handle_writer_tool_error,
+    after_agent_callback=[update_last_event_time, generate_session_title],
+    instruction=RECEPTIONIST_INSTRUCTION,
+    sub_agents=[ai_writer],
+    tools=[
+        search_suspicious_messages,
+        get_single_cofacts_article,
+        request_fact_check,
+        submit_suspicious_message,
+    ],
+)
+
 app = App(
     name="cofacts_ai",
-    root_agent=ai_writer,
+    root_agent=ai_receptionist,
     plugins=[LangfuseTracingPlugin(), SaveFilesAsArtifactsPlugin()],
 )

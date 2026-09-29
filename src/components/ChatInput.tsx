@@ -16,6 +16,16 @@ interface ChatInputProps {
   disabled?: boolean
   placeholder?: string
   sessionId?: string
+  /**
+   * Seed text for an empty composer — used by the share entry point on `/` to
+   * drop in what the user shared from another app.
+   *
+   * A draft the user typed themselves always wins: `drafts` survives navigation
+   * within the session, so someone who started writing and then came back must
+   * not have their words replaced by the shared payload. Read once on mount
+   * like the draft it stands in for, so typing over it is never undone.
+   */
+  initialValue?: string
 }
 
 export function ChatInput({
@@ -23,10 +33,13 @@ export function ChatInput({
   onStop,
   isStreaming,
   disabled,
-  placeholder = '詢問後續問題或要求修改...',
+  placeholder = 'Ask a follow-up question or request changes...',
   sessionId = '', // ChatInput without sessionId will connect to empty sessionId
+  initialValue = '',
 }: ChatInputProps) {
-  const [value, setValue] = useState(() => drafts.get(sessionId) ?? '')
+  const [value, setValue] = useState(
+    () => drafts.get(sessionId) ?? initialValue,
+  )
   const [files, setFiles] = useState<Array<File>>([])
   const [isDragging, setIsDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -158,7 +171,7 @@ export function ChatInput({
               upload_file
             </span>
             <span className="text-sm text-primary font-medium">
-              放開以附加檔案
+              Drop to attach files
             </span>
           </div>
         )}
@@ -197,7 +210,7 @@ export function ChatInput({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isStreaming}
-            title="附加檔案"
+            title="Attach file"
             className="shrink-0 p-1.5 text-gray-500 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined text-xl">
@@ -216,7 +229,7 @@ export function ChatInput({
                 <button
                   type="button"
                   onClick={() => removeFile(i)}
-                  aria-label={`移除 ${file.name}`}
+                  aria-label={`Remove ${file.name}`}
                   className="shrink-0 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
                 >
                   <span className="material-symbols-outlined text-sm leading-none">
@@ -240,7 +253,7 @@ export function ChatInput({
       </div>
       <div className="text-center mt-2">
         <span className="text-[10px] text-gray-400">
-          AI 可能會犯錯，請務必查核事實。
+          AI may make mistakes. Please verify facts independently.
         </span>
       </div>
     </div>

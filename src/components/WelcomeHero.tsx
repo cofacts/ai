@@ -10,10 +10,11 @@ export function WelcomeHero({ children }: WelcomeHeroProps) {
           C
         </div>
         <h1 className="text-2xl font-bold text-text-main">
-          歡迎使用 Cofacts.ai
+          Welcome to Cofacts.ai
         </h1>
         <p className="text-text-muted leading-relaxed">
-          貼上可疑訊息或 Cofacts 文章連結，AI 協助您進行查核、撰寫回應。
+          Paste a suspicious message or a Cofacts article link, and AI will help
+          you fact-check it and draft a response.
         </p>
       </div>
 
