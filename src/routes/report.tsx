@@ -14,8 +14,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+import type { ReportSearch } from '@/lib/report'
 import type {
   ReportOutcomeArticleQueryVariables,
   SearchSuspiciousMessagesQueryVariables,
@@ -32,7 +33,7 @@ import { FactCheckReplyCard } from '@/components/cofacts/FactCheckReplyCard'
 import { SuspiciousMessageCard } from '@/components/cofacts/SuspiciousMessageCard'
 import { useAuth } from '@/lib/auth'
 import { isAuthExpiredError } from '@/lib/authExpired'
-import { findFirstUrl } from '@/lib/report'
+import { findFirstUrl, findSharedUrl } from '@/lib/report'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import {
@@ -76,6 +77,14 @@ const createArticleReport = createServerFn({ method: 'POST' })
 
 export const Route = createFileRoute('/report')({
   component: ReportPage,
+  // Lenient by design: this is the URL a share sheet, an iOS shortcut and every
+  // campaign link point at, and an unrecognised `?utm_source=` must not break
+  // it. Unknown params are ignored rather than rejected.
+  validateSearch: (search: Record<string, unknown>): ReportSearch => ({
+    url: typeof search.url === 'string' ? search.url : undefined,
+    text: typeof search.text === 'string' ? search.text : undefined,
+    title: typeof search.title === 'string' ? search.title : undefined,
+  }),
   head: () => ({
     meta: [
       { title: '回報可疑訊息 — Cofacts.ai' },
@@ -104,17 +113,26 @@ type Outcome =
     }
 
 function ReportPage() {
+  const search = Route.useSearch()
   const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [url, setUrl] = useState('')
+  const sharedUrl = findSharedUrl(search)
+  const [url, setUrl] = useState(sharedUrl ?? '')
   const [reason, setReason] = useState('')
   const [noLink, setNoLink] = useState(false)
   const [candidates, setCandidates] = useState<Array<SearchCandidate> | null>(
     null,
   )
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  const reasonRef = useRef<HTMLTextAreaElement>(null)
+
+  // A share sheet fills the only field the machine can fill, which leaves the
+  // reason as the one thing still worth the reporter's attention.
+  useEffect(() => {
+    if (sharedUrl && user) reasonRef.current?.focus()
+  }, [sharedUrl, user])
 
   // The one way a new article gets filed: straight after a search that found
   // nothing, or when the reporter says none of the candidates is theirs.
@@ -254,6 +272,7 @@ function ReportPage() {
               }}
               reason={reason}
               onReasonChange={setReason}
+              reasonRef={reasonRef}
               onSubmit={submit}
               busy={busy}
               noLink={noLink}
@@ -288,6 +307,7 @@ function ReportForm({
   onUrlChange,
   reason,
   onReasonChange,
+  reasonRef,
   onSubmit,
   busy,
   noLink,
@@ -296,6 +316,7 @@ function ReportForm({
   onUrlChange: (value: string) => void
   reason: string
   onReasonChange: (value: string) => void
+  reasonRef: React.RefObject<HTMLTextAreaElement | null>
   onSubmit: () => void
   busy: boolean
   noLink: boolean
@@ -352,6 +373,7 @@ function ReportForm({
           為何您覺得這是謠言？
         </span>
         <textarea
+          ref={reasonRef}
           value={reason}
           onChange={(e) => onReasonChange(e.target.value)}
           rows={3}

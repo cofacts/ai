@@ -146,8 +146,9 @@ itself.
 - `src/server/__tests__/cofactsSite.test.ts` covers deriving the site host from the API host —
   every deployment points at `dev-api.cofacts.tw`, so a `cofacts.tw` link would 404.
 - `src/lib/__tests__/report.test.ts` covers pulling the link out of a paste — trimming the
-  sentence punctuation stuck to it without cutting a bracket that belongs to it — and the
-  link-required predicate.
+  sentence punctuation stuck to it without cutting a bracket that belongs to it — the
+  link-required predicate, and the share-sheet payload shapes, including the real
+  Facebook-on-Android one.
 - Not covered by tests: the outcome screens themselves. This repo has no React component test
   harness, and standing one up was out of scope here.
 

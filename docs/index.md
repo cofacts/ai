@@ -32,7 +32,8 @@ flowchart LR
    It serves two entry points. `/` is the chat: a session with the multi-agent system below.
    **`/report`** is a form that talks to `rumors-api` directly and never touches the agents —
    paste a circulating message, see whether Cofacts already has it, add a +1 or file it, then
-   open a chat about the resulting article if you want one.
+   open a chat about the resulting article if you want one. It is also the app's Web Share
+   Target, so it is where Android's share sheet lands.
    → decision: [Report through a form](decisions/20260905-report-form-page.md).
 
 2. **ADK agent backend** — a self-contained Python Google-ADK project under `adk/` (its own
