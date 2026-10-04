@@ -153,13 +153,21 @@ function ReportPage() {
     }
     setNoLink(false)
     setUrl(found)
+    clearMutations()
     startReport.mutate(found)
+  }
+
+  // Every action starts from a clean slate: a chained filing leaves its error
+  // on both startReport and fileNew, and resetting only the one being re-run
+  // would keep the other's stale message on screen.
+  function clearMutations() {
+    mutations.forEach((m) => m.reset())
   }
 
   function startOver() {
     setCandidates(null)
     setOutcome(null)
-    mutations.forEach((m) => m.reset())
+    clearMutations()
   }
 
   return (
@@ -188,8 +196,14 @@ function ReportPage() {
           ) : candidates ? (
             <CandidateView
               candidates={candidates}
-              onPick={(id) => pickCandidate.mutate(id)}
-              onNoneMatch={() => fileNew.mutate(url)}
+              onPick={(id) => {
+                clearMutations()
+                pickCandidate.mutate(id)
+              }}
+              onNoneMatch={() => {
+                clearMutations()
+                fileNew.mutate(url)
+              }}
               busy={busy}
             />
           ) : (
@@ -407,9 +421,7 @@ function OutcomeView({
       subtitle={
         hasReplies
           ? '查核結果在下面，你也可以留下看法。'
-          : communityDemandCount !== undefined
-            ? `目前還沒有查核結論，已經幫你一起請求查核了——現在有 ${communityDemandCount} 個人在等答案。`
-            : '目前還沒有查核結論。'
+          : `目前還沒有查核結論，已經幫你一起請求查核了——現在有 ${communityDemandCount} 個人在等答案。`
       }
       onDiscuss={onDiscuss}
       busy={busy}
