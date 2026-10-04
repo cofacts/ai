@@ -18,8 +18,12 @@ import { getArticleUrl, getRepliesUrl } from './cofactsSite'
 import { graphql } from './gql'
 import { resolveAdkUserIdOrThrow } from './adkUser'
 import type {
+  CreateArticleReportMutationVariables,
   ReportOutcomeArticleQuery,
+  ReportOutcomeArticleQueryVariables,
+  RequestFactCheckMutationVariables,
   SearchSuspiciousMessagesQuery,
+  SearchSuspiciousMessagesQueryVariables,
 } from './gql/graphql'
 import { cofactsExec } from '@/lib/cofactsExec'
 
@@ -124,7 +128,7 @@ const CANDIDATE_LIMIT = 5
 const BARE_LINK_MIN_SHOULD_MATCH = '90%'
 
 export async function findSimilarReports(
-  like: string,
+  like: SearchSuspiciousMessagesQueryVariables['like'],
 ): Promise<Array<SearchCandidate>> {
   const data = await cofactsExec(SearchSuspiciousMessagesDocument, {
     like,
@@ -134,14 +138,9 @@ export async function findSimilarReports(
   return data.ListArticles?.edges ?? []
 }
 
-export interface ReportOutcome {
-  article: ReportOutcomeArticle
-  articleUrl: string
-}
-
 export async function fetchReportOutcome(
-  articleId: string,
-): Promise<ReportOutcome | null> {
+  articleId: ReportOutcomeArticleQueryVariables['id'],
+): Promise<{ article: ReportOutcomeArticle; articleUrl: string } | null> {
   const data = await cofactsExec(ReportOutcomeArticleDocument, {
     id: articleId,
   })
@@ -152,11 +151,8 @@ export async function fetchReportOutcome(
   }
 }
 
-export interface RequestFactCheckInput {
-  articleId: string
-  /** The reporter's own words. Never a summary written for them. */
-  reason?: string
-}
+/** `reason` is the reporter's own words. Never a summary written for them. */
+export type RequestFactCheckInput = RequestFactCheckMutationVariables
 
 export async function recordFactCheckRequest(
   input: RequestFactCheckInput,
@@ -171,10 +167,17 @@ export async function recordFactCheckRequest(
   return { communityDemandCount: article.replyRequestCount ?? 0 }
 }
 
-export interface CreateArticleReportInput {
+/**
+ * The mutation's own variables, except that `text` and `reference` collapse
+ * into one `url`: this form files a link and nothing else, so both are derived
+ * from it below.
+ */
+export type CreateArticleReportInput = Pick<
+  CreateArticleReportMutationVariables,
+  'reason'
+> & {
   /** Where the message is circulating. Also the article's own text. */
   url: string
-  reason?: string
 }
 
 export async function fileArticleReport(
