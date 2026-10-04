@@ -12,6 +12,10 @@ import {
   recordFactCheckRequest,
 } from './report.queries'
 import type {
+  ReportOutcomeArticleQueryVariables,
+  SearchSuspiciousMessagesQueryVariables,
+} from './gql/graphql'
+import type {
   CreateArticleReportInput,
   RequestFactCheckInput,
 } from './report.queries'
@@ -19,7 +23,7 @@ import type {
 export type { ReportOutcomeArticle, SearchCandidate } from './report.queries'
 
 export const searchSuspiciousMessages = createServerFn({ method: 'GET' })
-  .inputValidator((text: string) => {
+  .inputValidator((text: SearchSuspiciousMessagesQueryVariables['like']) => {
     const like = text.trim()
     if (!like) throw new Error('Nothing to search for')
     return like
@@ -27,7 +31,9 @@ export const searchSuspiciousMessages = createServerFn({ method: 'GET' })
   .handler(({ data: like }) => findSimilarReports(like))
 
 export const getReportOutcomeArticle = createServerFn({ method: 'GET' })
-  .inputValidator((articleId: string) => articleId)
+  .inputValidator(
+    (articleId: ReportOutcomeArticleQueryVariables['id']) => articleId,
+  )
   .handler(({ data: articleId }) => fetchReportOutcome(articleId))
 
 export const requestFactCheck = createServerFn({ method: 'POST' })
