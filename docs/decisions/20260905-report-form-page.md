@@ -140,7 +140,7 @@ itself.
 
 ## Confirmation
 
-- `src/server/__tests__/report.queries.test.ts` covers all four Cofacts calls, including the
+- `src/server/__tests__/report.server.test.ts` covers all four Cofacts calls, including the
   threshold switch, the signed-out refusal that never reaches the API, and `reference` always
   being `URL`.
 - `src/server/__tests__/cofactsSite.test.ts` covers deriving the site host from the API host —

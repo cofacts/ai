@@ -7,7 +7,7 @@ import {
   fileArticleReport,
   findSimilarReports,
   recordFactCheckRequest,
-} from '../report.queries'
+} from '../report.server'
 import { cofactsExec } from '@/lib/cofactsExec'
 import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
 
