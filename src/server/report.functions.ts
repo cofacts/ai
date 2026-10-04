@@ -16,14 +16,7 @@ import type {
   RequestFactCheckInput,
 } from './report.queries'
 
-export type {
-  CreateArticleReportInput,
-  ReportOutcome,
-  ReportOutcomeArticle,
-  RequestFactCheckInput,
-  SearchCandidate,
-  SearchResult,
-} from './report.queries'
+export type { ReportOutcomeArticle, SearchCandidate } from './report.queries'
 
 export const searchSuspiciousMessages = createServerFn({ method: 'GET' })
   .inputValidator((text: string) => {

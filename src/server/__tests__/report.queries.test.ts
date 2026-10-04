@@ -45,9 +45,7 @@ describe('findSimilarReports', () => {
     // unrelated Facebook posts scoring an identical 225.5, because every share
     // link shares every token but the id. At 90% it returns the one right
     // article, or none.
-    mockedExec.mockResolvedValueOnce({
-      ListArticles: { totalCount: 0, edges: [] },
-    })
+    mockedExec.mockResolvedValueOnce({ ListArticles: { edges: [] } })
 
     await findSimilarReports('https://www.facebook.com/share/p/1HSNRpimmH/')
 
@@ -57,41 +55,33 @@ describe('findSimilarReports', () => {
     expect(variables.first).toBe(5)
   })
 
-  test('returns the edges with their scores', async () => {
+  test('returns the edges in the order Cofacts ranked them', async () => {
     mockedExec.mockResolvedValueOnce({
       ListArticles: {
-        totalCount: 2,
         edges: [
-          { score: 12.5, node: { id: 'a1', text: 'foo' } },
-          { score: 3.1, node: { id: 'a2', text: 'bar' } },
+          { node: { id: 'a1', text: 'foo' } },
+          { node: { id: 'a2', text: 'bar' } },
         ],
       },
     })
 
-    const result = await findSimilarReports('foo')
+    const candidates = await findSimilarReports('foo')
 
-    expect(result.totalCount).toBe(2)
-    expect(result.candidates.map((e) => e.node.id)).toEqual(['a1', 'a2'])
-    expect(result.candidates[0]?.score).toBe(12.5)
+    expect(candidates.map((e) => e.node.id)).toEqual(['a1', 'a2'])
   })
 
   test('survives an empty or null connection', async () => {
     mockedExec.mockResolvedValueOnce({ ListArticles: null })
-    expect(await findSimilarReports('foo')).toEqual({
-      totalCount: 0,
-      candidates: [],
-    })
+    expect(await findSimilarReports('foo')).toEqual([])
 
-    mockedExec.mockResolvedValueOnce({
-      ListArticles: { totalCount: 0, edges: [] },
-    })
-    expect((await findSimilarReports('foo')).candidates).toEqual([])
+    mockedExec.mockResolvedValueOnce({ ListArticles: { edges: [] } })
+    expect(await findSimilarReports('foo')).toEqual([])
   })
 })
 
 describe('fetchReportOutcome', () => {
   test('returns the article with a link on the matching site', async () => {
-    mockedExec.mockResolvedValueOnce({ GetArticle: { id: 'a1', text: 'foo' } })
+    mockedExec.mockResolvedValueOnce({ GetArticle: { id: 'a1' } })
 
     const outcome = await fetchReportOutcome('a1')
 
@@ -109,7 +99,7 @@ describe('fetchReportOutcome', () => {
 describe('recordFactCheckRequest', () => {
   test('records the request and reports the new count', async () => {
     mockedExec.mockResolvedValueOnce({
-      CreateOrUpdateReplyRequest: { id: 'a1', replyRequestCount: 4 },
+      CreateOrUpdateReplyRequest: { replyRequestCount: 4 },
     })
 
     const result = await recordFactCheckRequest({
@@ -117,13 +107,13 @@ describe('recordFactCheckRequest', () => {
       reason: '  來源看起來怪怪的  ',
     })
 
-    expect(result).toEqual({ articleId: 'a1', communityDemandCount: 4 })
+    expect(result).toEqual({ communityDemandCount: 4 })
     expect(lastCall().variables.reason).toBe('來源看起來怪怪的')
   })
 
   test('sends null rather than an empty reason', async () => {
     mockedExec.mockResolvedValueOnce({
-      CreateOrUpdateReplyRequest: { id: 'a1', replyRequestCount: 1 },
+      CreateOrUpdateReplyRequest: { replyRequestCount: 1 },
     })
     await recordFactCheckRequest({ articleId: 'a1', reason: '   ' })
     expect(lastCall().variables.reason).toBeNull()
@@ -156,8 +146,8 @@ describe('fileArticleReport', () => {
     })
 
     expect(result).toEqual({
-      articleId: 'new1',
       articleUrl: 'https://dev.cofacts.tw/article/new1',
+      repliesUrl: 'https://dev.cofacts.tw/replies',
     })
     const { variables } = lastCall()
     expect(variables.text).toBe('https://example.com/a')

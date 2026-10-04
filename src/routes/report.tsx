@@ -13,9 +13,8 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
-import type { ReportSearch } from '@/lib/report'
 import type {
   ReportOutcomeArticle,
   SearchCandidate,
@@ -26,7 +25,7 @@ import { FactCheckReplyCard } from '@/components/cofacts/FactCheckReplyCard'
 import { SuspiciousMessageCard } from '@/components/cofacts/SuspiciousMessageCard'
 import { useAuth } from '@/lib/auth'
 import { isAuthExpiredError } from '@/lib/authExpired'
-import { findFirstUrl, findSharedUrl } from '@/lib/report'
+import { findFirstUrl } from '@/lib/report'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import {
@@ -38,14 +37,6 @@ import {
 
 export const Route = createFileRoute('/report')({
   component: ReportPage,
-  // Lenient by design: this is the URL a share sheet, an iOS shortcut and every
-  // campaign link point at, and an unrecognised `?utm_source=` must not break
-  // it. Unknown params are ignored rather than rejected.
-  validateSearch: (search: Record<string, unknown>): ReportSearch => ({
-    url: typeof search.url === 'string' ? search.url : undefined,
-    text: typeof search.text === 'string' ? search.text : undefined,
-    title: typeof search.title === 'string' ? search.title : undefined,
-  }),
   head: () => ({
     meta: [
       { title: '回報可疑訊息 — Cofacts.ai' },
@@ -60,84 +51,70 @@ export const Route = createFileRoute('/report')({
 
 /** What the reporter ends up looking at. */
 type Outcome =
-  | { kind: 'created'; articleUrl: string }
+  | { kind: 'created'; articleUrl: string; repliesUrl: string }
   | {
       kind: 'matched'
       articleUrl: string
       article: ReportOutcomeArticle
-      /** True when we added their +1 because nobody had answered it yet. */
-      requested: boolean
+      /**
+       * Set when we added their +1 because nobody had answered it yet: how many
+       * people are waiting, counting them. Read back from the +1 itself, since
+       * `article` was fetched before it.
+       */
+      communityDemandCount?: number
     }
 
-/** `https://dev.cofacts.tw/article/xyz` -> `https://dev.cofacts.tw`. */
-function siteBaseFrom(articleUrl: string): string {
-  const at = articleUrl.indexOf('/article/')
-  return at === -1 ? articleUrl : articleUrl.slice(0, at)
-}
-
 function ReportPage() {
-  const search = Route.useSearch()
   const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const sharedUrl = findSharedUrl(search)
-  const [url, setUrl] = useState(sharedUrl ?? '')
+  const [url, setUrl] = useState('')
   const [reason, setReason] = useState('')
   const [noLink, setNoLink] = useState(false)
   const [candidates, setCandidates] = useState<Array<SearchCandidate> | null>(
     null,
   )
   const [outcome, setOutcome] = useState<Outcome | null>(null)
-  const reasonRef = useRef<HTMLTextAreaElement>(null)
 
-  // A share sheet fills the only field the machine can fill, which leaves the
-  // reason as the one thing still worth the reporter's attention.
-  useEffect(() => {
-    if (sharedUrl && user) reasonRef.current?.focus()
-  }, [sharedUrl, user])
+  // The one way a new article gets filed: straight after a search that found
+  // nothing, or when the reporter says none of the candidates is theirs.
+  const fileNew = useMutation({
+    mutationFn: (submitted: string) =>
+      createArticleReport({ data: { url: submitted, reason } }),
+    onSuccess: ({ articleUrl, repliesUrl }) =>
+      setOutcome({ kind: 'created', articleUrl, repliesUrl }),
+  })
 
   // Search first, always. Filing straight away is what produces the duplicates
   // that make the database harder to search for everyone after you.
   const startReport = useMutation({
-    mutationFn: async (
-      submitted: string,
-    ): Promise<
-      | { kind: 'candidates'; candidates: Array<SearchCandidate> }
-      | { kind: 'created'; articleUrl: string }
-    > => {
-      const result = await searchSuspiciousMessages({ data: submitted })
-      if (result.candidates.length > 0) {
-        return { kind: 'candidates', candidates: result.candidates }
-      }
-      const created = await createArticleReport({
-        data: { url: submitted, reason },
-      })
-      return { kind: 'created', articleUrl: created.articleUrl }
-    },
-    onSuccess: (result) => {
-      if (result.kind === 'candidates') setCandidates(result.candidates)
-      else setOutcome({ kind: 'created', articleUrl: result.articleUrl })
+    mutationFn: (submitted: string) =>
+      searchSuspiciousMessages({ data: submitted }),
+    // Returning the filing keeps this mutation pending until it settles, so
+    // the form never looks idle between "nothing found" and "filed".
+    onSuccess: (found, submitted) => {
+      if (found.length === 0) return fileNew.mutateAsync(submitted)
+      setCandidates(found)
     },
   })
 
   const pickCandidate = useMutation({
-    mutationFn: async (articleId: string) => {
+    mutationFn: async (articleId: string): Promise<Outcome> => {
       const found = await getReportOutcomeArticle({ data: articleId })
       if (!found) throw new Error('找不到這則訊息')
+      const matched: Outcome = { kind: 'matched', ...found }
       // Nobody has answered it yet: register the demand. That +1 is what tells
-      // volunteers which messages people are actually asking about.
-      const requested = found.article.replyCount === 0
-      if (requested) await requestFactCheck({ data: { articleId, reason } })
-      return { ...found, requested }
+      // volunteers which messages people are actually asking about. The same
+      // signal decides what the outcome screen shows, so the two cannot
+      // disagree about whether there is an answer.
+      if (found.article.articleReplies.length > 0) return matched
+      const { communityDemandCount } = await requestFactCheck({
+        data: { articleId, reason },
+      })
+      return { ...matched, communityDemandCount }
     },
-    onSuccess: ({ article, articleUrl, requested }) =>
-      setOutcome({ kind: 'matched', article, articleUrl, requested }),
-  })
-
-  const fileNew = useMutation({
-    mutationFn: () => createArticleReport({ data: { url, reason } }),
-    onSuccess: ({ articleUrl }) => setOutcome({ kind: 'created', articleUrl }),
+    onSuccess: setOutcome,
   })
 
   // Hands the article to ai_writer the way it already expects to receive one —
@@ -156,17 +133,14 @@ function ReportPage() {
     },
   })
 
-  const busy =
-    startReport.isPending ||
-    pickCandidate.isPending ||
-    fileNew.isPending ||
-    discussWithAi.isPending
+  const mutations = [startReport, pickCandidate, fileNew, discussWithAi]
+  const busy = mutations.some((m) => m.isPending)
 
   // AUTH_EXPIRED opens the login modal through the global MutationCache
   // handler; only anything else deserves an inline message.
-  const failure = [startReport.error, pickCandidate.error, fileNew.error].find(
-    (err) => err && !isAuthExpiredError(err),
-  )
+  const failure = mutations
+    .map((m) => m.error)
+    .find((err) => err && !isAuthExpiredError(err))
 
   function submit() {
     // Forgiving about a paste that brought prose with it: keep the link and put
@@ -185,9 +159,7 @@ function ReportPage() {
   function startOver() {
     setCandidates(null)
     setOutcome(null)
-    startReport.reset()
-    pickCandidate.reset()
-    fileNew.reset()
+    mutations.forEach((m) => m.reset())
   }
 
   return (
@@ -217,7 +189,7 @@ function ReportPage() {
             <CandidateView
               candidates={candidates}
               onPick={(id) => pickCandidate.mutate(id)}
-              onNoneMatch={() => fileNew.mutate()}
+              onNoneMatch={() => fileNew.mutate(url)}
               busy={busy}
             />
           ) : (
@@ -229,7 +201,6 @@ function ReportPage() {
               }}
               reason={reason}
               onReasonChange={setReason}
-              reasonRef={reasonRef}
               onSubmit={submit}
               busy={busy}
               noLink={noLink}
@@ -238,7 +209,7 @@ function ReportPage() {
 
           {busy && (
             <p className="text-sm text-text-muted text-center">
-              {startReport.isPending
+              {startReport.isPending && !fileNew.isPending
                 ? '正在查看有沒有人回報過…'
                 : discussWithAi.isPending
                   ? '正在開啟對話…'
@@ -264,7 +235,6 @@ function ReportForm({
   onUrlChange,
   reason,
   onReasonChange,
-  reasonRef,
   onSubmit,
   busy,
   noLink,
@@ -273,7 +243,6 @@ function ReportForm({
   onUrlChange: (value: string) => void
   reason: string
   onReasonChange: (value: string) => void
-  reasonRef: React.RefObject<HTMLTextAreaElement | null>
   onSubmit: () => void
   busy: boolean
   noLink: boolean
@@ -330,7 +299,6 @@ function ReportForm({
           為何您覺得這是謠言？
         </span>
         <textarea
-          ref={reasonRef}
           value={reason}
           onChange={(e) => onReasonChange(e.target.value)}
           rows={3}
@@ -384,6 +352,9 @@ function CandidateView({
           factCheckCount={node.replyCount}
           communityDemandCount={node.replyRequestCount}
           onSelect={() => onPick(node.id)}
+          // A second tap would race the first: a second +1, or a +1 landing
+          // on one article while 都不是 files another.
+          disabled={busy}
         />
       ))}
       <button
@@ -409,22 +380,21 @@ function OutcomeView({
   onStartOver: () => void
   busy: boolean
 }) {
-  const site = siteBaseFrom(outcome.articleUrl)
-
   if (outcome.kind === 'created') {
     return (
       <OutcomeShell
         title="感謝回報，你是第一個發現他的！"
         subtitle="資料庫裡沒有相符的紀錄，這則訊息已經收進來，等待查核。"
-        primary={{ label: '與 Cofacts AI 討論', onClick: onDiscuss, busy }}
-        secondaryHref={`${site}/replies`}
+        onDiscuss={onDiscuss}
+        busy={busy}
+        secondaryHref={outcome.repliesUrl}
         secondaryLabel="看看最新查核"
         onStartOver={onStartOver}
       />
     )
   }
 
-  const { article, requested } = outcome
+  const { article, communityDemandCount } = outcome
   const hasReplies = article.articleReplies.length > 0
 
   return (
@@ -437,11 +407,12 @@ function OutcomeView({
       subtitle={
         hasReplies
           ? '查核結果在下面，你也可以留下看法。'
-          : requested
-            ? `目前還沒有查核結論，已經幫你一起請求查核了——現在有 ${article.replyRequestCount} 個人在等答案。`
+          : communityDemandCount !== undefined
+            ? `目前還沒有查核結論，已經幫你一起請求查核了——現在有 ${communityDemandCount} 個人在等答案。`
             : '目前還沒有查核結論。'
       }
-      primary={{ label: '與 Cofacts AI 討論', onClick: onDiscuss, busy }}
+      onDiscuss={onDiscuss}
+      busy={busy}
       secondaryHref={outcome.articleUrl}
       secondaryLabel="我來動手查"
       onStartOver={onStartOver}
@@ -468,7 +439,8 @@ function OutcomeView({
 function OutcomeShell({
   title,
   subtitle,
-  primary,
+  onDiscuss,
+  busy,
   secondaryHref,
   secondaryLabel,
   onStartOver,
@@ -476,7 +448,8 @@ function OutcomeShell({
 }: {
   title: string
   subtitle: string
-  primary: { label: string; onClick: () => void; busy: boolean }
+  onDiscuss: () => void
+  busy: boolean
   secondaryHref: string
   secondaryLabel: string
   onStartOver: () => void
@@ -492,11 +465,11 @@ function OutcomeShell({
       <div className="flex flex-wrap gap-3 justify-center">
         <button
           type="button"
-          onClick={primary.onClick}
-          disabled={primary.busy}
+          onClick={onDiscuss}
+          disabled={busy}
           className="px-6 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-hover disabled:opacity-50 cursor-pointer"
         >
-          {primary.label}
+          與 Cofacts AI 討論
         </button>
         <a
           href={secondaryHref}

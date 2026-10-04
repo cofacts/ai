@@ -189,7 +189,8 @@ export type AllTools = {
  * One Cofacts article as the agent's tools return it — the `COMMON_ARTICLE_FIELDS`
  * fragment in `adk/cofacts_ai/tools.py`, narrowed to the fields the UI reads.
  * Shared by `get_single_cofacts_article` and `search_cofacts_database`, which
- * select the same fragment.
+ * select the same fragment; extracted so RightDrawer can name the shape it
+ * renders.
  */
 export type CofactsArticle = {
   id: string

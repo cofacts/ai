@@ -77,11 +77,7 @@ export function AuthProvider({
   useEffect(() => {
     const onAuthExpired = () => {
       clearUserScopedCache(queryClient)
-      // href, not pathname: it carries the query string too, so re-auth lands
-      // back on the same view rather than a bare path. /report is reached from a
-      // share sheet with the shared link in the query string; dropping it would
-      // return the user to an empty form.
-      setPendingRedirect(router.state.location.href)
+      setPendingRedirect(router.state.location.pathname)
     }
     window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired)
