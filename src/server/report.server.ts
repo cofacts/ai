@@ -1,10 +1,11 @@
 // The report form's four Cofacts calls: search, read, +1, file.
 //
-// Server-only, and split from report.functions.ts for a mechanical reason: an
-// exported plain function is a tree-shaking root, so exporting these from the
-// module the route imports would drag `cofactsExec` — and h3's getCookie with
-// it — into the client bundle. The createServerFn wrappers next door have
-// their handler bodies stripped for the client, which drops this import too.
+// Server-only, and named `.server.ts` so TanStack Start's import protection
+// fails the build if client code ever imports it. The route's createServerFn
+// wrappers are the only importers; their handler bodies are stripped from the
+// client bundle, which drops the import with them. Kept apart from the route,
+// and exported, so these can be unit-tested — a server function itself needs
+// the Start runtime and cannot be called from vitest.
 //
 // All of them go through cofactsExec, which attaches the reporter's own JWT from
 // the HttpOnly session cookie and the RUMORS_SITE app id — so what lands in

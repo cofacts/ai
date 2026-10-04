@@ -13,13 +13,20 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { createServerFn } from '@tanstack/react-start'
 import { useEffect, useRef, useState } from 'react'
 
 import type { ReportSearch } from '@/lib/report'
 import type {
+  ReportOutcomeArticleQueryVariables,
+  SearchSuspiciousMessagesQueryVariables,
+} from '@/server/gql/graphql'
+import type {
+  CreateArticleReportInput,
   ReportOutcomeArticle,
+  RequestFactCheckInput,
   SearchCandidate,
-} from '@/server/report.functions'
+} from '@/server/report.server'
 import { Header } from '@/components/Header'
 import { LoginPrompt } from '@/components/LoginPrompt'
 import { FactCheckReplyCard } from '@/components/cofacts/FactCheckReplyCard'
@@ -30,11 +37,43 @@ import { findFirstUrl, findSharedUrl } from '@/lib/report'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import {
-  createArticleReport,
-  getReportOutcomeArticle,
-  requestFactCheck,
-  searchSuspiciousMessages,
-} from '@/server/report.functions'
+  fetchReportOutcome,
+  fileArticleReport,
+  findSimilarReports,
+  recordFactCheckRequest,
+} from '@/server/report.server'
+
+// Only this page calls these, so they live beside it. Each is an RPC wrapper
+// plus its input check; the Cofacts calls themselves are in report.server.ts,
+// where they can be tested.
+
+const searchSuspiciousMessages = createServerFn({ method: 'GET' })
+  .inputValidator((text: SearchSuspiciousMessagesQueryVariables['like']) => {
+    const like = text.trim()
+    if (!like) throw new Error('Nothing to search for')
+    return like
+  })
+  .handler(({ data: like }) => findSimilarReports(like))
+
+const getReportOutcomeArticle = createServerFn({ method: 'GET' })
+  .inputValidator(
+    (articleId: ReportOutcomeArticleQueryVariables['id']) => articleId,
+  )
+  .handler(({ data: articleId }) => fetchReportOutcome(articleId))
+
+const requestFactCheck = createServerFn({ method: 'POST' })
+  .inputValidator((input: RequestFactCheckInput) => {
+    if (!input.articleId) throw new Error('articleId is required')
+    return input
+  })
+  .handler(({ data }) => recordFactCheckRequest(data))
+
+const createArticleReport = createServerFn({ method: 'POST' })
+  .inputValidator((input: CreateArticleReportInput) => {
+    if (!input.url.trim()) throw new Error('url is required')
+    return input
+  })
+  .handler(({ data }) => fileArticleReport(data))
 
 export const Route = createFileRoute('/report')({
   component: ReportPage,
