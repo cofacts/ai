@@ -16,7 +16,7 @@ import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/
 type Documents = {
   '\n  query GetCurrentUser {\n    GetUser {\n      id\n      name\n      avatarUrl\n      avatarType\n      avatarData\n    }\n  }\n': typeof types.GetCurrentUserDocument
   '\n  query SearchSuspiciousMessages(\n    $like: String!\n    $first: Int!\n    $minimumShouldMatch: String\n  ) {\n    ListArticles(\n      filter: {\n        moreLikeThis: { like: $like, minimumShouldMatch: $minimumShouldMatch }\n      }\n      orderBy: [{ _score: DESC }]\n      first: $first\n    ) {\n      edges {\n        node {\n          id\n          text\n          articleType\n          replyCount\n          replyRequestCount\n        }\n      }\n    }\n  }\n': typeof types.SearchSuspiciousMessagesDocument
-  '\n  query ReportOutcomeArticle($id: String!) {\n    GetArticle(id: $id) {\n      id\n      replyRequestCount\n      articleReplies(statuses: [NORMAL]) {\n        positiveFeedbackCount\n        negativeFeedbackCount\n        reply {\n          type\n          text\n          reference\n          user {\n            name\n          }\n        }\n      }\n    }\n  }\n': typeof types.ReportOutcomeArticleDocument
+  '\n  query ReportOutcomeArticle($id: String!) {\n    GetArticle(id: $id) {\n      id\n      articleReplies(statuses: [NORMAL]) {\n        positiveFeedbackCount\n        negativeFeedbackCount\n        reply {\n          type\n          text\n          reference\n          user {\n            name\n          }\n        }\n      }\n    }\n  }\n': typeof types.ReportOutcomeArticleDocument
   '\n  mutation RequestFactCheck($articleId: String!, $reason: String) {\n    CreateOrUpdateReplyRequest(articleId: $articleId, reason: $reason) {\n      replyRequestCount\n    }\n  }\n': typeof types.RequestFactCheckDocument
   '\n  mutation CreateArticleReport(\n    $text: String!\n    $reference: ArticleReferenceInput!\n    $reason: String\n  ) {\n    CreateArticle(text: $text, reference: $reference, reason: $reason) {\n      id\n    }\n  }\n': typeof types.CreateArticleReportDocument
 }
@@ -25,7 +25,7 @@ const documents: Documents = {
     types.GetCurrentUserDocument,
   '\n  query SearchSuspiciousMessages(\n    $like: String!\n    $first: Int!\n    $minimumShouldMatch: String\n  ) {\n    ListArticles(\n      filter: {\n        moreLikeThis: { like: $like, minimumShouldMatch: $minimumShouldMatch }\n      }\n      orderBy: [{ _score: DESC }]\n      first: $first\n    ) {\n      edges {\n        node {\n          id\n          text\n          articleType\n          replyCount\n          replyRequestCount\n        }\n      }\n    }\n  }\n':
     types.SearchSuspiciousMessagesDocument,
-  '\n  query ReportOutcomeArticle($id: String!) {\n    GetArticle(id: $id) {\n      id\n      replyRequestCount\n      articleReplies(statuses: [NORMAL]) {\n        positiveFeedbackCount\n        negativeFeedbackCount\n        reply {\n          type\n          text\n          reference\n          user {\n            name\n          }\n        }\n      }\n    }\n  }\n':
+  '\n  query ReportOutcomeArticle($id: String!) {\n    GetArticle(id: $id) {\n      id\n      articleReplies(statuses: [NORMAL]) {\n        positiveFeedbackCount\n        negativeFeedbackCount\n        reply {\n          type\n          text\n          reference\n          user {\n            name\n          }\n        }\n      }\n    }\n  }\n':
     types.ReportOutcomeArticleDocument,
   '\n  mutation RequestFactCheck($articleId: String!, $reason: String) {\n    CreateOrUpdateReplyRequest(articleId: $articleId, reason: $reason) {\n      replyRequestCount\n    }\n  }\n':
     types.RequestFactCheckDocument,
@@ -63,8 +63,8 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: '\n  query ReportOutcomeArticle($id: String!) {\n    GetArticle(id: $id) {\n      id\n      replyRequestCount\n      articleReplies(statuses: [NORMAL]) {\n        positiveFeedbackCount\n        negativeFeedbackCount\n        reply {\n          type\n          text\n          reference\n          user {\n            name\n          }\n        }\n      }\n    }\n  }\n',
-): (typeof documents)['\n  query ReportOutcomeArticle($id: String!) {\n    GetArticle(id: $id) {\n      id\n      replyRequestCount\n      articleReplies(statuses: [NORMAL]) {\n        positiveFeedbackCount\n        negativeFeedbackCount\n        reply {\n          type\n          text\n          reference\n          user {\n            name\n          }\n        }\n      }\n    }\n  }\n']
+  source: '\n  query ReportOutcomeArticle($id: String!) {\n    GetArticle(id: $id) {\n      id\n      articleReplies(statuses: [NORMAL]) {\n        positiveFeedbackCount\n        negativeFeedbackCount\n        reply {\n          type\n          text\n          reference\n          user {\n            name\n          }\n        }\n      }\n    }\n  }\n',
+): (typeof documents)['\n  query ReportOutcomeArticle($id: String!) {\n    GetArticle(id: $id) {\n      id\n      articleReplies(statuses: [NORMAL]) {\n        positiveFeedbackCount\n        negativeFeedbackCount\n        reply {\n          type\n          text\n          reference\n          user {\n            name\n          }\n        }\n      }\n    }\n  }\n']
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -57,7 +57,6 @@ const ReportOutcomeArticleDocument = graphql(`
   query ReportOutcomeArticle($id: String!) {
     GetArticle(id: $id) {
       id
-      replyRequestCount
       articleReplies(statuses: [NORMAL]) {
         positiveFeedbackCount
         negativeFeedbackCount

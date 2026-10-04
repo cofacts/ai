@@ -74,7 +74,6 @@ export type ReportOutcomeArticleQueryVariables = Exact<{
 export type ReportOutcomeArticleQuery = {
   GetArticle: {
     id: string
-    replyRequestCount: number | null
     articleReplies: Array<{
       positiveFeedbackCount: number
       negativeFeedbackCount: number
@@ -342,10 +341,6 @@ export const ReportOutcomeArticleDocument = {
               kind: 'SelectionSet',
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'id' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'replyRequestCount' },
-                },
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'articleReplies' },
