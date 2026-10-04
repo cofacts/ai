@@ -17,8 +17,14 @@ type SuspiciousMessageCardProps = {
   communityDemandCount?: number | null
   className?: string
 } & (
-  | { href: string; onSelect?: never; selected?: never }
-  | { href?: never; onSelect: () => void; selected?: boolean }
+  | { href: string; onSelect?: never; selected?: never; disabled?: never }
+  | {
+      href?: never
+      onSelect: () => void
+      selected?: boolean
+      /** While the caller is busy acting on a pick, so it cannot be repeated. */
+      disabled?: boolean
+    }
 )
 
 export function SuspiciousMessageCard({
@@ -30,6 +36,7 @@ export function SuspiciousMessageCard({
   href,
   onSelect,
   selected,
+  disabled,
 }: SuspiciousMessageCardProps) {
   const body = (
     <>
@@ -79,10 +86,11 @@ export function SuspiciousMessageCard({
     <button
       type="button"
       onClick={onSelect}
+      disabled={disabled}
       aria-pressed={selected}
       className={cn(
         shared,
-        'w-full text-left hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]',
+        'w-full text-left cursor-pointer hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]',
         selected && 'border-[var(--primary)] bg-white',
         className,
       )}

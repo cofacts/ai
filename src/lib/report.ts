@@ -35,17 +35,16 @@ function count(text: string, char: string): number {
 
 /** Drops whatever the surrounding sentence left stuck to the end of a link. */
 function trimTrailing(link: string): string {
-  let end = link.length
-  while (end > 0) {
-    const last = link[end - 1]
-    const head = link.slice(0, end)
-    const opener = CLOSER_TO_OPENER[last] as string | undefined
+  // Never empties: every link starts with `http`, which is neither.
+  let trimmed = link
+  for (;;) {
+    const last = trimmed.slice(-1)
+    const opener = CLOSER_TO_OPENER[last]
     const unbalanced =
-      opener !== undefined && count(head, last) > count(head, opener)
-    if (!TRAILING_PUNCT.has(last) && !unbalanced) break
-    end -= 1
+      opener !== undefined && count(trimmed, last) > count(trimmed, opener)
+    if (!TRAILING_PUNCT.has(last) && !unbalanced) return trimmed
+    trimmed = trimmed.slice(0, -1)
   }
-  return link.slice(0, end)
 }
 
 /**
@@ -61,8 +60,6 @@ export function findFirstUrl(
 ): string | null {
   for (const candidate of candidates) {
     const match = candidate?.match(URL_RE)
-    // Every match starts with `http`, so trimming trailing punctuation can
-    // never empty it — the first match is the answer.
     if (match) return trimTrailing(match[0])
   }
   return null
