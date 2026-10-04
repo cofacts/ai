@@ -1,49 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { findFirstUrl, findSharedUrl } from '../report'
-
-// Android's Web Share Target and the iOS shortcut both hand off through the
-// query string, and the sending app decides which field the link lands in.
-
-describe('findSharedUrl', () => {
-  test('reads the payload Facebook on Android actually sends', () => {
-    // Measured on a preview deployment: the link is the whole of `text`, and
-    // neither `url` nor `title` is set.
-    expect(
-      findSharedUrl({ text: 'https://www.facebook.com/share/p/1HSNRpimmH/' }),
-    ).toBe('https://www.facebook.com/share/p/1HSNRpimmH/')
-  })
-
-  test('reads a link the app put in url instead', () => {
-    expect(findSharedUrl({ url: 'https://example.com/a' })).toBe(
-      'https://example.com/a',
-    )
-  })
-
-  test('prefers url when both carry one', () => {
-    expect(
-      findSharedUrl({ url: 'https://example.com/a', text: 'https://other/b' }),
-    ).toBe('https://example.com/a')
-  })
-
-  test('digs the link out of a longer shared text', () => {
-    expect(
-      findSharedUrl({ text: '快看這則 https://example.com/a 太扯了' }),
-    ).toBe('https://example.com/a')
-  })
-
-  test('returns null when the share carried no link at all', () => {
-    expect(
-      findSharedUrl({ text: '長輩群組傳的', title: '某某新聞' }),
-    ).toBeNull()
-    expect(findSharedUrl({})).toBeNull()
-    expect(findSharedUrl(undefined)).toBeNull()
-  })
-
-  test('ignores a non-http scheme', () => {
-    expect(findSharedUrl({ url: 'javascript:alert(1)' })).toBeNull()
-  })
-})
+import { findFirstUrl } from '../report'
 
 describe('findFirstUrl', () => {
   test('finds a bare link', () => {
@@ -64,6 +21,27 @@ describe('findFirstUrl', () => {
     expect(findFirstUrl('看看這個 https://example.com/a。')).toBe(
       'https://example.com/a',
     )
+    expect(findFirstUrl('see https://example.com/a.')).toBe(
+      'https://example.com/a',
+    )
+  })
+
+  test('keeps a closing bracket that is part of the link', () => {
+    expect(findFirstUrl('https://en.wikipedia.org/wiki/Mercury_(planet)')).toBe(
+      'https://en.wikipedia.org/wiki/Mercury_(planet)',
+    )
+    expect(
+      findFirstUrl('看這篇 https://en.wikipedia.org/wiki/Mercury_(planet)。'),
+    ).toBe('https://en.wikipedia.org/wiki/Mercury_(planet)')
+  })
+
+  test('drops a closing bracket that belongs to the surrounding prose', () => {
+    expect(findFirstUrl('(see https://x.com/a)')).toBe('https://x.com/a')
+    expect(findFirstUrl('（來源：https://x.com/a）')).toBe('https://x.com/a')
+    expect(findFirstUrl('「https://x.com/a」')).toBe('https://x.com/a')
+    expect(
+      findFirstUrl('(see https://en.wikipedia.org/wiki/Mercury_(planet)).'),
+    ).toBe('https://en.wikipedia.org/wiki/Mercury_(planet)')
   })
 
   test('returns null for text with no link, which the form must refuse', () => {
