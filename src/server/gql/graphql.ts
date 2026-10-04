@@ -55,14 +55,11 @@ export type SearchSuspiciousMessagesQueryVariables = Exact<{
 
 export type SearchSuspiciousMessagesQuery = {
   ListArticles: {
-    totalCount: number
     edges: Array<{
-      score: number | null
       node: {
         id: string
         text: string | null
         articleType: ArticleTypeEnum
-        createdAt: string | null
         replyCount: number
         replyRequestCount: number | null
       }
@@ -77,23 +74,14 @@ export type ReportOutcomeArticleQueryVariables = Exact<{
 export type ReportOutcomeArticleQuery = {
   GetArticle: {
     id: string
-    text: string | null
-    articleType: ArticleTypeEnum
-    createdAt: string | null
-    replyCount: number
     replyRequestCount: number | null
-    attachmentUrl: string | null
     articleReplies: Array<{
-      createdAt: string | null
       positiveFeedbackCount: number
       negativeFeedbackCount: number
-      user: { name: string | null } | null
       reply: {
-        id: string
         type: ReplyTypeEnum
         text: string | null
         reference: string | null
-        createdAt: string | null
         user: { name: string | null } | null
       } | null
     }>
@@ -106,10 +94,7 @@ export type RequestFactCheckMutationVariables = Exact<{
 }>
 
 export type RequestFactCheckMutation = {
-  CreateOrUpdateReplyRequest: {
-    id: string
-    replyRequestCount: number | null
-  } | null
+  CreateOrUpdateReplyRequest: { replyRequestCount: number | null } | null
 }
 
 export type CreateArticleReportMutationVariables = Exact<{
@@ -265,14 +250,12 @@ export const SearchSuspiciousMessagesDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'totalCount' } },
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'edges' },
                   selectionSet: {
                     kind: 'SelectionSet',
                     selections: [
-                      { kind: 'Field', name: { kind: 'Name', value: 'score' } },
                       {
                         kind: 'Field',
                         name: { kind: 'Name', value: 'node' },
@@ -290,10 +273,6 @@ export const SearchSuspiciousMessagesDocument = {
                             {
                               kind: 'Field',
                               name: { kind: 'Name', value: 'articleType' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'createdAt' },
                             },
                             {
                               kind: 'Field',
@@ -363,24 +342,9 @@ export const ReportOutcomeArticleDocument = {
               kind: 'SelectionSet',
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'id' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'text' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'articleType' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'replyCount' } },
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'replyRequestCount' },
-                },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'attachmentUrl' },
-                  arguments: [
-                    {
-                      kind: 'Argument',
-                      name: { kind: 'Name', value: 'variant' },
-                      value: { kind: 'EnumValue', value: 'PREVIEW' },
-                    },
-                  ],
                 },
                 {
                   kind: 'Field',
@@ -400,10 +364,6 @@ export const ReportOutcomeArticleDocument = {
                     selections: [
                       {
                         kind: 'Field',
-                        name: { kind: 'Name', value: 'createdAt' },
-                      },
-                      {
-                        kind: 'Field',
                         name: { kind: 'Name', value: 'positiveFeedbackCount' },
                       },
                       {
@@ -412,27 +372,10 @@ export const ReportOutcomeArticleDocument = {
                       },
                       {
                         kind: 'Field',
-                        name: { kind: 'Name', value: 'user' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'name' },
-                            },
-                          ],
-                        },
-                      },
-                      {
-                        kind: 'Field',
                         name: { kind: 'Name', value: 'reply' },
                         selectionSet: {
                           kind: 'SelectionSet',
                           selections: [
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'id' },
-                            },
                             {
                               kind: 'Field',
                               name: { kind: 'Name', value: 'type' },
@@ -444,10 +387,6 @@ export const ReportOutcomeArticleDocument = {
                             {
                               kind: 'Field',
                               name: { kind: 'Name', value: 'reference' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'createdAt' },
                             },
                             {
                               kind: 'Field',
@@ -537,7 +476,6 @@ export const RequestFactCheckDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'replyRequestCount' },

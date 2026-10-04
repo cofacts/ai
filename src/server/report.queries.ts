@@ -40,14 +40,11 @@ const SearchSuspiciousMessagesDocument = graphql(`
       orderBy: [{ _score: DESC }]
       first: $first
     ) {
-      totalCount
       edges {
-        score
         node {
           id
           text
           articleType
-          createdAt
           replyCount
           replyRequestCount
         }
@@ -60,25 +57,14 @@ const ReportOutcomeArticleDocument = graphql(`
   query ReportOutcomeArticle($id: String!) {
     GetArticle(id: $id) {
       id
-      text
-      articleType
-      createdAt
-      replyCount
       replyRequestCount
-      attachmentUrl(variant: PREVIEW)
       articleReplies(statuses: [NORMAL]) {
-        createdAt
         positiveFeedbackCount
         negativeFeedbackCount
-        user {
-          name
-        }
         reply {
-          id
           type
           text
           reference
-          createdAt
           user {
             name
           }
@@ -91,7 +77,6 @@ const ReportOutcomeArticleDocument = graphql(`
 const RequestFactCheckDocument = graphql(`
   mutation RequestFactCheck($articleId: String!, $reason: String) {
     CreateOrUpdateReplyRequest(articleId: $articleId, reason: $reason) {
-      id
       replyRequestCount
     }
   }
@@ -117,11 +102,6 @@ export type ReportOutcomeArticle = NonNullable<
   ReportOutcomeArticleQuery['GetArticle']
 >
 
-export interface SearchResult {
-  totalCount: number
-  candidates: Array<SearchCandidate>
-}
-
 /** How many candidates a person can actually read before giving up. */
 const CANDIDATE_LIMIT = 5
 
@@ -144,17 +124,15 @@ const CANDIDATE_LIMIT = 5
  */
 const BARE_LINK_MIN_SHOULD_MATCH = '90%'
 
-export async function findSimilarReports(like: string): Promise<SearchResult> {
+export async function findSimilarReports(
+  like: string,
+): Promise<Array<SearchCandidate>> {
   const data = await cofactsExec(SearchSuspiciousMessagesDocument, {
     like,
     first: CANDIDATE_LIMIT,
     minimumShouldMatch: BARE_LINK_MIN_SHOULD_MATCH,
   })
-  const connection = data.ListArticles
-  return {
-    totalCount: connection?.totalCount ?? 0,
-    candidates: connection?.edges ?? [],
-  }
+  return data.ListArticles?.edges ?? []
 }
 
 export interface ReportOutcome {
@@ -183,7 +161,7 @@ export interface RequestFactCheckInput {
 
 export async function recordFactCheckRequest(
   input: RequestFactCheckInput,
-): Promise<{ articleId: string; communityDemandCount: number }> {
+): Promise<{ communityDemandCount: number }> {
   await resolveAdkUserIdOrThrow()
   const result = await cofactsExec(RequestFactCheckDocument, {
     articleId: input.articleId,
@@ -191,10 +169,7 @@ export async function recordFactCheckRequest(
   })
   const article = result.CreateOrUpdateReplyRequest
   if (!article) throw new Error('Article not found')
-  return {
-    articleId: article.id,
-    communityDemandCount: article.replyRequestCount ?? 0,
-  }
+  return { communityDemandCount: article.replyRequestCount ?? 0 }
 }
 
 export interface CreateArticleReportInput {
@@ -205,7 +180,7 @@ export interface CreateArticleReportInput {
 
 export async function fileArticleReport(
   input: CreateArticleReportInput,
-): Promise<{ articleId: string; articleUrl: string; repliesUrl: string }> {
+): Promise<{ articleUrl: string; repliesUrl: string }> {
   await resolveAdkUserIdOrThrow()
   const result = await cofactsExec(CreateArticleReportDocument, {
     // The URL is the article body and the reference alike — one value, so the
@@ -224,7 +199,6 @@ export async function fileArticleReport(
   // articleUrl on the client: getSiteBase() is server-only, and one derivation
   // beats two that can disagree.
   return {
-    articleId,
     articleUrl: getArticleUrl(articleId),
     repliesUrl: getRepliesUrl(),
   }
