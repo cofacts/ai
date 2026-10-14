@@ -307,9 +307,12 @@ off.
 resolved with `url_context`'s grounding chunks. A dead URL is fetched by neither path, so it is
 simply absent and can never reach the `claim_sources` gate. A PDF url-resolver missed but
 `url_context` grounded still appears. Archived text adds nothing to the union, even though the
-model read it. The callback writes the resolved half to `temp:` state, clearing it first on
-every call: `AgentTool` forwards child state back to the parent, so a stale key would let one
-claim cite the previous claim's pages. The union also wraps the response when `url_context`
+model read it. The callback writes the resolved half to `temp:cofacts_resolved_meta` and
+clears it first on every model call. `temp:` already keeps it inside one verifier call:
+`AgentTool` seeds the child session without `temp:` keys, and the deltas it forwards back are
+trimmed of them. But one verifier call makes ~2 model calls in the same child session, so
+without the reset a later call that exits early would keep the earlier call's meta. `sources`
+would then list pages missing from the request the final answer was written from. The union also wraps the response when `url_context`
 returned no grounding at all, so a model that skips it does not lose the fetched sources too.
 
 ### Around the hook

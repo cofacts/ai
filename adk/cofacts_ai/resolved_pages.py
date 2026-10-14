@@ -39,9 +39,11 @@ logger = logging.getLogger(__name__)
 
 # Handoff from this module's before-model callback to append_verifier_sources'
 # after-model callback: {url: {"status", "title", "canonical"}} for what
-# url-resolver fetched on this call. `temp:` keeps it out of the persisted
-# session, but NOT out of the next AgentTool call — see the unconditional
-# reset in inject_resolved_url_content.
+# url-resolver fetched for this model call. `temp:` scopes it to one verifier
+# call: AgentTool's child session is seeded without `temp:` keys, and the deltas
+# it forwards back up are trimmed of them. Within that call it does carry over
+# from one model call to the next -- see the reset in
+# inject_resolved_url_content.
 RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
 
 
@@ -289,15 +291,15 @@ async def inject_resolved_url_content(
     costing a re-fetch; it does cost re-sent tokens.
     """
     # Clear first, so every exit below -- the early returns, the `except`, and
-    # the normal path -- leaves this key describing only the current call.
+    # the normal path -- leaves this key describing only the current model
+    # call.
     #
-    # `temp:` is NOT scoped per AgentTool call: agent_tool.py seeds the child
-    # session from the parent's state and forwards the child's delta back up,
-    # so without this a call that resolves nothing inherits the previous
-    # call's meta and append_verifier_sources reports pages this response
-    # never read. ai_verifier runs once per claim, so that is a claim citing
-    # the *previous* claim's URLs -- the fabricated citation this whole
-    # feature exists to prevent.
+    # The key cannot leak between verifier calls (see its definition), but it
+    # does persist across the ~2 model calls of one: the child session is the
+    # same. Without the reset, a later call that exits early -- the resolver
+    # down, an artifact read failing -- would keep the earlier call's meta, and
+    # append_verifier_sources would list pages missing from the request the
+    # final answer was written from.
     #
     # This costs no extra fetches. The fetch cache is the artifact
     # (`resolved-<sha1>.txt`, loaded below); this key is only the handoff to
