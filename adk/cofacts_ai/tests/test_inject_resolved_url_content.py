@@ -22,6 +22,7 @@ the artifact cache round-trips page text plus title/canonical without the
 version API, including for artifacts written before that envelope existed.
 """
 
+import asyncio
 import os
 from typing import cast
 from unittest.mock import AsyncMock, patch
@@ -739,6 +740,42 @@ class TestArtifactFailuresAreLocal:
         assert [p.split("\n", 1)[0] for p in pages] == [
             "[RESOLVED PAGE] https://cached.com"
         ]
+
+
+class TestArtifactIoIsConcurrent:
+    """Cache reads, and cache writes, go out together rather than one URL at a
+    time. Each fake call yields once while counted as in flight, so a
+    sequential loop never has two in flight."""
+
+    async def test_loads_and_saves_overlap_and_keep_url_order(self):
+        store = FakeArtifactStore()
+        in_flight = {"load": 0, "save": 0}
+        peak = {"load": 0, "save": 0}
+
+        def overlapping(kind, call):
+            async def wrapper(*args, **kwargs):
+                in_flight[kind] += 1
+                peak[kind] = max(peak[kind], in_flight[kind])
+                await asyncio.sleep(0)
+                in_flight[kind] -= 1
+                return await call(*args, **kwargs)
+
+            return wrapper
+
+        context = make_context(store)
+        context.load_artifact = overlapping("load", store.load_artifact)
+        context.save_artifact = overlapping("save", store.save_artifact)
+        urls = ["https://a.com", "https://b.com", "https://c.com"]
+        request = make_request(user_text(" ".join(urls)))
+
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(return_value=[resolved(url) for url in urls]),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        assert peak == {"load": 3, "save": 3}
+        assert list(context.state[RESOLVED_META_STATE_KEY]) == urls
 
 
 class TestWhichUrlsAreFetched:

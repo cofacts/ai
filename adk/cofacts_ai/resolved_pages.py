@@ -21,6 +21,7 @@ after-model callback cannot see the parts injected into the request.
 Decision record: ``docs/decisions/20260722-url-resolver-verifier-prefetch.md``.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -345,10 +346,13 @@ async def inject_resolved_url_content(
     # failed read is a cache miss, a failed write only loses the cache entry.
     # A bug in extraction, budgeting or part assembly is ours and must be
     # visible instead of masquerading as a message with no links -- and so is
-    # a malformed URL_RESOLVER_* setting (UrlResolverConfigError).
+    # a malformed URL_RESOLVER_* setting (UrlResolverConfigError). Both helpers
+    # catch their own errors, so gathering them keeps that isolation.
     to_fetch: list[str] = []
-    for url in urls:
-        cached = await _load_cached_page(callback_context, url)
+    cached_pages = await asyncio.gather(
+        *(_load_cached_page(callback_context, url) for url in urls)
+    )
+    for url, cached in zip(urls, cached_pages):
         if cached is None:
             to_fetch.append(url)
             continue
@@ -403,9 +407,6 @@ async def inject_resolved_url_content(
                 lengths[r.url] = len(r.summary)
                 titles[r.url] = r.title or r.url
                 canonicals[r.url] = r.canonical
-                await _save_cached_page(
-                    callback_context, r.url, r.summary, r.title, r.canonical
-                )
             elif r.status == ResolveStatus.DEAD:
                 resolved_meta[r.url] = {
                     "status": ResolveStatus.DEAD.value,
@@ -439,6 +440,15 @@ async def inject_resolved_url_content(
                 # text it served years ago invites exactly the citation the
                 # advisory note is trying to prevent.
                 _stage_archived(r.url, cofacts_links, archived, lengths)
+        await asyncio.gather(
+            *(
+                _save_cached_page(
+                    callback_context, r.url, r.summary, r.title, r.canonical
+                )
+                for r in results
+                if r.status == ResolveStatus.RESOLVED and r.summary
+            )
+        )
 
     allocation = _water_fill(lengths, budget)
     for url, full_text in full_texts.items():
