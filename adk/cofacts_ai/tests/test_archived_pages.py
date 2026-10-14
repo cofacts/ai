@@ -17,6 +17,8 @@ from types import SimpleNamespace
 from typing import AsyncGenerator, cast
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.events import Event
@@ -60,14 +62,22 @@ def texts(request: LlmRequest) -> list[str]:
     return [p.text for p in request.contents[0].parts or [] if p.text]
 
 
-def link(url=URL, summary="舊的內文", status=200, fetched="2018-09-25T00:00:00.000Z"):
+def link(
+    url=URL,
+    summary="舊的內文",
+    status="0",
+    error=None,
+    fetched="2018-09-25T00:00:00.000Z",
+):
+    # rumors-api's `Hyperlink.status` is a String, and most successful crawls in
+    # production carry "0" or null rather than "200".
     return {
         "url": url,
         "title": "舊標題",
         "summary": summary,
         "fetchedAt": fetched,
         "status": status,
-        "error": None,
+        "error": error,
     }
 
 
@@ -187,15 +197,36 @@ class TestStage:
         args = stage([fr_event("search_image_web", {"hyperlinks": [link()]})], request)
         assert args["request"] == request
 
+    @pytest.mark.parametrize("status", ["0", None, "200"])
+    def test_carries_a_summary_whatever_its_status(self, status):
+        # `status` does not say whether the crawl succeeded: most good crawls
+        # carry "0" or null. A summary with no `error` is the usable signal.
+        args = stage(
+            [
+                fr_event(
+                    "get_single_cofacts_article",
+                    {"article": {"hyperlinks": [link(status=status)]}},
+                )
+            ],
+            f"請查核 {URL}",
+        )
+        assert set(unpack(args["request"])[0]) == {URL}
+
     def test_skips_links_whose_own_crawl_failed(self):
-        # status 0 means Cofacts got no HTTP response -- there is no text to fall
-        # back to, so carrying the entry would only produce an empty injection.
+        # A failed crawl carries an `error`; whatever summary it has is not the
+        # page's text, so carrying it would only mislead the verifier.
         request = f"請查核 {URL}"
         args = stage(
             [
                 fr_event(
                     "get_single_cofacts_article",
-                    {"article": {"hyperlinks": [link(status=0)]}},
+                    {
+                        "article": {
+                            "hyperlinks": [
+                                link(summary="Error 1020", error="UNKNOWN_UNFURL_ERROR")
+                            ]
+                        }
+                    },
                 )
             ],
             request,

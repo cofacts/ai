@@ -87,7 +87,7 @@ def cofacts_link(url: str) -> dict:
         "title": "Old title",
         "summary": "Page text Cofacts crawled back then",
         "fetchedAt": "2018-09-25T00:00:00.000Z",
-        "status": 200,
+        "status": "0",
         "error": None,
     }
 
