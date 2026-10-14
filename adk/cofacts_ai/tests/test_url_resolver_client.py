@@ -290,6 +290,38 @@ class TestResolveUrlsErrorBucketing:
         assert result.status == ResolveStatus.RESOLVER_CANT_FETCH
         assert result.error is not None
 
+    @pytest.mark.parametrize(
+        ("http_status", "expected"),
+        [
+            (404, ResolveStatus.DEAD),
+            (410, ResolveStatus.DEAD),
+            (403, ResolveStatus.RESOLVER_CANT_FETCH),
+            (500, ResolveStatus.RESOLVER_CANT_FETCH),
+            (0, ResolveStatus.RESOLVED),
+        ],
+    )
+    async def test_http_error_status_overrides_successfully_resolved(
+        self, http_status, expected
+    ):
+        # The browser scrape "resolves" a 404 error page too; its text must not
+        # be injected as the page. Status 0 is the meta fast path: no HTTP code.
+        call = FakeUnaryStreamCall(
+            replies=[
+                make_reply(
+                    "https://a.com",
+                    summary="Page not found",
+                    status=http_status,
+                    successfully_resolved=True,
+                )
+            ]
+        )
+        p1, p2 = patched_client(call)
+        with p1, p2:
+            [result] = await resolve_urls(["https://a.com"])
+
+        assert result.status == expected
+        assert (result.error is None) == (expected == ResolveStatus.RESOLVED)
+
 
 class TestResolveUrlsTransportFailure:
     async def test_whole_call_failure_before_any_reply_marks_all_unavailable(self):

@@ -251,6 +251,9 @@ failure means _the resolver_ could not get the page, not that the page is missin
 before answering (`TIMEOUT`) and a whole-call failure (`RESOLVER_UNAVAILABLE`, set on every
 URL). A resolver outage must never mark good sources as
 dead. That is why the split is by cause and not simply success/failure.
+A reply carrying HTTP 404 or 410 also counts as `DEAD`, even when url-resolver marks it
+resolved (its browser scrape returns the error page); any other HTTP status ≥ 400 is
+`RESOLVER_CANT_FETCH`.
 
 The client keeps those causes apart (as `ResolveStatus` values), so logs and tests can tell
 them apart. The callback does not: past this diamond, every cause
