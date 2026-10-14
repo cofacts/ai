@@ -9,12 +9,11 @@ cache and to persist the full page text for the UI. That fake's
 `AgentTool`-hosted agent actually gets -- see the class docstring.
 
 Coverage: a resolved URL gets a `[RESOLVED PAGE]` part; a dead URL (DNS
-failure) gets an advisory `[LINK NOT FOUND]` note, not a ban; a URL the
-resolver merely couldn't fetch (e.g. a PDF) gets nothing injected so
-url_context gets a clean shot at it; a URL dropped by the `URL_RESOLVER_MAX_URLS`
-cap gets an explicit `[NOT PRE-FETCHED]` note (the one no-signal bucket that
-is never silent, since its cause is certain rather than a hiccup); YouTube
-and Cofacts-media URLs are
+failure) gets an advisory `[LINK NOT FOUND]` note, not a ban; every other
+failure -- a URL the resolver couldn't fetch (e.g. a PDF), a timeout, a
+resolver outage, a URL dropped by the `URL_RESOLVER_MAX_URLS` cap -- gets
+nothing injected (absent an archived copy) so url_context gets a clean shot
+at it; YouTube and Cofacts-media URLs are
 excluded (handled elsewhere via FileData); the next model call of a turn
 re-injects from the artifact cache without re-fetching; a misconfigured char
 budget raises instead of degrading silently; a resolver outage injects nothing; and
@@ -217,48 +216,33 @@ class TestInjectResolvedUrlContent:
         assert "url_context" in part
         assert "do NOT claim" in part
 
-    async def test_resolver_cant_fetch_injects_nothing_by_default_to_url_context(self):
-        request = make_request(user_text("https://report.example/file.pdf"))
+    @pytest.mark.parametrize(
+        "result",
+        [
+            cant_fetch("https://report.example/file.pdf"),
+            not_attempted("https://report.example/file.pdf"),
+        ],
+        ids=["cant_fetch", "not_attempted"],
+    )
+    async def test_no_signal_without_archive_injects_nothing(self, result):
+        """Whatever the reason url-resolver gave no text, the verifier's next
+        step is the same -- url_context -- so no per-cause note is added."""
+        request = make_request(user_text("請查核 https://report.example/file.pdf"))
         context = make_context()
+        original_parts = list(request.contents[0].parts or [])
 
         with patch(
             "cofacts_ai.resolved_pages.resolve_urls",
-            AsyncMock(return_value=[cant_fetch("https://report.example/file.pdf")]),
+            AsyncMock(return_value=[result]),
         ):
             await inject_resolved_url_content(context, request)
 
-        parts = text_parts(request.contents[0])
-        assert not any(p.startswith("[RESOLVED PAGE]") for p in parts)
-        assert not any(p.startswith("[LINK NOT FOUND]") for p in parts)
-        # A one-line advisory note is fine, but nothing that bans the URL.
-        for p in parts:
-            assert "do NOT claim" not in p
+        assert list(request.contents[0].parts or []) == original_parts
+        assert context.state[RESOLVED_META_STATE_KEY] == {}
 
-    async def test_not_attempted_injects_an_explicit_note_unlike_unavailable(self):
-        request = make_request(user_text("https://dropped.example"))
-        context = make_context()
-
-        with patch(
-            "cofacts_ai.resolved_pages.resolve_urls",
-            AsyncMock(return_value=[not_attempted("https://dropped.example")]),
-        ):
-            await inject_resolved_url_content(context, request)
-
-        [part] = [
-            t
-            for t in text_parts(request.contents[0])
-            if t.startswith("[NOT PRE-FETCHED]")
-        ]
-        assert "https://dropped.example" in part
-        assert "url_context" in part
-        # Unlike RESOLVER_UNAVAILABLE/TIMEOUT (a hiccup that might be
-        # mistaken for a dead link if surfaced), the cap is a known, certain
-        # cause -- so this is the one no-signal bucket that is never silent.
-
-    async def test_not_attempted_prefers_an_archived_copy_over_the_note(self):
-        """Mirrors RESOLVER_CANT_FETCH: an archived copy, when Cofacts has
-        one, wins over the bare advisory note -- same as every other
-        no-signal bucket that reaches `_stage_archived`."""
+    async def test_not_attempted_falls_back_to_an_archived_copy(self):
+        """Same as every other no-signal bucket: Cofacts' archived copy is
+        injected when it has one."""
         url = "https://dropped.example"
         request = make_request(user_text(url))
         context = make_context(
@@ -280,7 +264,6 @@ class TestInjectResolvedUrlContent:
             await inject_resolved_url_content(context, request)
 
         parts = text_parts(request.contents[0])
-        assert not any(p.startswith("[NOT PRE-FETCHED]") for p in parts)
         [archived_part] = [p for p in parts if p.startswith("[ARCHIVED PAGE]")]
         assert "archived body text" in archived_part
         # Same safety property as the other no-signal buckets: an archived

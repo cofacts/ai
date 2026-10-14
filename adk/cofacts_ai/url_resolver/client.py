@@ -69,8 +69,8 @@ class ResolveStatus(str, Enum):
     RESOLVER_UNAVAILABLE = "resolver_unavailable"
     # Dropped by the `URL_RESOLVER_MAX_URLS` cap before ever being sent to
     # url-resolver — distinct from TIMEOUT (which means the resolver was
-    # asked and never answered) so callers can tell "never attempted" from
-    # "attempted and unresolvable" and say so explicitly.
+    # asked and never answered), so a capped batch is visible as such
+    # rather than looking like a slow resolver.
     NOT_ATTEMPTED = "not_attempted"
 
 
@@ -194,6 +194,14 @@ async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
         )
         for url in deduped_urls[max_urls:]
     ]
+    if not_attempted:
+        # The verifier is not told (it falls back to url_context like any
+        # other unfetched URL), so this log is the only trace of the cap.
+        logger.warning(
+            "url-resolver: %d URL(s) past URL_RESOLVER_MAX_URLS=%d not sent",
+            len(not_attempted),
+            max_urls,
+        )
     if not to_send:
         return not_attempted
 
