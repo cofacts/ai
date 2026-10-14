@@ -213,10 +213,10 @@ metadata over plain HTTP first. When canonical, title, description and image are
 `summary` is the page's own description (`twitter:description || og:description ||
 description`), often one or two sentences. Only when the metadata is incomplete does it drive
 a headless browser and return the Readability-extracted body. The verifier prompt therefore
-does not call `[RESOLVED PAGE]` the body text. It calls it a real, verbatim fetch that may be
-only a short description: quote from it, and when it is too short to settle a claim, read the
-page with `url_context` instead. A claim missing from a description is not evidence against
-the page.
+does not call `[RESOLVED PAGE]` the body text. It calls it a verbatim fetch that is sometimes
+only the page's short description, so the verifier quotes from it and turns to `url_context`
+where it is too short to settle a claim. A claim missing from a one-line description is then
+not mistaken for one the page does not support.
 
 Deliberately **not** done: making url-resolver always return the body. The same service
 produces the link previews on the Cofacts site, where the description is exactly what is
