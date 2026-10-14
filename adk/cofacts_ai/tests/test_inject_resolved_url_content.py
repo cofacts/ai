@@ -22,6 +22,7 @@ the artifact cache round-trips page text plus title/canonical without the
 version API, including for artifacts written before that envelope existed.
 """
 
+import asyncio
 import os
 from typing import cast
 from unittest.mock import AsyncMock, patch
@@ -293,7 +294,7 @@ class TestInjectResolvedUrlContent:
                 AsyncMock(return_value=[resolved("https://good.com")]),
             ),
             patch.dict(os.environ, {"URL_RESOLVER_TOTAL_CHAR_BUDGET": "lots"}),
-            pytest.raises(ValueError),
+            pytest.raises(UrlResolverConfigError),
         ):
             await inject_resolved_url_content(context, request)
 
@@ -305,6 +306,25 @@ class TestInjectResolvedUrlContent:
 
         with (
             patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "twenty"}),
+            pytest.raises(UrlResolverConfigError),
+        ):
+            await inject_resolved_url_content(context, request)
+
+    @pytest.mark.parametrize(
+        "name", ["URL_RESOLVER_TOTAL_CHAR_BUDGET", "URL_RESOLVER_MAX_URLS"]
+    )
+    @pytest.mark.parametrize("value", ["0", "-5"])
+    async def test_setting_below_one_raises(self, name, value):
+        # Parses fine, but a zero budget or cap silently injects nothing.
+        context = make_context()
+        request = make_request(user_text("https://good.com"))
+
+        with (
+            patch(
+                "cofacts_ai.resolved_pages.resolve_urls",
+                AsyncMock(return_value=[resolved("https://good.com")]),
+            ),
+            patch.dict(os.environ, {name: value}),
             pytest.raises(UrlResolverConfigError),
         ):
             await inject_resolved_url_content(context, request)
@@ -521,6 +541,19 @@ class TestUrlExtraction:
             "https://example.com/s?q=a&b=1"
         ]
 
+    def test_citation_marker_right_after_a_url_is_not_part_of_it(self):
+        # The writer prompt lets a marker go anywhere, including flush against
+        # the URL it is citing.
+        assert self.urls(
+            "https://example.com/a[^get_single_cofacts_article-1a2b3c] 說"
+        ) == ["https://example.com/a"]
+
+    def test_markdown_emphasis_and_code_are_not_part_of_the_url(self):
+        assert self.urls("**https://x.com/a** 和 `https://x.com/b`") == [
+            "https://x.com/a",
+            "https://x.com/b",
+        ]
+
     def test_youtube_and_cofacts_media_are_still_excluded(self):
         assert self.urls(
             "https://www.youtube.com/watch?v=abc123 和 "
@@ -726,6 +759,42 @@ class TestArtifactFailuresAreLocal:
         assert [p.split("\n", 1)[0] for p in pages] == [
             "[RESOLVED PAGE] https://cached.com"
         ]
+
+
+class TestArtifactIoIsConcurrent:
+    """Cache reads, and cache writes, go out together rather than one URL at a
+    time. Each fake call yields once while counted as in flight, so a
+    sequential loop never has two in flight."""
+
+    async def test_loads_and_saves_overlap_and_keep_url_order(self):
+        store = FakeArtifactStore()
+        in_flight = {"load": 0, "save": 0}
+        peak = {"load": 0, "save": 0}
+
+        def overlapping(kind, call):
+            async def wrapper(*args, **kwargs):
+                in_flight[kind] += 1
+                peak[kind] = max(peak[kind], in_flight[kind])
+                await asyncio.sleep(0)
+                in_flight[kind] -= 1
+                return await call(*args, **kwargs)
+
+            return wrapper
+
+        context = make_context(store)
+        context.load_artifact = overlapping("load", store.load_artifact)
+        context.save_artifact = overlapping("save", store.save_artifact)
+        urls = ["https://a.com", "https://b.com", "https://c.com"]
+        request = make_request(user_text(" ".join(urls)))
+
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(return_value=[resolved(url) for url in urls]),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        assert peak == {"load": 3, "save": 3}
+        assert list(context.state[RESOLVED_META_STATE_KEY]) == urls
 
 
 class TestWhichUrlsAreFetched:

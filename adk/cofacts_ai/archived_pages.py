@@ -76,9 +76,10 @@ def _collect_hyperlinks(node: object, found: dict[str, dict]) -> None:
     `article.hyperlinks` plus one list per reply, `search_cofacts_database`
     under `data.edges[].node.hyperlinks`.
 
-    Only entries with usable text are kept. `status`/`error` record how Cofacts'
-    own crawl went, and a hyperlink whose crawl failed carries no summary worth
-    falling back to.
+    Only entries with usable text are kept: a non-empty summary and no `error`.
+    A hyperlink whose crawl failed carries no summary worth falling back to.
+    `status` is not checked -- it is a String in rumors-api, and most successful
+    crawls carry "0" or null.
     """
     if isinstance(node, list):
         for item in node:
@@ -95,7 +96,7 @@ def _collect_hyperlinks(node: object, found: dict[str, dict]) -> None:
             summary = link.get("summary")
             if not isinstance(url, str) or not isinstance(summary, str):
                 continue
-            if not summary.strip() or link.get("status") != 200:
+            if not summary.strip() or link.get("error"):
                 continue
             found[url] = {
                 "summary": summary,

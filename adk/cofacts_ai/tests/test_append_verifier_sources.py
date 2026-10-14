@@ -196,6 +196,16 @@ class TestAppendVerifierSources:
 
         assert result is None
 
+    async def test_empty_text_returns_none_so_the_empty_retry_fires(self):
+        # Wrapping "" as {"content": "", ...} would hide the empty response from
+        # the writer's empty-response retry.
+        context = make_context({"https://a.com": {"status": "resolved", "title": "A"}})
+        response = make_response(text="  \n", grounding_chunks=[])
+
+        result = await append_verifier_sources(context, response)
+
+        assert result is None
+
     async def test_preserves_report_text(self):
         context = make_context({})
         response = make_response(text="✓ Supported: ...", grounding_chunks=[])

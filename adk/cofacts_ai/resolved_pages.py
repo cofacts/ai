@@ -21,12 +21,12 @@ after-model callback cannot see the parts injected into the request.
 Decision record: ``docs/decisions/20260722-url-resolver-verifier-prefetch.md``.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
-import os
 import re
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
@@ -65,16 +65,19 @@ RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
 # of a URL and are handled by _trim_url_punctuation below.
 _CJK_URL_STOP = "，。、！？；：〜～…—「」『』〈〉《》【】"
 
-_HTTP_URL_RE = re.compile(r"https?://[^\s\"'<>" + _CJK_URL_STOP + r"]+")
+# A `[^` ends a URL too: it opens a citation marker (`writer_citations`), which
+# the writer may put flush against the URL it cites.
+_HTTP_URL_RE = re.compile(r"https?://(?:(?!\[\^)[^\s\"'<>" + _CJK_URL_STOP + r"])+")
 
 # Closing bracket -> its opener. A trailing closer is part of the URL when the
 # URL contains a matching opener (`.../Mercury_(planet)`) and prose punctuation
 # when it does not (`(https://example.com)`).
 _URL_CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{", "）": "（"}
 
-# Punctuation that commonly ends a sentence right after a URL. Brackets are
-# handled by the balance rule above instead of appearing here.
-_URL_TRAILING_CHARS = ".,;:!?\"'"
+# Punctuation that commonly ends a sentence right after a URL, plus Markdown's
+# `**bold**` and `` `code` `` wrappers. Brackets are handled by the balance rule
+# above instead of appearing here.
+_URL_TRAILING_CHARS = ".,;:!?\"'*`"
 
 
 def _trim_url_punctuation(url: str) -> str:
@@ -117,12 +120,7 @@ _LINK_NOT_FOUND_PREFIX = "[LINK NOT FOUND] "
 _ARCHIVED_PAGE_PREFIX = "[ARCHIVED PAGE] "
 
 
-def _stage_archived(
-    url: str,
-    cofacts_links: dict,
-    archived: dict,
-    lengths: dict,
-) -> None:
+def _stage_archived(url: str, cofacts_links: dict, archived: dict) -> None:
     """Queue Cofacts' stored copy of `url` for injection, if it has one."""
     entry = cofacts_links.get(url)
     if not isinstance(entry, dict):
@@ -131,7 +129,14 @@ def _stage_archived(
     if not isinstance(summary, str) or not summary.strip():
         return
     archived[url] = entry
-    lengths[url] = len(summary)
+
+
+class _Page(NamedTuple):
+    """A page injected as [RESOLVED PAGE]: fetched now, or from the cache."""
+
+    text: str
+    title: str  # the URL when the page has no title
+    canonical: Optional[str]
 
 
 _DEFAULT_TOTAL_CHAR_BUDGET = 200_000
@@ -375,13 +380,19 @@ async def inject_resolved_url_content(
     # Parsed up front, outside the guard below: a malformed
     # URL_RESOLVER_TOTAL_CHAR_BUDGET or URL_RESOLVER_MAX_URLS is a
     # misconfiguration and should crash loudly, not read as "this message had
-    # no links".
-    budget = int(
-        os.environ.get("URL_RESOLVER_TOTAL_CHAR_BUDGET", _DEFAULT_TOTAL_CHAR_BUDGET)
-    )
+    # no links". So is a value below 1, which would inject nothing at all.
+    budget = env_number("URL_RESOLVER_TOTAL_CHAR_BUDGET", int)
+    if budget is None:
+        budget = _DEFAULT_TOTAL_CHAR_BUDGET
     max_urls = env_number("URL_RESOLVER_MAX_URLS", int)
     if max_urls is None:
         max_urls = _DEFAULT_MAX_URLS
+    for name, value in (
+        ("URL_RESOLVER_TOTAL_CHAR_BUDGET", budget),
+        ("URL_RESOLVER_MAX_URLS", max_urls),
+    ):
+        if value < 1:
+            raise UrlResolverConfigError(f"{name}={value} must be at least 1")
 
     resolved_meta: dict[str, dict] = {}
     injected_parts: list[genai_types.Part] = []
@@ -389,10 +400,7 @@ async def inject_resolved_url_content(
     cofacts_links = callback_context.state.get(ARCHIVED_LINKS_STATE_KEY) or {}
     if not isinstance(cofacts_links, dict):
         cofacts_links = {}
-    lengths: dict[str, int] = {}
-    full_texts: dict[str, str] = {}
-    titles: dict[str, str] = {}
-    canonicals: dict[str, Optional[str]] = {}
+    pages: dict[str, _Page] = {}
 
     # Only the network call and the artifact I/O are guarded, and each on its
     # own. A resolver outage must degrade to url_context rather than fail the
@@ -400,18 +408,18 @@ async def inject_resolved_url_content(
     # failed read is a cache miss, a failed write only loses the cache entry.
     # A bug in extraction, budgeting or part assembly is ours and must be
     # visible instead of masquerading as a message with no links -- and so is
-    # a malformed URL_RESOLVER_* setting (UrlResolverConfigError).
+    # a malformed URL_RESOLVER_* setting (UrlResolverConfigError). Both helpers
+    # catch their own errors, so gathering them keeps that isolation.
     to_fetch: list[str] = []
-    for url in urls:
-        cached = await _load_cached_page(callback_context, url)
+    cached_pages = await asyncio.gather(
+        *(_load_cached_page(callback_context, url) for url in urls)
+    )
+    for url, cached in zip(urls, cached_pages):
         if cached is None:
             to_fetch.append(url)
             continue
         text, title, canonical = cached
-        full_texts[url] = text
-        lengths[url] = len(text)
-        titles[url] = title or url
-        canonicals[url] = canonical
+        pages[url] = _Page(text, title or url, canonical)
 
     # The cap bounds fetch work, so cache hits do not count toward it. Past
     # it, a URL gets what any unfetched one gets: Cofacts' archived copy if
@@ -425,7 +433,7 @@ async def inject_resolved_url_content(
             max_urls,
         )
         for url in over_cap:
-            _stage_archived(url, cofacts_links, archived, lengths)
+            _stage_archived(url, cofacts_links, archived)
 
     if to_fetch:
         try:
@@ -441,26 +449,12 @@ async def inject_resolved_url_content(
                 len(to_fetch),
             )
             results = [
-                ResolvedUrl(
-                    url=url,
-                    canonical=None,
-                    title=None,
-                    summary=None,
-                    http_status=None,
-                    status=ResolveStatus.RESOLVER_UNAVAILABLE,
-                    error="url-resolver call failed",
-                )
+                ResolvedUrl.unavailable(url, "url-resolver call failed")
                 for url in to_fetch
             ]
         for r in results:
             if r.status == ResolveStatus.RESOLVED and r.summary:
-                full_texts[r.url] = r.summary
-                lengths[r.url] = len(r.summary)
-                titles[r.url] = r.title or r.url
-                canonicals[r.url] = r.canonical
-                await _save_cached_page(
-                    callback_context, r.url, r.summary, r.title, r.canonical
-                )
+                pages[r.url] = _Page(r.summary, r.title or r.url, r.canonical)
             elif r.status == ResolveStatus.DEAD:
                 resolved_meta[r.url] = {
                     "status": ResolveStatus.DEAD.value,
@@ -493,14 +487,26 @@ async def inject_resolved_url_content(
                 # does not resolve, and pairing "this link is broken" with the
                 # text it served years ago invites exactly the citation the
                 # advisory note is trying to prevent.
-                _stage_archived(r.url, cofacts_links, archived, lengths)
+                _stage_archived(r.url, cofacts_links, archived)
+        await asyncio.gather(
+            *(
+                _save_cached_page(
+                    callback_context, r.url, r.summary, r.title, r.canonical
+                )
+                for r in results
+                if r.status == ResolveStatus.RESOLVED and r.summary
+            )
+        )
 
+    lengths = {url: len(page.text) for url, page in pages.items()}
+    lengths.update((url, len(entry["summary"])) for url, entry in archived.items())
     allocation = _water_fill(lengths, budget)
-    for url, full_text in full_texts.items():
+    for url, page in pages.items():
+        full_text = page.text
         allowed = allocation.get(url, len(full_text))
         truncated = allowed < len(full_text)
         body = full_text if not truncated else full_text[:allowed]
-        text = f"{_RESOLVED_PAGE_PREFIX}{url}\nTITLE: {titles[url]}\n---\n{body}"
+        text = f"{_RESOLVED_PAGE_PREFIX}{url}\nTITLE: {page.title}\n---\n{body}"
         if truncated:
             text += (
                 f"\n---(truncated from {len(full_text)} chars; full text "
@@ -509,8 +515,8 @@ async def inject_resolved_url_content(
         injected_parts.append(genai_types.Part(text=text))
         resolved_meta[url] = {
             "status": ResolveStatus.RESOLVED.value,
-            "title": titles[url],
-            "canonical": canonicals[url],
+            "title": page.title,
+            "canonical": page.canonical,
         }
 
     # Archived copies share the same char budget -- they cost the same

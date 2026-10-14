@@ -90,8 +90,8 @@ class ResolveStatus(str, Enum):
     A url-resolver error is NOT proof a URL is fake — it may just be a
     resolver limitation (a PDF, a JS-heavy page, a page that blocks
     puppeteer) that Gemini's `url_context` tool can still read. So only
-    `DEAD` (DNS failure / malformed URL) is a real "this link is bad"
-    signal, and callers should still treat even that as advisory rather than
+    `DEAD` (DNS failure / malformed URL / HTTP 404 or 410) is a real "this
+    link is bad" signal, and callers should still treat even that as advisory rather than
     an absolute ban (`url_context` may succeed where the resolver's simpler
     fetch failed). `RESOLVER_CANT_FETCH` / `TIMEOUT` / `RESOLVER_UNAVAILABLE`
     all mean "no signal from the resolver" — never flag those URLs as dead.
@@ -112,6 +112,11 @@ _DEAD_URL_ERRORS = frozenset(
         resolve_error_pb2.INVALID_URL,
     }
 )
+
+# HTTP codes that mean the page is gone. The browser scrape still "resolves" the
+# error page it was served, so a reply's HTTP status is checked even on success;
+# any other code >= 400 is the resolver being refused, not the page missing.
+_DEAD_HTTP_STATUSES = frozenset({404, 410})
 
 # Human-readable text for each ResolveError enum value, used in the `error`
 # field so callers (and the text injected into the verifier's context) don't
@@ -144,6 +149,19 @@ class ResolvedUrl:
     status: ResolveStatus
     error: Optional[str]
 
+    @classmethod
+    def unavailable(cls, url: str, error: str) -> "ResolvedUrl":
+        """`url` with no answer from url-resolver at all: RESOLVER_UNAVAILABLE."""
+        return cls(
+            url=url,
+            canonical=None,
+            title=None,
+            summary=None,
+            http_status=None,
+            status=ResolveStatus.RESOLVER_UNAVAILABLE,
+            error=error,
+        )
+
 
 def _bucket_error(error_enum: int) -> tuple[ResolveStatus, str]:
     status = (
@@ -157,17 +175,19 @@ def _bucket_error(error_enum: int) -> tuple[ResolveStatus, str]:
 
 def _reply_to_resolved_url(reply: url_resolver_pb2.UrlReply) -> ResolvedUrl:
     which = reply.WhichOneof("result")
+    message: Optional[str]
     if which == "successfully_resolved" and reply.successfully_resolved:
-        return ResolvedUrl(
-            url=reply.url,
-            canonical=reply.canonical or None,
-            title=reply.title or None,
-            summary=reply.summary or None,
-            http_status=reply.status or None,
-            status=ResolveStatus.RESOLVED,
-            error=None,
-        )
-    status, message = _bucket_error(reply.error if which == "error" else 0)
+        # status 0 is the meta fast path, which records no HTTP code.
+        if reply.status in _DEAD_HTTP_STATUSES:
+            status = ResolveStatus.DEAD
+            message = f"page not found (HTTP {reply.status})"
+        elif reply.status >= 400:
+            status = ResolveStatus.RESOLVER_CANT_FETCH
+            message = f"server returned an error page (HTTP {reply.status})"
+        else:
+            status, message = ResolveStatus.RESOLVED, None
+    else:
+        status, message = _bucket_error(reply.error if which == "error" else 0)
     return ResolvedUrl(
         url=reply.url,
         canonical=reply.canonical or None,
@@ -243,15 +263,7 @@ async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
                     len(to_send),
                 )
                 return [
-                    ResolvedUrl(
-                        url=url,
-                        canonical=None,
-                        title=None,
-                        summary=None,
-                        http_status=None,
-                        status=ResolveStatus.RESOLVER_UNAVAILABLE,
-                        error=str(e.details() or e),
-                    )
+                    ResolvedUrl.unavailable(url, str(e.details() or e))
                     for url in to_send
                 ]
             # Partial results already arrived; treat the rest as timed out
