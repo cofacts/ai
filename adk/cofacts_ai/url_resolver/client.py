@@ -28,7 +28,6 @@ _N = TypeVar("_N", int, float)
 
 DEFAULT_ADDRESS = "url-resolver:4000"
 DEFAULT_TIMEOUT = 30.0
-DEFAULT_MAX_URLS = 20
 
 # Per-URL time budget used to scale the deadline for a batch, when
 # URL_RESOLVER_TIMEOUT is not explicitly set. url-resolver tries a plain HTTP
@@ -40,8 +39,8 @@ DEFAULT_MAX_URLS = 20
 # the batch, so a flat 30s default silently starves anything past the first
 # few browser-backed URLs — see `resolve_urls`.
 #
-# This has no upper cap: at `URL_RESOLVER_MAX_URLS` (default 20) the deadline
-# reaches 200s, which is deliberately allowed to run that long rather than
+# This has no upper cap: at the verifier's `URL_RESOLVER_MAX_URLS` (default 20)
+# the deadline reaches 200s, which is deliberately allowed to run that long rather than
 # reintroduce the premature-cutoff bug this exists to fix — Cloud Run's own
 # request timeout (900s, `service.template.yaml`) is the real ceiling. That
 # does mean a slow/stuck resolver can now hold a verifier turn open for
@@ -68,7 +67,7 @@ class UrlResolverConfigError(ValueError):
     """
 
 
-def _env_number(name: str, parse: Callable[[str], _N]) -> Optional[_N]:
+def env_number(name: str, parse: Callable[[str], _N]) -> Optional[_N]:
     """`parse(os.environ[name])`, or None when unset."""
     raw = os.environ.get(name)
     if raw is None:
@@ -88,9 +87,8 @@ class ResolveStatus(str, Enum):
     `DEAD` (DNS failure / malformed URL) is a real "this link is bad"
     signal, and callers should still treat even that as advisory rather than
     an absolute ban (`url_context` may succeed where the resolver's simpler
-    fetch failed). `RESOLVER_CANT_FETCH` / `TIMEOUT` / `RESOLVER_UNAVAILABLE` /
-    `NOT_ATTEMPTED` all mean "no signal from the resolver" — never flag those
-    URLs as dead.
+    fetch failed). `RESOLVER_CANT_FETCH` / `TIMEOUT` / `RESOLVER_UNAVAILABLE`
+    all mean "no signal from the resolver" — never flag those URLs as dead.
     """
 
     RESOLVED = "resolved"
@@ -98,11 +96,6 @@ class ResolveStatus(str, Enum):
     RESOLVER_CANT_FETCH = "resolver_cant_fetch"
     TIMEOUT = "timeout"
     RESOLVER_UNAVAILABLE = "resolver_unavailable"
-    # Dropped by the `URL_RESOLVER_MAX_URLS` cap before ever being sent to
-    # url-resolver — distinct from TIMEOUT (which means the resolver was
-    # asked and never answered), so a capped batch is visible as such
-    # rather than looking like a slow resolver.
-    NOT_ATTEMPTED = "not_attempted"
 
 
 # ResolveError enum values that mean the URL itself is unusable (DNS doesn't
@@ -183,15 +176,16 @@ def _reply_to_resolved_url(reply: url_resolver_pb2.UrlReply) -> ResolvedUrl:
 async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
     """Resolves each URL to its cleaned main body text via url-resolver.
 
-    Dedups `urls` (preserving order) and caps at `URL_RESOLVER_MAX_URLS`;
-    anything past the cap is never sent to url-resolver and comes back
-    `NOT_ATTEMPTED`. The rest streams through one `ResolveUrl` call and is
-    joined back to the request by `reply.url` (the server stream is not
-    guaranteed to preserve request order). Any requested URL not answered by
-    the time the stream ends is `TIMEOUT`. If the whole call fails before any
-    reply arrives (resolver down/unreachable), every URL that WAS sent comes
-    back `RESOLVER_UNAVAILABLE` — never treated as `DEAD`, since that would
-    let a resolver outage falsely brand good URLs as dead links.
+    Sends every URL it is given, deduped in order: which URLs are worth
+    fetching, and how many, is the caller's decision (see
+    `inject_resolved_url_content`), not a transport concern. They stream
+    through one `ResolveUrl` call and are joined back to the request by
+    `reply.url` (the server stream is not guaranteed to preserve request
+    order). Any requested URL not answered by the time the stream ends is
+    `TIMEOUT`. If the whole call fails before any reply arrives (resolver
+    down/unreachable), every URL comes back `RESOLVER_UNAVAILABLE` — never
+    treated as `DEAD`, since that would let a resolver outage falsely brand
+    good URLs as dead links.
 
     The deadline for that one call is `URL_RESOLVER_TIMEOUT` if set, else
     `DEFAULT_PER_URL_TIMEOUT` seconds per URL sent (floor `DEFAULT_TIMEOUT`):
@@ -204,40 +198,11 @@ async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
     `html` is never read off the reply — it must never reach an LLM.
     """
     address = os.environ.get("URL_RESOLVER_ADDRESS", DEFAULT_ADDRESS)
-    max_urls = _env_number("URL_RESOLVER_MAX_URLS", int)
-    if max_urls is None:
-        max_urls = DEFAULT_MAX_URLS
-    explicit_timeout = _env_number("URL_RESOLVER_TIMEOUT", float)
+    explicit_timeout = env_number("URL_RESOLVER_TIMEOUT", float)
 
-    deduped_urls: list[str] = []
-    seen = set()
-    for url in urls:
-        if url not in seen:
-            seen.add(url)
-            deduped_urls.append(url)
-    to_send = deduped_urls[:max_urls]
-    not_attempted = [
-        ResolvedUrl(
-            url=url,
-            canonical=None,
-            title=None,
-            summary=None,
-            http_status=None,
-            status=ResolveStatus.NOT_ATTEMPTED,
-            error=f"dropped: more than URL_RESOLVER_MAX_URLS={max_urls} URLs in this request",
-        )
-        for url in deduped_urls[max_urls:]
-    ]
-    if not_attempted:
-        # The verifier is not told (it falls back to url_context like any
-        # other unfetched URL), so this log is the only trace of the cap.
-        logger.warning(
-            "url-resolver: %d URL(s) past URL_RESOLVER_MAX_URLS=%d not sent",
-            len(not_attempted),
-            max_urls,
-        )
+    to_send = list(dict.fromkeys(urls))
     if not to_send:
-        return not_attempted
+        return []
 
     timeout = (
         explicit_timeout
@@ -281,7 +246,7 @@ async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
                         error=str(e.details() or e),
                     )
                     for url in to_send
-                ] + not_attempted
+                ]
             # Partial results already arrived; treat the rest as timed out
             # below (they're simply absent from `results`).
             logger.warning(
@@ -307,4 +272,4 @@ async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
             ),
         )
         for url in to_send
-    ] + not_attempted
+    ]

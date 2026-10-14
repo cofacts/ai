@@ -912,6 +912,10 @@ ai_writer = LlmAgent(
     - Anything is citable this way — the Cofacts article, a verifier report, an investigator's
       findings, one of your own `draft_factcheck_response` proposals, even another proofreader's
       feedback. If the sub-agent needs to read it, cite it rather than summarizing it.
+    - **Citing does not ask `{AI_VERIFIER_NAME}` to read a page.** The system fetches page text
+      only for URLs written in your own `request`, not for URLs inside a cited block. To have a
+      page checked, write its URL in the request itself, even when it already appears in the
+      article you cite.
     - You do not have to place the citation anywhere in particular: the text is always hoisted to
       the top, so a citation in the middle of a sentence still reads cleanly.
     - Cite **exactly what you mean**. Citing the wrong id succeeds silently and sends the wrong

@@ -146,14 +146,15 @@ right-hand column shows what each can become in `sources`.
 
 ```mermaid
 flowchart LR
-    U["URL in the<br/>verifier's message"] --> X{"① YouTube or<br/>Cofacts media?"}
+    U["① URL in the writer's<br/>own words"] --> X{"① YouTube or<br/>Cofacts media?"}
     X -->|"yes"| SIB["sibling callbacks<br/>inject FileData"]
     X -->|"no"| C{"② already an<br/>artifact?"}
-    C -->|"miss"| R["③ url-resolver<br/>body text only · html dropped"]
+    C -->|"miss · within URL cap"| R["③ url-resolver<br/>body text only · html dropped"]
+    C -->|"miss · past URL cap"| A
     R --> S{"④ why did it fail?"}
     S -->|"RESOLVED"| SV["save artifact"]
     S -->|"DEAD<br/>DNS · malformed"| O2["⑤ [LINK NOT FOUND] url<br/>advisory, not a ban"]
-    S -->|"anything else<br/>PDF · blocked · timeout ·<br/>resolver down · over URL cap"| A{"⑥ Cofacts already<br/>crawled it?"}
+    S -->|"anything else<br/>PDF · blocked · timeout ·<br/>resolver down"| A{"⑥ Cofacts already<br/>crawled it?"}
     A -->|"no"| O4["nothing injected"]
     C -->|"hit"| B
     SV --> B["⑦ share 200k chars<br/>across the turn"]
@@ -172,12 +173,24 @@ flowchart LR
     style O4 fill:#f3f4f6,stroke:#6b7280
 ```
 
-#### ① Only plain web URLs
+#### ① Only URLs the writer wrote, and only plain web ones
+
+The verifier's `request` holds more URLs than it is asked about, because `resolve_citations`
+hoists cited tool results into it. A cited `search_cofacts_database` result alone can carry
+dozens of other articles' links and references. Fetching all of them would fill the URL cap
+(③) and spend the shared text budget (⑦) on pages nobody asked about. It would also list them
+in `sources` as read. So extraction skips **every** hoisted block
+(`writer_citations.strip_hoisted_blocks`, which owns that format). A cited result is context
+the verifier reads, not a page it fetches.
+
+That includes the cited suspicious message. The writer prompt states the rule: citing does not
+ask the verifier to read a page, so to have a page checked the writer writes its URL in the
+request, even when the URL is already in the article it cites. Keeping the rule to "what you
+wrote" avoids a second rule about which kinds of cited block count.
 
 YouTube URLs and Cofacts `gs://` media are left to `inject_youtube_filedata` and
 `inject_cofacts_media_filedata`, which hand Gemini the media itself as `FileData`. url-resolver
-scrapes HTML text, so it has nothing to add for a video. Everything else that looks like an
-http(s) URL (CJK-aware extraction) goes on.
+scrapes HTML text, so it has nothing to add for a video. Extraction is CJK-aware.
 
 #### ② The artifact store is the fetch cache
 
@@ -198,7 +211,13 @@ costing a re-fetch, but the tokens are still re-sent.
 The gRPC client (`adk/cofacts_ai/url_resolver/`) drops `html` unconditionally. That is the
 one rule in the module that cannot bend: raw HTML is 100 KB+ per page and must never reach a
 model. Replies are joined back to requests **by URL**, because stream order is not guaranteed.
-At most `URL_RESOLVER_MAX_URLS` URLs are sent per call. The one shared deadline grows with the
+Otherwise the client is transparent: it sends every URL it is given. How many to fetch is a
+policy decision, and it is made by the callback. `URL_RESOLVER_MAX_URLS` (default 20) caps the
+**uncached** URLs of one call: cache hits cost no fetch, so they don't count. A URL past the
+cap goes to ⑥ like any unfetched URL, and a warning is logged. With cited blocks skipped (①),
+a normal call doesn't reach it. An earlier revision capped inside the client and returned a
+`NOT_ATTEMPTED` status for the overflow. That status only existed because the client was making
+a decision that was not its own. The one shared deadline grows with the
 number of URLs sent (`DEFAULT_PER_URL_TIMEOUT` each, never below 30 s) unless
 `URL_RESOLVER_TIMEOUT` is set: a page without enough `<meta>` tags for url-resolver's
 `parseMeta()` fast path pays for a real headless-browser navigation, so a flat 30 s for the
@@ -213,18 +232,17 @@ url-resolver stops sending `html` at all.
 Only `NAME_NOT_RESOLVED` / `INVALID_URL` become `DEAD`: the URL itself is unusable. Every other
 failure means _the resolver_ could not get the page, not that the page is missing. That covers
 `UNSUPPORTED` (a PDF), `NOT_REACHABLE`, `HTTPS_ERROR`, scrap/unfurl errors, a stream that ends
-before answering (`TIMEOUT`), a whole-call failure (`RESOLVER_UNAVAILABLE`, set on every URL)
-and a URL past the cap (`NOT_ATTEMPTED`). A resolver outage must never mark good sources as
+before answering (`TIMEOUT`) and a whole-call failure (`RESOLVER_UNAVAILABLE`, set on every
+URL). A resolver outage must never mark good sources as
 dead. That is why the split is by cause and not simply success/failure.
 
 The client keeps those causes apart (as `ResolveStatus` values), so logs and tests can tell
-a capped batch from a slow resolver. The callback does not: past this diamond, every cause
+them apart. The callback does not: past this diamond, every cause
 except `DEAD` takes the same path. An earlier revision gave each cause its own note
 (`[NOTE] couldn't fetch`, `[NOT PRE-FETCHED]`, silence for a timeout), but every one of those
 notes told the verifier the same thing — use `url_context`, which it must call for every URL
 anyway. So the notes added prompt surface without changing behaviour, and a resolver hiccup
-spelled out to the model risked being read as evidence against the link. The cap is still
-visible, in a warning log.
+spelled out to the model risked being read as evidence against the link.
 
 #### ⑤ `[LINK NOT FOUND]` is advisory, not a ban
 
@@ -406,11 +424,10 @@ it does not lose the fetched sources too.
   the requested URL, not a homepage canonical;
   the second model call of a turn re-injects the page but is served from the artifact cache, not
   the network; a dead URL never appears in `sources` while a `url_context`-grounded PDF still
-  does; a URL dropped by `URL_RESOLVER_MAX_URLS` becomes `NOT_ATTEMPTED` rather than vanishing
-  (including when it coincides with a whole-call `RESOLVER_UNAVAILABLE` failure), the timeout
-  scales with the number of URLs actually sent (not the pre-cap count) unless
-  `URL_RESOLVER_TIMEOUT` is set, and every non-`DEAD` failure injects an archived copy when
-  Cofacts has one and nothing otherwise.
+  does; URLs inside a hoisted citation block are not fetched; the cap counts only uncached URLs
+  and sends a URL past it to the archived-copy fallback; the client sends every URL it is given;
+  the timeout scales with the number of URLs sent unless `URL_RESOLVER_TIMEOUT` is set; and
+  every non-`DEAD` failure injects an archived copy when Cofacts has one and nothing otherwise.
 - The archived-copy hand-off is tested end to end through a real `AgentTool`, with a scripted
   model on both sides. A hyperlink in an earlier turn's Cofacts response reaches the verifier as
   `[ARCHIVED PAGE]`, and the staged block never reaches the verifier's model. Swapping in the

@@ -13,10 +13,10 @@ stream order), a URL missing from the stream becomes TIMEOUT, a whole-call
 failure before any reply marks every URL RESOLVER_UNAVAILABLE (never DEAD --
 a resolver outage must not falsely brand good links as dead), each
 `ResolveError` enum value buckets into DEAD (URL itself is bad) or
-RESOLVER_CANT_FETCH (resolver limitation, url_context may still succeed), a
-URL dropped by the `URL_RESOLVER_MAX_URLS` cap becomes NOT_ATTEMPTED rather
-than silently vanishing, and the deadline for the whole streaming call scales
-with how many URLs were actually sent unless URL_RESOLVER_TIMEOUT pins it.
+RESOLVER_CANT_FETCH (resolver limitation, url_context may still succeed),
+every URL given is sent (there is no cap here), and the deadline for the
+whole streaming call scales with how many URLs were sent unless
+URL_RESOLVER_TIMEOUT pins it.
 """
 
 import os
@@ -149,58 +149,19 @@ class TestResolveUrlsHappyPath:
         assert by_url["https://a.com"].status == ResolveStatus.RESOLVED
         assert by_url["https://b.com"].status == ResolveStatus.TIMEOUT
 
-    async def test_dedups_and_caps_to_max_urls_preserving_order(self):
+    async def test_dedups_and_sends_every_url_preserving_order(self):
+        """No cap here: which URLs are worth fetching, and how many, is the
+        verifier callback's call (see inject_resolved_url_content)."""
+        urls = [f"https://{c}.com" for c in "abcdefghijklmnopqrstuvwxy"]  # 25
         call = FakeUnaryStreamCall(
-            replies=[
-                make_reply("https://a.com", successfully_resolved=True, summary="a"),
-                make_reply("https://b.com", successfully_resolved=True, summary="b"),
-            ]
+            replies=[make_reply(u, successfully_resolved=True, summary=u) for u in urls]
         )
         p1, p2 = patched_client(call)
-        with p1, p2, patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "2"}):
-            results = await resolve_urls(
-                ["https://a.com", "https://a.com", "https://b.com", "https://c.com"]
-            )
+        with p1, p2 as stub_ctor:
+            results = await resolve_urls([urls[0], *urls])
 
-        # The de-duped "a" only counts once against the cap; "c" is the URL
-        # actually pushed past it and comes back NOT_ATTEMPTED rather than
-        # silently vanishing.
-        assert [r.url for r in results] == [
-            "https://a.com",
-            "https://b.com",
-            "https://c.com",
-        ]
-        assert results[-1].status == ResolveStatus.NOT_ATTEMPTED
-
-    async def test_urls_beyond_cap_are_never_sent_to_the_resolver(self):
-        call = FakeUnaryStreamCall(
-            replies=[
-                make_reply("https://a.com", successfully_resolved=True, summary="a")
-            ]
-        )
-        p1, p2 = patched_client(call)
-        with (
-            p1,
-            p2 as stub_ctor,
-            patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "1"}),
-        ):
-            await resolve_urls(["https://a.com", "https://b.com"])
-
-        sent = list(stub_ctor.return_value.last_request.urls)
-        assert sent == ["https://a.com"]
-
-    async def test_all_urls_beyond_cap_returns_without_opening_channel(self):
-        call = FakeUnaryStreamCall(replies=[])
-        p1, p2 = patched_client(call)
-        with (
-            p1,
-            p2 as stub_ctor,
-            patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "0"}),
-        ):
-            results = await resolve_urls(["https://a.com"])
-
-        assert [r.status for r in results] == [ResolveStatus.NOT_ATTEMPTED]
-        stub_ctor.assert_not_called()
+        assert list(stub_ctor.return_value.last_request.urls) == urls
+        assert [r.url for r in results] == urls
 
     async def test_empty_input_returns_empty_without_opening_channel(self):
         call = FakeUnaryStreamCall(replies=[])
@@ -258,45 +219,20 @@ class TestResolveUrlsTimeout:
 
         assert stub_ctor.return_value.last_timeout == 5.0
 
-    # 5 requested / cap 2 is deliberate: scaling by the sent count (2) floors
-    # at DEFAULT_TIMEOUT (30.0), but scaling by the *pre-cap* count (5) would
-    # give 50.0 -- the exact to_send/deduped_urls mix-up this guards against.
-    async def test_urls_dropped_by_the_cap_do_not_count_toward_the_timeout(self):
-        call = FakeUnaryStreamCall(
-            replies=[
-                make_reply("https://a.com", successfully_resolved=True, summary="a"),
-                make_reply("https://b.com", successfully_resolved=True, summary="b"),
-            ]
-        )
-        p1, p2 = patched_client(call)
-        with (
-            p1,
-            p2 as stub_ctor,
-            patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "2"}),
-        ):
-            os.environ.pop("URL_RESOLVER_TIMEOUT", None)
-            urls: list[str] = [f"https://{c}.com" for c in "abcde"]
-            await resolve_urls(urls)
-
-        from cofacts_ai.url_resolver.client import DEFAULT_TIMEOUT
-
-        assert stub_ctor.return_value.last_timeout == DEFAULT_TIMEOUT
-
 
 class TestResolveUrlsConfig:
     """A malformed setting is a deployment bug, not an outage: it must raise
     its own error so the verifier callback can let it through instead of
     reading it as "resolver down" on every turn."""
 
-    @pytest.mark.parametrize(
-        "env",
-        [{"URL_RESOLVER_TIMEOUT": "120s"}, {"URL_RESOLVER_MAX_URLS": "twenty"}],
-        ids=["timeout", "max_urls"],
-    )
-    async def test_malformed_setting_raises_config_error(self, env):
+    async def test_malformed_timeout_raises_config_error(self):
         p1, p2 = patched_client(FakeUnaryStreamCall())
-        with p1 as channel_ctor, p2, patch.dict(os.environ, env):
-            with pytest.raises(UrlResolverConfigError, match=next(iter(env))):
+        with (
+            p1 as channel_ctor,
+            p2,
+            patch.dict(os.environ, {"URL_RESOLVER_TIMEOUT": "120s"}),
+        ):
+            with pytest.raises(UrlResolverConfigError, match="URL_RESOLVER_TIMEOUT"):
                 await resolve_urls(["https://a.com"])
         channel_ctor.assert_not_called()
 
@@ -381,16 +317,3 @@ class TestResolveUrlsTransportFailure:
         by_url = {r.url: r for r in results}
         assert by_url["https://a.com"].status == ResolveStatus.RESOLVED
         assert by_url["https://b.com"].status == ResolveStatus.TIMEOUT
-
-    async def test_whole_call_failure_still_reports_urls_dropped_by_the_cap(self):
-        """RESOLVER_UNAVAILABLE for the sent URLs must not swallow the
-        NOT_ATTEMPTED ones dropped before the call was ever made."""
-        error = rpc_error(grpc.StatusCode.UNAVAILABLE, "connection refused")
-        call = FakeUnaryStreamCall(replies=[], error=error)
-        p1, p2 = patched_client(call)
-        with p1, p2, patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "1"}):
-            results = await resolve_urls(["https://a.com", "https://b.com"])
-
-        by_url = {r.url: r for r in results}
-        assert by_url["https://a.com"].status == ResolveStatus.RESOLVER_UNAVAILABLE
-        assert by_url["https://b.com"].status == ResolveStatus.NOT_ATTEMPTED
