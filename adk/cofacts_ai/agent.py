@@ -180,9 +180,9 @@ async def append_verifier_sources(
 
     Unlike the old url_context-only version, this wraps the response even
     when url_context returned no grounding_metadata at all (e.g. the model
-    skipped calling it) as long as url-resolver resolved something — a lazy
-    or misbehaving model should not also lose the deterministically-fetched
-    resolver sources.
+    skipped calling it) — a lazy or misbehaving model should not also lose
+    the deterministically-fetched resolver sources. It only skips a response
+    with no text, so the writer's empty-response retry still fires.
     """
     if not llm_response.content or not llm_response.content.parts:
         return None
@@ -221,6 +221,8 @@ async def append_verifier_sources(
         )
 
     content = "".join(p.text or "" for p in llm_response.content.parts)
+    if not content.strip():
+        return None
 
     serialized = json.dumps(
         {"content": content, "sources": sources_list},
