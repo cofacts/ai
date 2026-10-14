@@ -11,9 +11,10 @@ cache and to persist the full page text for the UI. That fake's
 Coverage: a resolved URL gets a `[RESOLVED PAGE]` part; a dead URL (DNS
 failure) gets an advisory `[LINK NOT FOUND]` note, not a ban; every other
 failure -- a URL the resolver couldn't fetch (e.g. a PDF), a timeout, a
-resolver outage, a URL dropped by the `URL_RESOLVER_MAX_URLS` cap -- gets
+resolver outage, a URL past the `URL_RESOLVER_MAX_URLS` cap -- gets
 nothing injected (absent an archived copy) so url_context gets a clean shot
-at it; YouTube and Cofacts-media URLs are
+at it; URLs inside a hoisted citation block are not fetched; the cap counts
+only uncached URLs; YouTube and Cofacts-media URLs are
 excluded (handled elsewhere via FileData); the next model call of a turn
 re-injects from the artifact cache without re-fetching; a misconfigured char
 budget raises instead of degrading silently; a resolver outage injects nothing; and
@@ -43,6 +44,7 @@ from cofacts_ai.url_resolver.client import (
     ResolveStatus,
     UrlResolverConfigError,
 )
+from cofacts_ai.writer_citations import _render_block
 
 
 def make_request(*contents: genai_types.Content) -> LlmRequest:
@@ -160,21 +162,6 @@ def unavailable(url: str) -> ResolvedUrl:
     )
 
 
-def not_attempted(
-    url: str,
-    error: str = "dropped: more than URL_RESOLVER_MAX_URLS=20 URLs in this request",
-) -> ResolvedUrl:
-    return ResolvedUrl(
-        url=url,
-        canonical=None,
-        title=None,
-        summary=None,
-        http_status=None,
-        status=ResolveStatus.NOT_ATTEMPTED,
-        error=error,
-    )
-
-
 class TestInjectResolvedUrlContent:
     async def test_resolved_url_injects_resolved_page_part(self):
         request = make_request(user_text("請查核 https://good.com/article"))
@@ -219,15 +206,7 @@ class TestInjectResolvedUrlContent:
         assert "url_context" in part
         assert "do NOT claim" in part
 
-    @pytest.mark.parametrize(
-        "result",
-        [
-            cant_fetch("https://report.example/file.pdf"),
-            not_attempted("https://report.example/file.pdf"),
-        ],
-        ids=["cant_fetch", "not_attempted"],
-    )
-    async def test_no_signal_without_archive_injects_nothing(self, result):
+    async def test_no_signal_without_archive_injects_nothing(self):
         """Whatever the reason url-resolver gave no text, the verifier's next
         step is the same -- url_context -- so no per-cause note is added."""
         request = make_request(user_text("請查核 https://report.example/file.pdf"))
@@ -236,41 +215,11 @@ class TestInjectResolvedUrlContent:
 
         with patch(
             "cofacts_ai.resolved_pages.resolve_urls",
-            AsyncMock(return_value=[result]),
+            AsyncMock(return_value=[cant_fetch("https://report.example/file.pdf")]),
         ):
             await inject_resolved_url_content(context, request)
 
         assert list(request.contents[0].parts or []) == original_parts
-        assert context.state[RESOLVED_META_STATE_KEY] == {}
-
-    async def test_not_attempted_falls_back_to_an_archived_copy(self):
-        """Same as every other no-signal bucket: Cofacts' archived copy is
-        injected when it has one."""
-        url = "https://dropped.example"
-        request = make_request(user_text(url))
-        context = make_context(
-            state={
-                ARCHIVED_LINKS_STATE_KEY: {
-                    url: {
-                        "summary": "archived body text",
-                        "title": "Archived Title",
-                        "fetchedAt": "2020-01-01T00:00:00Z",
-                    }
-                }
-            }
-        )
-
-        with patch(
-            "cofacts_ai.resolved_pages.resolve_urls",
-            AsyncMock(return_value=[not_attempted(url)]),
-        ):
-            await inject_resolved_url_content(context, request)
-
-        parts = text_parts(request.contents[0])
-        [archived_part] = [p for p in parts if p.startswith("[ARCHIVED PAGE]")]
-        assert "archived body text" in archived_part
-        # Same safety property as the other no-signal buckets: an archived
-        # copy must never be presented as something this turn actually read.
         assert context.state[RESOLVED_META_STATE_KEY] == {}
 
     async def test_resolver_unavailable_injects_nothing(self):
@@ -777,3 +726,84 @@ class TestArtifactFailuresAreLocal:
         assert [p.split("\n", 1)[0] for p in pages] == [
             "[RESOLVED PAGE] https://cached.com"
         ]
+
+
+class TestWhichUrlsAreFetched:
+    async def test_urls_inside_a_citation_block_are_not_fetched(self):
+        """A cited result is context to read. A cited search dump alone can
+        carry dozens of other articles' links; fetching them would fill the
+        cap, spend the text budget and list them in `sources` as read."""
+        dump = _render_block(
+            "search_cofacts_database-srch1",
+            '{"links": ["https://dump.example/1", "https://dump.example/2"]}',
+        )
+        request = make_request(
+            user_text(
+                f"{dump}\n\n---\n\n參考 [^search_cofacts_database-srch1]，"
+                "請查核 https://target.example"
+            )
+        )
+        context = make_context()
+        resolve_mock = AsyncMock(return_value=[resolved("https://target.example")])
+
+        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
+            await inject_resolved_url_content(context, request)
+
+        resolve_mock.assert_awaited_once_with(["https://target.example"])
+        assert set(context.state[RESOLVED_META_STATE_KEY]) == {"https://target.example"}
+
+    async def test_urls_past_the_cap_are_not_sent_and_fall_back_to_archive(self):
+        urls = ["https://a.example", "https://b.example", "https://c.example"]
+        request = make_request(user_text(" ".join(urls)))
+        context = make_context(
+            state={
+                ARCHIVED_LINKS_STATE_KEY: {
+                    "https://c.example": {
+                        "summary": "archived body text",
+                        "title": "Archived",
+                        "fetchedAt": "2020-01-01T00:00:00Z",
+                    }
+                }
+            }
+        )
+        resolve_mock = AsyncMock(
+            return_value=[resolved("https://a.example"), resolved("https://b.example")]
+        )
+
+        with (
+            patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock),
+            patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "2"}),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        resolve_mock.assert_awaited_once_with(urls[:2])
+        [archived] = [
+            t
+            for t in text_parts(request.contents[0])
+            if t.startswith("[ARCHIVED PAGE]")
+        ]
+        assert "https://c.example" in archived
+        assert "https://c.example" not in context.state[RESOLVED_META_STATE_KEY]
+
+    async def test_cached_urls_do_not_count_toward_the_cap(self):
+        store = FakeArtifactStore()
+        context = make_context(store)
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(return_value=[resolved("https://cached.example")]),
+        ):
+            await inject_resolved_url_content(
+                context, make_request(user_text("https://cached.example"))
+            )
+
+        resolve_mock = AsyncMock(return_value=[resolved("https://new.example")])
+        with (
+            patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock),
+            patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "1"}),
+        ):
+            await inject_resolved_url_content(
+                context,
+                make_request(user_text("https://cached.example https://new.example")),
+            )
+
+        resolve_mock.assert_awaited_once_with(["https://new.example"])

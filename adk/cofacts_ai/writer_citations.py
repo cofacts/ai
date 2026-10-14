@@ -280,6 +280,27 @@ def _render_block(cite_id: str, body: str) -> str:
     return f"<{cite_id}>\n{escaped}\n</{cite_id}>"
 
 
+# A hoisted block as `_render_block` writes it: the id is the tag name, and the
+# same id closes it. Uses the same id alphabet as `_CITATION_RE`, and nothing
+# else about what an id looks like -- see the note there.
+_HOISTED_BLOCK_RE = re.compile(r"<([A-Za-z0-9_.-]+)>\n.*?\n</\1>", re.DOTALL)
+
+
+def strip_hoisted_blocks(text: str) -> str:
+    """`text` without the blocks `resolve_citations` hoisted into it: what the
+    writer itself wrote.
+
+    Only a block whose `[^id]` marker is also in `text` is removed -- that pair
+    is what a hoisted citation looks like, so an unrelated tag that happens to
+    look like one is left alone. A cited block's body cannot end it early:
+    `_render_block` escapes the closing tag inside it.
+    """
+    markers = {m.group(1) for m in _CITATION_RE.finditer(text)}
+    return _HOISTED_BLOCK_RE.sub(
+        lambda m: "" if m.group(1) in markers else m.group(0), text
+    )
+
+
 def resolve_citations(
     tool: BaseTool, args: dict, tool_context: CallbackContext
 ) -> Optional[dict]:

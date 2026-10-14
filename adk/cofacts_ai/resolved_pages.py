@@ -37,8 +37,10 @@ from .url_resolver.client import (
     ResolvedUrl,
     ResolveStatus,
     UrlResolverConfigError,
+    env_number,
     resolve_urls,
 )
+from .writer_citations import strip_hoisted_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +134,11 @@ def _stage_archived(
 
 
 _DEFAULT_TOTAL_CHAR_BUDGET = 200_000
+
+# How many uncached URLs one verifier call may send to url-resolver. With cited
+# blocks skipped, this is a safety bound rather than something a normal call
+# reaches.
+_DEFAULT_MAX_URLS = 20
 
 
 def _resolved_artifact_filename(url: str) -> str:
@@ -272,6 +279,13 @@ def _extract_web_urls(
     "latest content wins" — today each verifier AgentTool call is a fresh
     single-message session, so there is normally just one candidate).
 
+    Skips every citation block `resolve_citations` hoisted into the request:
+    cited results (a search dump, a research report, the suspicious message
+    itself) are context for the verifier to read, not pages to fetch. A cited
+    search dump alone can carry dozens of other articles' links, which would
+    fill the URL cap, spend the shared text budget and be listed in `sources`
+    as read. The writer asks for a page by writing its URL in the request.
+
     Excludes YouTube URLs (watched via FileData + url_context; url-resolver
     can only scrape HTML text, not video content) and Cofacts media URLs
     (same reason, handled by inject_cofacts_media_filedata).
@@ -286,7 +300,7 @@ def _extract_web_urls(
         for part in content.parts:
             if not part.text:
                 continue
-            for match in _HTTP_URL_RE.findall(part.text):
+            for match in _HTTP_URL_RE.findall(strip_hoisted_blocks(part.text)):
                 url = _trim_url_punctuation(match)
                 if _YOUTUBE_URL_RE.fullmatch(url) or _COFACTS_MEDIA_URL_RE.fullmatch(
                     url
@@ -357,11 +371,15 @@ async def inject_resolved_url_content(
         return None
 
     # Parsed up front, outside the guard below: a malformed
-    # URL_RESOLVER_TOTAL_CHAR_BUDGET is a misconfiguration and should crash
-    # loudly, not read as "this message had no links".
+    # URL_RESOLVER_TOTAL_CHAR_BUDGET or URL_RESOLVER_MAX_URLS is a
+    # misconfiguration and should crash loudly, not read as "this message had
+    # no links".
     budget = int(
         os.environ.get("URL_RESOLVER_TOTAL_CHAR_BUDGET", _DEFAULT_TOTAL_CHAR_BUDGET)
     )
+    max_urls = env_number("URL_RESOLVER_MAX_URLS", int)
+    if max_urls is None:
+        max_urls = _DEFAULT_MAX_URLS
 
     resolved_meta: dict[str, dict] = {}
     injected_parts: list[genai_types.Part] = []
@@ -392,6 +410,20 @@ async def inject_resolved_url_content(
         lengths[url] = len(text)
         titles[url] = title or url
         canonicals[url] = canonical
+
+    # The cap bounds fetch work, so cache hits do not count toward it. Past
+    # it, a URL gets what any unfetched one gets: Cofacts' archived copy if
+    # there is one, and otherwise url_context alone.
+    over_cap = to_fetch[max_urls:]
+    to_fetch = to_fetch[:max_urls]
+    if over_cap:
+        logger.warning(
+            "url-resolver: %d URL(s) past URL_RESOLVER_MAX_URLS=%d not fetched",
+            len(over_cap),
+            max_urls,
+        )
+        for url in over_cap:
+            _stage_archived(url, cofacts_links, archived, lengths)
 
     if to_fetch:
         try:
@@ -445,14 +477,15 @@ async def inject_resolved_url_content(
                 )
             else:
                 # Everything else -- RESOLVER_CANT_FETCH (PDF, blocked, TLS),
-                # TIMEOUT, RESOLVER_UNAVAILABLE, NOT_ATTEMPTED (the batch
-                # cap) -- is "no signal from url-resolver". The reasons differ
-                # but what the verifier should do does not: read the page with
-                # url_context, which it is told to call for every URL anyway.
-                # So all four get the same treatment: Cofacts' older crawl if
-                # there is one, and otherwise nothing. A per-cause note would
-                # only restate "use url_context", and a resolver hiccup
-                # surfaced as one risks being read as evidence the link is bad.
+                # TIMEOUT, RESOLVER_UNAVAILABLE -- is "no signal from
+                # url-resolver", like a URL past the cap above. The reasons
+                # differ but what the verifier should do does not: read the
+                # page with url_context, which it is told to call for every
+                # URL anyway. So all of them get the same treatment: Cofacts'
+                # older crawl if there is one, and otherwise nothing. A
+                # per-cause note would only restate "use url_context", and a
+                # resolver hiccup surfaced as one risks being read as evidence
+                # the link is bad.
                 #
                 # DEAD is deliberately excluded above: there the URL itself
                 # does not resolve, and pairing "this link is broken" with the
