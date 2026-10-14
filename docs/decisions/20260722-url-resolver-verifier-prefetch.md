@@ -240,8 +240,8 @@ number of URLs sent (`DEFAULT_PER_URL_TIMEOUT` each, never below 30 s) unless
 whole batch would let a few such pages time out the rest. Dropping `html` client-side does
 not keep it off the wire, though. After a browser scrape url-resolver sends the full
 `page.content()`, and at gRPC's default 4 MB receive limit one heavy page would end the
-stream for every URL still pending. The channel therefore accepts up to 64 MB, until
-url-resolver stops sending `html` at all.
+stream for every URL still pending. The channel therefore accepts up to 64 MB. That is the
+fix, not a stopgap: url-resolver's response is left as it is (see above), `html` included.
 
 #### ④ Failures are split by cause, and only one cause means "bad link"
 

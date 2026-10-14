@@ -57,8 +57,9 @@ DEFAULT_PER_URL_TIMEOUT = 10.0
 # browser scrape it is `page.content()`), and gRPC's default 4MB receive limit
 # turns one heavy page into RESOURCE_EXHAUSTED for the whole stream: every URL
 # not yet answered degrades to TIMEOUT, or all of them to RESOLVER_UNAVAILABLE.
-# Dropping `html` client-side cannot help -- it has already arrived. The real
-# fix is for url-resolver not to send it; until then, make room for it.
+# Dropping `html` client-side cannot help -- it has already arrived, and
+# url-resolver's response is left unchanged (ADR 0722 section 3) -- so make
+# room for it.
 MAX_RECEIVE_MESSAGE_BYTES = 64 * 1024 * 1024
 
 
