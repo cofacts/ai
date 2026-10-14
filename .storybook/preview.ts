@@ -1,4 +1,4 @@
-import type { Preview } from '@storybook/react-vite'
+import type { Preview } from '@storybook/tanstack-react'
 
 import '../src/styles.css'
 

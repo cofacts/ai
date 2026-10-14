@@ -1,5 +1,5 @@
 import { Button } from './button'
-import type { Meta, StoryObj } from '@storybook/react-vite'
+import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
 const meta = {
   title: 'ui/Button',
