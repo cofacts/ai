@@ -27,3 +27,4 @@ gha-creds-*.json
 
 # storybook
 storybook-static
+public/storybook
