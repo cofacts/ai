@@ -11,8 +11,8 @@ in a different one, so it has to be carried across.
 It rides inside the verifier's ``request``, in a delimited block:
 
 - ``stage_archived_links`` (writer, ``before_tool_callback``) walks the writer's
-  event history, keeps the hyperlinks whose URL the request mentions, and
-  appends them as JSON.
+  event history, keeps the hyperlinks whose URL the verifier will fetch from
+  the request (``web_urls_in``), and appends them as JSON.
 - ``unpack_archived_links`` (verifier, first ``before_model_callback``) parses
   the block into ``ARCHIVED_LINKS_STATE_KEY`` and removes it, so the model only
   ever sees the archived text the way ``inject_resolved_url_content`` frames
@@ -48,7 +48,9 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.tools.base_tool import BaseTool
 
 from .agent_names import AI_VERIFIER_NAME
+from .media_filedata import _COFACTS_MEDIA_URL_RE, _YOUTUBE_URL_RE
 from .tools import get_single_cofacts_article, search_cofacts_database
+from .writer_citations import strip_hoisted_blocks
 
 # What unpack_archived_links hands to inject_resolved_url_content, both inside
 # the verifier's own child session: {url: {"summary", "title", "fetchedAt"}}.
@@ -66,6 +68,81 @@ _HYPERLINK_TOOL_NAMES = frozenset(
 # process, so both ends agree on it.
 _TAG = f"cofacts-archived-links-{secrets.token_hex(8)}"
 _BLOCK_RE = re.compile(rf"\n*<{_TAG}>\n(.*?)\n</{_TAG}>", re.DOTALL)
+
+
+# CJK sentence punctuation ends a URL. It has to be excluded from the match
+# itself, not merely stripped afterwards: Chinese prose has no spaces, so
+# `https://example.com/a，另一個` would otherwise capture the following words
+# into the URL, which then resolves DEAD and gets the verifier told not to
+# trust a perfectly good source.
+#
+# Full-width BRACKETS are deliberately absent from this set -- they can be part
+# of a URL and are handled by _trim_url_punctuation below.
+_CJK_URL_STOP = "，。、！？；：〜～…—「」『』〈〉《》【】"
+
+# A `[^` ends a URL too: it opens a citation marker (`writer_citations`), which
+# the writer may put flush against the URL it cites.
+_HTTP_URL_RE = re.compile(r"https?://(?:(?!\[\^)[^\s\"'<>" + _CJK_URL_STOP + r"])+")
+
+# Closing bracket -> its opener. A trailing closer is part of the URL when the
+# URL contains a matching opener (`.../Mercury_(planet)`) and prose punctuation
+# when it does not (`(https://example.com)`).
+_URL_CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{", "）": "（"}
+
+# Punctuation that commonly ends a sentence right after a URL, plus Markdown's
+# `**bold**` and `` `code` `` wrappers. Brackets are handled by the balance rule
+# above instead of appearing here.
+_URL_TRAILING_CHARS = ".,;:!?\"'*`"
+
+
+def _trim_url_punctuation(url: str) -> str:
+    """Strip prose punctuation from the end of an extracted URL.
+
+    Mirrors what rumors-site gets from `linkifyjs.tokenize()` (`lib/text.tsx`),
+    whose behaviour is pinned by its own `parses half-width brackets correctly`
+    / `parses full-width brackets correctly` tests. A plain `rstrip` of a
+    punctuation set cannot do this: it would break `.../Mercury_(planet)` by
+    taking the closing paren that belongs to the URL, and it cannot tell that
+    apart from the wrapping paren in `(https://example.com)`.
+
+    `linkify-it-py` was tried instead of hand-rolling this and rejected -- it
+    handles half-width brackets but keeps a trailing full-width `）` and, more
+    importantly, swallows following words in CJK prose exactly as the old
+    regex did.
+    """
+    while url:
+        last = url[-1]
+        opener = _URL_CLOSING_BRACKETS.get(last)
+        if opener is not None:
+            if url.count(opener) >= url.count(last):
+                break  # balanced -- the bracket belongs to the URL
+            url = url[:-1]
+        elif last in _URL_TRAILING_CHARS:
+            url = url[:-1]
+        else:
+            break
+    return url
+
+
+def web_urls_in(text: str) -> list[str]:
+    """The plain web URLs the verifier pre-fetches from one request text, in
+    order -- what `inject_resolved_url_content` sends to url-resolver, and so
+    the only URLs `stage_archived_links` has a fallback to carry for.
+
+    Lives here rather than in `resolved_pages` because that module imports this
+    one; both callers need the exact same answer.
+
+    Skips every citation block `resolve_citations` hoisted into the text, and
+    YouTube and Cofacts media URLs, which Gemini perceives as media instead
+    (see `media_filedata`).
+    """
+    urls = []
+    for match in _HTTP_URL_RE.findall(strip_hoisted_blocks(text)):
+        url = _trim_url_punctuation(match)
+        if _YOUTUBE_URL_RE.fullmatch(url) or _COFACTS_MEDIA_URL_RE.fullmatch(url):
+            continue
+        urls.append(url)
+    return urls
 
 
 def _collect_hyperlinks(node: object, found: dict[str, dict]) -> None:
@@ -112,10 +189,10 @@ def stage_archived_links(
 ) -> Optional[dict]:
     """before_tool_callback for ai_writer: carry Cofacts' copies to the verifier.
 
-    Runs after `resolve_citations`, so URLs inside hoisted citation blocks count
-    as mentioned -- the verifier will try to fetch those too. Only URLs the
-    request mentions are carried: the rest could never be looked up, and would
-    only make the call's payload larger.
+    Only URLs the verifier will fetch are carried -- `web_urls_in` the request,
+    matched exactly: the rest could never be looked up, and would only make the
+    call's payload larger. Runs after `resolve_citations`, so that skips the URLs
+    inside hoisted citation blocks, which the verifier reads but does not fetch.
 
     Always returns None: this never replaces the tool call.
     """
@@ -137,7 +214,8 @@ def stage_archived_links(
             if fr and fr.name in _HYPERLINK_TOOL_NAMES:
                 _collect_hyperlinks(fr.response, found)
 
-    wanted = {url: entry for url, entry in found.items() if url in request}
+    fetched = set(web_urls_in(request))
+    wanted = {url: entry for url, entry in found.items() if url in fetched}
     if wanted:
         body = json.dumps(wanted, ensure_ascii=False)
         args["request"] = f"{request}\n\n<{_TAG}>\n{body}\n</{_TAG}>"

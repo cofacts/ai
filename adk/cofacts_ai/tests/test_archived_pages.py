@@ -40,6 +40,7 @@ from cofacts_ai.resolved_pages import (
     inject_resolved_url_content,
 )
 from cofacts_ai.url_resolver.client import ResolvedUrl, ResolveStatus
+from cofacts_ai.writer_citations import _render_block
 
 URL = "https://news.example.com/a"
 
@@ -184,6 +185,39 @@ class TestStage:
                 fr_event(
                     "get_single_cofacts_article",
                     {"article": {"hyperlinks": [link(), link(url=other)]}},
+                )
+            ],
+            f"請查核 {URL}",
+        )
+        assert set(unpack(args["request"])[0]) == {URL}
+
+    def test_skips_urls_only_inside_a_hoisted_citation_block(self):
+        # The verifier does not fetch those, so their archived text would only
+        # make the call's payload larger.
+        cited = "https://cited.example/y"
+        dump = _render_block(
+            "get_single_cofacts_article-art1", f'{{"hyperlinks": ["{cited}"]}}'
+        )
+        args = stage(
+            [
+                fr_event(
+                    "get_single_cofacts_article",
+                    {"article": {"hyperlinks": [link(), link(url=cited)]}},
+                )
+            ],
+            f"{dump}\n\n---\n\n參考 [^get_single_cofacts_article-art1]，請查核 {URL}",
+        )
+        assert set(unpack(args["request"])[0]) == {URL}
+
+    def test_matches_whole_urls_not_prefixes(self):
+        # `https://news.example.com` is a substring of the URL the request
+        # names, but a different page.
+        site = "https://news.example.com"
+        args = stage(
+            [
+                fr_event(
+                    "get_single_cofacts_article",
+                    {"article": {"hyperlinks": [link(), link(url=site)]}},
                 )
             ],
             f"請查核 {URL}",

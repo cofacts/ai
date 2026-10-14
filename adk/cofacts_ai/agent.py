@@ -853,8 +853,8 @@ ai_writer = LlmAgent(
         )
     ),
     before_model_callback=inject_article_attachment,
-    # resolve_citations first: it may cancel the call, and the URLs it hoists
-    # into the request count as mentioned for stage_archived_links.
+    # resolve_citations first: it may cancel the call, and stage_archived_links
+    # skips the blocks it hoists into the request, as the verifier does.
     before_tool_callback=[resolve_citations, stage_archived_links],
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,
