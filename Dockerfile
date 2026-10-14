@@ -12,7 +12,7 @@ COPY . .
 # Storybook goes into public/ before the app build: Nitro bakes its static-asset
 # manifest at build time, so files added to .output/public afterwards 404.
 # Served at /storybook/ (trailing slash required).
-RUN STORYBOOK_DISABLE_TELEMETRY=1 pnpm run build-storybook --output-dir public/storybook
+RUN pnpm run build-storybook --output-dir public/storybook
 RUN pnpm run build
 
 # --- runtime ---
