@@ -38,7 +38,11 @@ from cofacts_ai.resolved_pages import (
     _resolved_artifact_filename,
     inject_resolved_url_content,
 )
-from cofacts_ai.url_resolver.client import ResolvedUrl, ResolveStatus
+from cofacts_ai.url_resolver.client import (
+    ResolvedUrl,
+    ResolveStatus,
+    UrlResolverConfigError,
+)
 
 
 def make_request(*contents: genai_types.Content) -> LlmRequest:
@@ -341,6 +345,18 @@ class TestInjectResolvedUrlContent:
             ),
             patch.dict(os.environ, {"URL_RESOLVER_TOTAL_CHAR_BUDGET": "lots"}),
             pytest.raises(ValueError),
+        ):
+            await inject_resolved_url_content(context, request)
+
+    async def test_malformed_resolver_setting_raises(self):
+        """Like the budget: a malformed URL_RESOLVER_* setting must surface,
+        not be swallowed as a resolver outage that turns pre-fetch off."""
+        context = make_context()
+        request = make_request(user_text("https://good.com"))
+
+        with (
+            patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "twenty"}),
+            pytest.raises(UrlResolverConfigError),
         ):
             await inject_resolved_url_content(context, request)
 
@@ -688,3 +704,76 @@ class TestResolvedMetaDescribesOnlyThisModelCall:
             if t.startswith("[RESOLVED PAGE]")
         ]
         assert "Cached Title" in part
+
+
+class TestArtifactFailuresAreLocal:
+    """One storage error costs at most that page's cache entry, never the
+    injection: dropping every page over it would put the verifier back on
+    url_context alone, the path this callback exists to close."""
+
+    async def test_failed_cache_read_refetches_that_page(self):
+        context = make_context()
+        context.load_artifact = AsyncMock(side_effect=RuntimeError("gcs down"))
+        request = make_request(user_text("https://good.com"))
+
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(return_value=[resolved("https://good.com")]),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        assert any(
+            t.startswith("[RESOLVED PAGE] https://good.com")
+            for t in text_parts(request.contents[0])
+        )
+
+    async def test_failed_cache_write_keeps_every_fetched_page(self):
+        context = make_context()
+        context.save_artifact = AsyncMock(side_effect=RuntimeError("gcs down"))
+        request = make_request(user_text("https://a.com https://b.com"))
+
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(
+                return_value=[resolved("https://a.com"), resolved("https://b.com")]
+            ),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        pages = [
+            t
+            for t in text_parts(request.contents[0])
+            if t.startswith("[RESOLVED PAGE]")
+        ]
+        assert len(pages) == 2
+        assert set(context.state[RESOLVED_META_STATE_KEY]) == {
+            "https://a.com",
+            "https://b.com",
+        }
+
+    async def test_unexpected_resolver_failure_keeps_cached_pages(self):
+        store = FakeArtifactStore()
+        context = make_context(store)
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(return_value=[resolved("https://cached.com")]),
+        ):
+            await inject_resolved_url_content(
+                context, make_request(user_text("https://cached.com"))
+            )
+
+        request = make_request(user_text("https://cached.com https://new.com"))
+        with patch(
+            "cofacts_ai.resolved_pages.resolve_urls",
+            AsyncMock(side_effect=RuntimeError("unexpected")),
+        ):
+            await inject_resolved_url_content(context, request)
+
+        pages = [
+            t
+            for t in text_parts(request.contents[0])
+            if t.startswith("[RESOLVED PAGE]")
+        ]
+        assert [p.split("\n", 1)[0] for p in pages] == [
+            "[RESOLVED PAGE] https://cached.com"
+        ]

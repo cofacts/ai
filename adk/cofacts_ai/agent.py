@@ -193,17 +193,16 @@ async def append_verifier_sources(
     for url, meta in resolved_meta.items():
         if meta.get("status") != ResolveStatus.RESOLVED.value:
             continue
-        canonical = meta.get("canonical")
-        sources_list.append(
-            {"title": meta.get("title") or url, "url": canonical or url}
-        )
-        # Claim BOTH identities of the page, not just the one being listed:
-        # url_context keys its grounding chunks by the URL that was requested,
-        # while a resolved page is listed under its canonical. Registering only
-        # the canonical lets a page that redirects -- or declares a different
-        # canonical -- come back through the loop below and enter `sources` a
-        # second time under its requested URL.
+        # Listed under the URL the verifier was asked about, never the
+        # canonical. That is the URL its `content` names, the one the writer
+        # copies into `references` and `claim_sources`, and the one a reader
+        # will click. url-resolver's canonical is `twitter:url || og:url`,
+        # which many sites point at their homepage or a section page.
+        sources_list.append({"title": meta.get("title") or url, "url": url})
+        # The canonical still claims the page, so that url_context grounding it
+        # under that other name does not add it a second time.
         seen_urls.add(url)
+        canonical = meta.get("canonical")
         if canonical:
             seen_urls.add(canonical)
 

@@ -16,13 +16,15 @@ import logging
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Callable, Optional, TypeVar
 
 import grpc
 
 from ._generated import resolve_error_pb2, url_resolver_pb2, url_resolver_pb2_grpc
 
 logger = logging.getLogger(__name__)
+
+_N = TypeVar("_N", int, float)
 
 DEFAULT_ADDRESS = "url-resolver:4000"
 DEFAULT_TIMEOUT = 30.0
@@ -46,6 +48,35 @@ DEFAULT_MAX_URLS = 20
 # minutes rather than 30s; `URL_RESOLVER_TIMEOUT` is the escape hatch if that
 # trade-off ever needs revisiting for a particular deployment.
 DEFAULT_PER_URL_TIMEOUT = 10.0
+
+# url-resolver sends each page's full raw `html` over the wire (after a
+# browser scrape it is `page.content()`), and gRPC's default 4MB receive limit
+# turns one heavy page into RESOURCE_EXHAUSTED for the whole stream: every URL
+# not yet answered degrades to TIMEOUT, or all of them to RESOLVER_UNAVAILABLE.
+# Dropping `html` client-side cannot help -- it has already arrived. The real
+# fix is for url-resolver not to send it; until then, make room for it.
+MAX_RECEIVE_MESSAGE_BYTES = 64 * 1024 * 1024
+
+
+class UrlResolverConfigError(ValueError):
+    """A `URL_RESOLVER_*` setting that cannot be parsed.
+
+    Its own type so that callers which degrade gracefully on a resolver outage
+    can tell this apart and let it through: a typo in the deployment config is
+    not an outage, and swallowing it would switch pre-fetch off for every turn
+    with nothing but a log line to show for it.
+    """
+
+
+def _env_number(name: str, parse: Callable[[str], _N]) -> Optional[_N]:
+    """`parse(os.environ[name])`, or None when unset."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    try:
+        return parse(raw)
+    except ValueError:
+        raise UrlResolverConfigError(f"{name}={raw!r} is not a valid number") from None
 
 
 class ResolveStatus(str, Enum):
@@ -173,7 +204,10 @@ async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
     `html` is never read off the reply — it must never reach an LLM.
     """
     address = os.environ.get("URL_RESOLVER_ADDRESS", DEFAULT_ADDRESS)
-    max_urls = int(os.environ.get("URL_RESOLVER_MAX_URLS", DEFAULT_MAX_URLS))
+    max_urls = _env_number("URL_RESOLVER_MAX_URLS", int)
+    if max_urls is None:
+        max_urls = DEFAULT_MAX_URLS
+    explicit_timeout = _env_number("URL_RESOLVER_TIMEOUT", float)
 
     deduped_urls: list[str] = []
     seen = set()
@@ -205,15 +239,17 @@ async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
     if not to_send:
         return not_attempted
 
-    timeout_env = os.environ.get("URL_RESOLVER_TIMEOUT")
     timeout = (
-        float(timeout_env)
-        if timeout_env is not None
+        explicit_timeout
+        if explicit_timeout is not None
         else max(DEFAULT_TIMEOUT, DEFAULT_PER_URL_TIMEOUT * len(to_send))
     )
 
     results: dict[str, ResolvedUrl] = {}
-    channel = grpc.aio.insecure_channel(address)
+    channel = grpc.aio.insecure_channel(
+        address,
+        options=[("grpc.max_receive_message_length", MAX_RECEIVE_MESSAGE_BYTES)],
+    )
     try:
         stub = url_resolver_pb2_grpc.UrlResolverStub(channel)
         call = stub.ResolveUrl(

@@ -72,9 +72,28 @@ class TestAppendVerifierSources:
         result = await append_verifier_sources(context, response)
 
         assert result is not None
-        assert sources_of(result) == [
-            {"title": "A Title", "url": "https://a.com/canonical"}
-        ]
+        assert sources_of(result) == [{"title": "A Title", "url": "https://a.com"}]
+
+    async def test_lists_the_requested_url_not_a_homepage_canonical(self):
+        """og:url often points at the site's homepage. Listing it would have
+        the published reply cite `https://news.example/` instead of the article
+        the verifier actually checked."""
+        article = "https://news.example/2026/07/article-123"
+        context = make_context(
+            {
+                article: {
+                    "status": "resolved",
+                    "title": "Article",
+                    "canonical": "https://news.example/",
+                }
+            }
+        )
+        response = make_response(grounding_chunks=[])
+
+        result = await append_verifier_sources(context, response)
+
+        assert result is not None
+        assert sources_of(result) == [{"title": "Article", "url": article}]
 
     async def test_dead_url_never_becomes_a_source(self):
         context = make_context(
@@ -124,12 +143,10 @@ class TestAppendVerifierSources:
         assert sources[0]["title"] == "Resolver Title"
 
     async def test_dedups_when_canonical_differs_from_requested_url(self):
-        """One page, one entry -- even when the two paths name it differently.
-
-        The resolver lists a page under its canonical, while url_context keys
-        its grounding chunks by the URL that was requested. A page that
-        redirects (or declares a different canonical) is the same page under
-        two names, and must not be presented to a reader as two sources.
+        """One page, one entry -- even when url_context grounds it under its
+        canonical. A page that redirects (or declares a different canonical)
+        is the same page under two names, and must not be presented to a
+        reader as two sources. It is listed under the requested URL.
         """
         context = make_context(
             {
@@ -141,9 +158,7 @@ class TestAppendVerifierSources:
             }
         )
         response = make_response(
-            grounding_chunks=[
-                web_chunk("https://a.com/?utm_source=line", "Grounding Title")
-            ]
+            grounding_chunks=[web_chunk("https://a.com/article", "Grounding Title")]
         )
 
         result = await append_verifier_sources(context, response)
@@ -151,7 +166,7 @@ class TestAppendVerifierSources:
         assert result is not None
         sources = sources_of(result)
         assert len(sources) == 1
-        assert sources[0]["url"] == "https://a.com/article"
+        assert sources[0]["url"] == "https://a.com/?utm_source=line"
         assert sources[0]["title"] == "Resolver Title"
 
     async def test_wraps_response_even_without_grounding_metadata(self):

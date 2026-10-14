@@ -185,7 +185,9 @@ Page text is saved as `resolved-<sha1(url)>.txt`. One file serves three purposes
 that saves re-fetching on the verifier's ~2 model calls per turn and on later turns of the
 session; the full text when ⑦ had to trim the injected copy; and, since the frontend already
 renders artifacts, a record a human can audit of exactly what the system read. Only resolved
-text is cached. A failure costs little to retry, so it is not stored.
+text is cached. A failure costs little to retry, so it is not stored. Storage errors stay
+local to one page: a failed read counts as a cache miss and the page is fetched again, and a
+failed write only loses that cache entry. Neither abandons the pages already in hand.
 
 Every model call re-injects the page, because ADK rebuilds `llm_request.contents` from session
 events and parts appended to the request are gone by the next call. The cache stops that from
@@ -200,7 +202,11 @@ At most `URL_RESOLVER_MAX_URLS` URLs are sent per call. The one shared deadline 
 number of URLs sent (`DEFAULT_PER_URL_TIMEOUT` each, never below 30 s) unless
 `URL_RESOLVER_TIMEOUT` is set: a page without enough `<meta>` tags for url-resolver's
 `parseMeta()` fast path pays for a real headless-browser navigation, so a flat 30 s for the
-whole batch would let a few such pages time out the rest.
+whole batch would let a few such pages time out the rest. Dropping `html` client-side does
+not keep it off the wire, though. After a browser scrape url-resolver sends the full
+`page.content()`, and at gRPC's default 4 MB receive limit one heavy page would end the
+stream for every URL still pending. The channel therefore accepts up to 64 MB, until
+url-resolver stops sending `html` at all.
 
 #### ④ Failures are split by cause, and only one cause means "bad link"
 
@@ -299,7 +305,9 @@ Fresh and archived pages are injected **in full** while their combined length fi
 split (`_water_fill`) trim the longest pages, leaving short ones whole. Text is never
 summarized, because the verifier must quote verbatim and a summary could make an unsupported
 source read as supporting. A malformed budget raises instead of quietly turning the feature
-off.
+off, and so does a malformed `URL_RESOLVER_MAX_URLS` or `URL_RESOLVER_TIMEOUT`. Those raise
+`UrlResolverConfigError`, which the callback lets through rather than treating it as a resolver
+outage.
 
 #### ⑧ `sources` is a union, so no ban list is needed
 
@@ -307,13 +315,23 @@ off.
 resolved with `url_context`'s grounding chunks. A dead URL is fetched by neither path, so it is
 simply absent and can never reach the `claim_sources` gate. A PDF url-resolver missed but
 `url_context` grounded still appears. Archived text adds nothing to the union, even though the
-model read it. The callback writes the resolved half to `temp:cofacts_resolved_meta` and
+model read it.
+
+A resolved page is listed under the URL the verifier was asked about, not url-resolver's
+canonical. That is the URL the verifier's `content` names, and the one the writer carries into
+`references` and `claim_sources`, so it is what a published reply cites. The canonical is
+`twitter:url || og:url`, which many sites point at their homepage or a section page. The
+canonical still takes part in deduplication, so `url_context` grounding the page under it
+does not list the page twice.
+
+The callback writes the resolved half to `temp:cofacts_resolved_meta` and
 clears it first on every model call. `temp:` already keeps it inside one verifier call:
 `AgentTool` seeds the child session without `temp:` keys, and the deltas it forwards back are
 trimmed of them. But one verifier call makes ~2 model calls in the same child session, so
 without the reset a later call that exits early would keep the earlier call's meta. `sources`
-would then list pages missing from the request the final answer was written from. The union also wraps the response when `url_context`
-returned no grounding at all, so a model that skips it does not lose the fetched sources too.
+would then list pages missing from the request the final answer was written from. The union
+also wraps the response when `url_context` returned no grounding at all, so a model that skips
+it does not lose the fetched sources too.
 
 ### Around the hook
 
@@ -382,7 +400,10 @@ returned no grounding at all, so a model that skips it does not lose the fetched
   invariants that matter rather than the implementation: `html` never leaves the client; results
   join by URL, not stream order; each `ResolveError` value lands in the right bucket; a transport
   failure marks every URL `RESOLVER_UNAVAILABLE` and **never** `DEAD`; `RESOLVER_CANT_FETCH`
-  injects nothing; a misconfigured char budget raises rather than degrading to url_context-only;
+  injects nothing; a misconfigured char budget, URL cap or timeout raises rather than degrading
+  to url_context-only; a failed artifact read or write, or an unexpected resolver failure, loses
+  no page already in hand; the channel accepts replies past gRPC's 4 MB default; `sources` lists
+  the requested URL, not a homepage canonical;
   the second model call of a turn re-injects the page but is served from the artifact cache, not
   the network; a dead URL never appears in `sources` while a `url_context`-grounded PDF still
   does; a URL dropped by `URL_RESOLVER_MAX_URLS` becomes `NOT_ATTEMPTED` rather than vanishing
