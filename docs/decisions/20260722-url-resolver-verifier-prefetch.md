@@ -244,10 +244,48 @@ this record exists to fix:
 - **The prompt ranks it last.** It is background for understanding what the link was about,
   and `url_context` wins wherever the two disagree.
 
-The data comes through `temp:cofacts_hyperlinks`, harvested in the writer's `after_tool` while
-the Cofacts tool response is still structured, not parsed back out of the flat citation text
-the writer sends. Unlike `temp:cofacts_resolved_meta`, this key accumulates and is never
-reset: it is a URL-keyed lookup table, so a stale entry is merely old, and says so.
+**How the copy reaches the verifier.** The hyperlinks live in the writer's session, in the
+`function_response` events of its two Cofacts tools. The verifier runs in a separate child
+session that `AgentTool` creates for every call. So the data has to cross that boundary, and
+it rides in the verifier's `request` (`adk/cofacts_ai/archived_pages.py`):
+
+- `stage_archived_links`, a writer `before_tool_callback` placed after `resolve_citations`,
+  walks the writer's events. It keeps the hyperlinks whose URL the request mentions, and appends
+  them to the request as a JSON block. `_citable_index` already walks the same events to resolve
+  citations. ADK hands callbacks a deep copy of the call's arguments, so the block never enters
+  the writer's own history.
+- `unpack_archived_links`, the verifier's **first** `before_model_callback`, parses the block
+  into `temp:cofacts_archived_links` and removes it from the request. That way the model only
+  ever sees archived text framed as `[ARCHIVED PAGE]`, and the URL-reading callbacks after it
+  never pick up URLs from inside archived pages. `temp:` is right on this side, because writer
+  and reader share one child session.
+- The block's tag carries a per-process random suffix. The suspicious message is quoted into
+  the request verbatim, and it must not be able to forge a block and supply "archived" text of
+  its choosing.
+
+Options considered for the hand-off:
+
+- **`temp:` state in the writer**, as first shipped in #136. **It never worked.** `AgentTool`
+  seeds the child session through `create_session(state=...)`, which drops every `temp:` key,
+  and `temp:` is not persisted across turns either. Every unit test built the verifier's state
+  by hand, so none of them noticed. This is the same trap
+  [`20260603-auth-token-contextvar`](20260603-auth-token-contextvar.md) records for the auth
+  token.
+- **Non-`temp:` state.** It would cross the boundary, but every write is persisted in the
+  event's `state_delta`. Whole page texts would pile up in the session database on every
+  Cofacts call.
+- **A `ContextVar` set in the writer's `before_tool`.** This works, because ADK runs each
+  function call, and the `AgentTool` child inside it, in one asyncio task. But it depends on that
+  execution detail, and nothing a reader can see shows what was carried.
+- **Re-saving hyperlinks as artifacts**, beside `resolved-<sha1>.txt`. This keeps the verifier
+  side simplest: a lookup on failure. But it duplicates what session events already hold, and
+  it pays a write, plus a read to avoid piling up versions, for every hyperlink of every Cofacts
+  call. Most of those are never needed, because the live fetch usually succeeds.
+  `resolved-<sha1>.txt` earns its artifact because the session holds that text nowhere else.
+- **In the request: chosen.** The cost is paid only when the verifier is called, and only for
+  the URLs it is asked about. There is one copy of the data, and the hand-off shows up in the
+  tool call's trace. Both ends are plain functions. A test runs them through a real `AgentTool`,
+  which is the boundary that broke the first version.
 
 Deliberately **not** done: skipping the live fetch when Cofacts' copy is fresh. The verifier's
 question is whether the link supports the claim _now_. The cost is real (the re-fetch also
@@ -327,6 +365,11 @@ returned no grounding at all, so a model that skips it does not lose the fetched
   the request it was built from, so the two halves of the `sources` union are necessarily
   computed at different times and stitched through state — another private convention in the
   same family as the `{content, sources}` contract.
+- Bad, because the archived-copy hand-off is a private format shared by two callbacks: the
+  writer appends a tagged block to the verifier's `request`, and the verifier must strip it
+  before anything reads the text. A third callback that reads the request ahead of
+  `unpack_archived_links` would see raw archived text. The callback order in `agent.py` and
+  the AgentTool test are what hold that line.
 - Bad, because injected page text still competes for attention: it is bounded, but a 200 000-char
   turn is real cost and real mid-context recall risk.
 
@@ -344,6 +387,10 @@ returned no grounding at all, so a model that skips it does not lose the fetched
   scales with the number of URLs actually sent (not the pre-cap count) unless
   `URL_RESOLVER_TIMEOUT` is set, and every non-`DEAD` failure injects an archived copy when
   Cofacts has one and nothing otherwise.
+- The archived-copy hand-off is tested end to end through a real `AgentTool`, with a scripted
+  model on both sides. A hyperlink in an earlier turn's Cofacts response reaches the verifier as
+  `[ARCHIVED PAGE]`, and the staged block never reaches the verifier's model. Swapping in the
+  old `temp:` hand-off makes the test fail.
 - `ruff check`, `ruff format --check` and `ty check` clean; protoc-generated stubs are excluded
   from both via `pyproject.toml`.
 - The end-to-end check against a live resolver is done, against #123's real preview deployment

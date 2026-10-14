@@ -31,8 +31,8 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
+from cofacts_ai.archived_pages import ARCHIVED_LINKS_STATE_KEY
 from cofacts_ai.resolved_pages import (
-    COFACTS_HYPERLINKS_STATE_KEY,
     RESOLVED_META_STATE_KEY,
     _extract_web_urls,
     _resolved_artifact_filename,
@@ -247,7 +247,7 @@ class TestInjectResolvedUrlContent:
         request = make_request(user_text(url))
         context = make_context(
             state={
-                COFACTS_HYPERLINKS_STATE_KEY: {
+                ARCHIVED_LINKS_STATE_KEY: {
                     url: {
                         "summary": "archived body text",
                         "title": "Archived Title",

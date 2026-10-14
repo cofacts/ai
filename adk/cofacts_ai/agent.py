@@ -40,6 +40,7 @@ from .agent_names import (
     AI_VERIFIER_NAME,
     AI_WRITER_NAME,
 )
+from .archived_pages import stage_archived_links, unpack_archived_links
 from .media_filedata import (
     _YOUTUBE_URL_RE,
     inject_article_attachment,
@@ -47,7 +48,6 @@ from .media_filedata import (
 )
 from .resolved_pages import (
     RESOLVED_META_STATE_KEY,
-    harvest_cofacts_hyperlinks,
     inject_resolved_url_content,
 )
 from .session_title import generate_session_title
@@ -378,6 +378,9 @@ ai_verifier = LlmAgent(
         http_options=genai_types.HttpOptions(timeout=240_000),
     ),
     before_model_callback=[
+        # First: it removes the archived-links block the writer staged, which
+        # carries URLs of its own that the URL-reading callbacks must not see.
+        unpack_archived_links,
         inject_youtube_filedata,
         inject_cofacts_media_filedata,
         inject_resolved_url_content,
@@ -720,14 +723,6 @@ async def after_tool(
     writer_citations.
     """
     normalized = await _normalized_response(tool, tool_context, tool_response)
-    # Stash any Cofacts `hyperlinks` before the payload is handed on. This is
-    # the only point where the response is still structured -- what the writer
-    # later cites to the verifier is a flat text block, and digging the field
-    # back out of that would mean parsing a prompt. Harvesting is unconditional
-    # and shape-agnostic: it costs one walk of a dict we already hold.
-    harvest_cofacts_hyperlinks(
-        tool_context, tool_response if normalized is None else normalized
-    )
     # `is None` rather than a truthiness test: a sub-agent's payload can
     # legitimately deserialize to something falsy, and only None means
     # "unchanged" here.
@@ -852,7 +847,9 @@ ai_writer = LlmAgent(
         )
     ),
     before_model_callback=inject_article_attachment,
-    before_tool_callback=resolve_citations,
+    # resolve_citations first: it may cancel the call, and the URLs it hoists
+    # into the request count as mentioned for stage_archived_links.
+    before_tool_callback=[resolve_citations, stage_archived_links],
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,
     after_agent_callback=[update_last_event_time, generate_session_title],
