@@ -1,5 +1,5 @@
 import { UserAvatar } from './UserAvatar'
-import type { Meta, StoryObj } from '@storybook/react-vite'
+import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
 const meta = {
   title: 'components/UserAvatar',
