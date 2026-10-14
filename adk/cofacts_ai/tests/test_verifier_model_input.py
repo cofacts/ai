@@ -13,6 +13,13 @@ one, which gets nothing so url_context has a clean shot at it. The request also
 cites the Cofacts message, whose URL arrives inside the hoisted citation and
 must not be fetched: cited text is context to read, and the writer asks for a
 page only by writing its URL in the request.
+
+The request also carries a YouTube video and a Cofacts media file. Neither is
+a web page: url-resolver could only scrape a video page's HTML, so neither is
+sent to it and neither gets a page part. Instead each becomes a FileData part
+Gemini perceives as media -- the YouTube URL as is, the Cofacts storage URL
+converted to its `gs://` form -- appended right after the request text, ahead
+of the page parts, because the media callbacks run before the pre-fetch.
 """
 
 from textwrap import dedent
@@ -37,6 +44,13 @@ ARCHIVED = "https://news.example.com/blocked"
 NOTHING = "https://news.example.com/report.pdf"
 # Only inside the cited Cofacts message.
 CITED = "https://rumor.example.com/post"
+# Media, not pages: watched through FileData, never pre-fetched.
+YOUTUBE = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+MEDIA = (
+    "https://storage.googleapis.com/cofacts-media-collection/"
+    "production/video/vid1/original"
+)
+MEDIA_GS = "gs://cofacts-media-collection/production/video/vid1/original"
 
 ARTICLE_TEXT = f"Vaccines contain microchips! Forward this: {CITED}"
 CITE_ID = "get_single_cofacts_article-art1"
@@ -45,7 +59,9 @@ REQUEST = f"""Check the claim in [^{CITE_ID}]: vaccines contain microchips.
 {RESOLVED}
 {DEAD}
 {ARCHIVED}
-{NOTHING}"""
+{NOTHING}
+{YOUTUBE}
+{MEDIA}"""
 
 
 def outcome(
@@ -195,7 +211,7 @@ async def verifier_model_input() -> tuple[list[genai_types.Content], AsyncMock]:
 async def test_what_the_verifier_model_receives():
     contents, resolver = await verifier_model_input()
 
-    # Every URL the writer wrote, and not CITED.
+    # Every web page URL the writer wrote: not CITED, and neither media URL.
     resolver.assert_awaited_once_with([RESOLVED, DEAD, ARCHIVED, NOTHING])
     assert contents == [
         genai_types.Content(
@@ -215,7 +231,24 @@ async def test_what_the_verifier_model_receives():
                         {RESOLVED}
                         {DEAD}
                         {ARCHIVED}
-                        {NOTHING}""")
+                        {NOTHING}
+                        {YOUTUBE}
+                        {MEDIA}""")
+                ),
+                # The media come first, one FileData part each. Vertex AI
+                # rejects a FileData without a mime type, and reads `gs://`
+                # objects directly with the runtime service account.
+                genai_types.Part(
+                    file_data=genai_types.FileData(
+                        file_uri=YOUTUBE, mime_type="video/webm"
+                    )
+                ),
+                genai_types.Part(
+                    file_data=genai_types.FileData(
+                        # Typed from the `/video/` segment of the path.
+                        file_uri=MEDIA_GS,
+                        mime_type="video/mp4",
+                    )
                 ),
                 # Injected notes and pages follow, grouped by kind. NOTHING has
                 # no part at all.
