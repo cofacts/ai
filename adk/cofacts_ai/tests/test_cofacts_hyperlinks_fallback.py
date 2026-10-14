@@ -186,7 +186,7 @@ class TestArchivedFallback:
         assert not any(t.startswith("[ARCHIVED PAGE]") for t in texts(request))
         assert any(t.startswith("[LINK NOT FOUND]") for t in texts(request))
 
-    async def test_no_archive_keeps_the_old_couldnt_fetch_note(self):
+    async def test_no_archive_injects_nothing(self):
         ctx = make_context()
         request = make_request(f"請查核 {URL}")
 
@@ -196,10 +196,7 @@ class TestArchivedFallback:
         ):
             await inject_resolved_url_content(ctx, request)
 
-        assert any(
-            t.startswith("[NOTE] url-resolver couldn't fetch") for t in texts(request)
-        )
-        assert not any(t.startswith("[ARCHIVED PAGE]") for t in texts(request))
+        assert texts(request) == [f"請查核 {URL}"]
 
     async def test_a_live_fetch_is_never_replaced_by_the_archive(self):
         ctx = make_context({COFACTS_HYPERLINKS_STATE_KEY: {URL: link()}})

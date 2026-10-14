@@ -171,8 +171,6 @@ def harvest_cofacts_hyperlinks(
 
 _RESOLVED_PAGE_PREFIX = "[RESOLVED PAGE] "
 _LINK_NOT_FOUND_PREFIX = "[LINK NOT FOUND] "
-_RESOLVER_CANT_FETCH_PREFIX = "[NOTE] url-resolver couldn't fetch "
-_NOT_ATTEMPTED_PREFIX = "[NOT PRE-FETCHED] "
 
 # Deliberately a different marker from [RESOLVED PAGE]. This text was not read
 # in this turn and may describe a page that has since changed or gone, so the
@@ -187,21 +185,16 @@ def _stage_archived(
     cofacts_links: dict,
     archived: dict,
     lengths: dict,
-) -> bool:
-    """Queue Cofacts' stored copy of `url` for injection. True if there was one.
-
-    The caller uses the return value to decide whether it still needs to emit
-    its own "couldn't fetch" note -- an archived copy says that and more.
-    """
+) -> None:
+    """Queue Cofacts' stored copy of `url` for injection, if it has one."""
     entry = cofacts_links.get(url)
     if not isinstance(entry, dict):
-        return False
+        return
     summary = entry.get("summary")
     if not isinstance(summary, str) or not summary.strip():
-        return False
+        return
     archived[url] = entry
     lengths[url] = len(summary)
-    return True
 
 
 _DEFAULT_TOTAL_CHAR_BUDGET = 200_000
@@ -347,9 +340,10 @@ async def inject_resolved_url_content(
     let it hallucinate support for dead or irrelevant links. A URL
     url-resolver could not resolve at all (DNS failure / malformed) gets an
     advisory [LINK NOT FOUND] note rather than a hard ban, since url_context
-    may still read a page the resolver's simpler fetch missed; a URL the
-    resolver merely couldn't fetch (PDF, blocked, ...) gets nothing injected
-    so url_context gets a clean shot at it.
+    may still read a page the resolver's simpler fetch missed. Any other
+    failure (PDF, blocked, timeout, resolver down, past the URL cap) gets
+    Cofacts' earlier crawl as an [ARCHIVED PAGE] if one exists and nothing
+    otherwise, so url_context gets a clean shot at it.
 
     Caches full page text as an ADK artifact keyed by a hash of the URL —
     this doubles as the fetch cache (skips re-resolving on the verifier's
@@ -460,48 +454,23 @@ async def inject_resolved_url_content(
                             )
                         )
                     )
-                # Everything below is "no signal from url-resolver, for
-                # different reasons": RESOLVER_CANT_FETCH (PDF, blocked, TLS)
-                # and TIMEOUT/RESOLVER_UNAVAILABLE mean it tried and failed;
-                # NOT_ATTEMPTED means it was never asked (batch cap). All are
-                # cases where Cofacts' own older crawl of the same URL is
-                # worth having, so try it before falling through to
-                # url_context alone.
-                #
-                # DEAD is deliberately excluded: there the URL itself does not
-                # resolve, and pairing "this link is broken" with the text it
-                # served years ago invites exactly the citation the advisory
-                # note is trying to prevent.
-                elif r.status == ResolveStatus.RESOLVER_CANT_FETCH:
-                    if not _stage_archived(r.url, cofacts_links, archived, lengths):
-                        injected_parts.append(
-                            genai_types.Part(
-                                text=(
-                                    f"{_RESOLVER_CANT_FETCH_PREFIX}{r.url} "
-                                    f"({r.error}) — may be a PDF or blocked; "
-                                    "rely on url_context."
-                                )
-                            )
-                        )
-                elif r.status == ResolveStatus.NOT_ATTEMPTED:
-                    # Unlike TIMEOUT/RESOLVER_UNAVAILABLE below, this is never
-                    # silent: the cause (too many URLs in one request) is
-                    # certain, not a hiccup that might be mistaken for a dead
-                    # link, so the verifier can be told outright rather than
-                    # left to assume url_context alone already covers it.
-                    if not _stage_archived(r.url, cofacts_links, archived, lengths):
-                        injected_parts.append(
-                            genai_types.Part(
-                                text=(
-                                    f"{_NOT_ATTEMPTED_PREFIX}{r.url} "
-                                    f"({r.error}); rely on url_context."
-                                )
-                            )
-                        )
                 else:
-                    # TIMEOUT / RESOLVER_UNAVAILABLE. Without an archived copy
-                    # this stays silent on purpose: a resolver hiccup must never
-                    # be mistaken for proof that a URL is dead.
+                    # Everything else -- RESOLVER_CANT_FETCH (PDF, blocked,
+                    # TLS), TIMEOUT, RESOLVER_UNAVAILABLE, NOT_ATTEMPTED (the
+                    # batch cap) -- is "no signal from url-resolver". The
+                    # reasons differ but what the verifier should do does
+                    # not: read the page with url_context, which it is told
+                    # to call for every URL anyway. So all four get the same
+                    # treatment: Cofacts' older crawl if there is one, and
+                    # otherwise nothing. A per-cause note would only restate
+                    # "use url_context", and a resolver hiccup surfaced as
+                    # one risks being read as evidence the link is bad.
+                    #
+                    # DEAD is deliberately excluded above: there the URL
+                    # itself does not resolve, and pairing "this link is
+                    # broken" with the text it served years ago invites
+                    # exactly the citation the advisory note is trying to
+                    # prevent.
                     _stage_archived(r.url, cofacts_links, archived, lengths)
     except Exception:
         logger.exception(
