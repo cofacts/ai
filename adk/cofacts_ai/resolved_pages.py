@@ -5,9 +5,10 @@ The verifier used to read linked pages only through Gemini's black-box
 ``url_context`` tool, with no deterministic proof a page was ever fetched —
 the root cause of the source hallucination this module exists to stop. Here
 every plain web URL in the request is resolved through ``url-resolver``
-(puppeteer + Readability, see :mod:`cofacts_ai.url_resolver.client`) and its
-cleaned body text is injected as ``[RESOLVED PAGE]`` parts the model cannot
-skip reading. ``url_context`` is kept alongside it, not replaced: it is still
+(see :mod:`cofacts_ai.url_resolver.client`) and the text it returns is
+injected as ``[RESOLVED PAGE]`` parts the model cannot skip reading. That text
+is the page's own description when its metadata is complete, and the
+Readability-extracted body otherwise; the verifier prompt says so. ``url_context`` is kept alongside it, not replaced: it is still
 the only source of page metadata, and it may reach a page the resolver's
 simpler fetch missed.
 
@@ -323,7 +324,8 @@ async def inject_resolved_url_content(
     """Before-model callback for ai_verifier.
 
     Pre-fetches every plain web URL through url-resolver and injects the
-    real Readability-cleaned body text as [RESOLVED PAGE] parts, so the
+    text it returned as [RESOLVED PAGE] parts (the page's description, or
+    its Readability-extracted body -- see the module docstring), so the
     verifier bases support/refute decisions on text it actually read instead
     of relying solely on Gemini's black-box url_context tool — which is what
     let it hallucinate support for dead or irrelevant links. A URL

@@ -1,9 +1,14 @@
 """Async gRPC client for the Cofacts url-resolver service.
 
-url-resolver (https://github.com/cofacts/url-resolver) scrapes a URL with a
-headless browser and returns the main body text extracted by Readability.js
-(menu/footer/nav stripped), or an explicit error when the page could not be
-fetched. This module wraps its `ResolveUrl` RPC with the semantics the
+url-resolver (https://github.com/cofacts/url-resolver) returns a URL's text
+as `summary`, or an explicit error when the page could not be fetched. It
+tries a plain HTTP fetch of the page's metadata first, and when canonical,
+title, description and image are all present, `summary` is the page's own
+description (`twitter:description || og:description || description`), often
+one or two sentences. Only when metadata is incomplete does it drive a
+headless browser and return the main body text extracted by Readability.js.
+That default suits the Cofacts site's link previews, which share the service,
+so it is not changed for the verifier. This module wraps its `ResolveUrl` RPC with the semantics the
 verifier callback needs: `html` (the full raw page, 100KB+) is dropped before
 it ever leaves this module, resolver errors are bucketed into "the URL is
 actually dead" vs. "the resolver merely couldn't fetch it" (see
@@ -174,7 +179,8 @@ def _reply_to_resolved_url(reply: url_resolver_pb2.UrlReply) -> ResolvedUrl:
 
 
 async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
-    """Resolves each URL to its cleaned main body text via url-resolver.
+    """Resolves each URL to its text via url-resolver: the page's description
+    or its extracted body (see the module docstring).
 
     Sends every URL it is given, deduped in order: which URLs are worth
     fetching, and how many, is the caller's decision (see

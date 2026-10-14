@@ -396,10 +396,10 @@ ai_verifier = LlmAgent(
     `[^get_single_cofacts_article-1a2b3c]` marker in the prose points at that block.
 
     ## Pre-fetched page text
-    For plain web URLs, the system has already fetched the real page and injected its
-    cleaned body text as a `[RESOLVED PAGE] <url>` part below — this is a real, verbatim
-    fetch, not a summary. Base support/refute for these URLs ONLY on that injected text
-    (quote verbatim from it) — never on training knowledge or on a URL's mere plausibility.
+    For plain web URLs, the system has already fetched the page and injected its text,
+    verbatim, as a `[RESOLVED PAGE] <url>` part below — sometimes only the page's short
+    description. Quote from it, never from training knowledge or a URL's plausibility;
+    where it is too short to settle a claim, judge from url_context instead.
     A `[LINK NOT FOUND] <url>` note means the system's fetcher could not resolve that URL
     at all (likely nonexistent or malformed): treat this as advisory, not a ban — still try
     url_context on it; only if url_context ALSO retrieves no content should you report the
@@ -412,15 +412,16 @@ ai_verifier = LlmAgent(
     archived text wherever the two disagree.
     A URL with none of these parts means the system's fetcher could not get it this time
     (e.g. a PDF, a blocked page, a timeout, or more URLs than it fetches per turn) and no
-    archived copy exists. That says nothing about the URL itself — fall back to url_context exactly as for any other URL.
+    archived copy exists. That says nothing about the URL itself — fall back to url_context
+    exactly as for any other URL.
 
     ## Your Task
     1. Call url_context for ALL provided web/news/YouTube page URLs in one call (up to 20) —
        this is MANDATORY, even for URLs that already have injected `[RESOLVED PAGE]` text:
        url_context is still the only source for page METADATA (title, publish date,
        description) and for anything the system's fetcher could not get.
-       Division of labour: **body text → injected `[RESOLVED PAGE]` parts; page metadata /
-       upload date / video content → url_context (+ FileData)**.
+       Division of labour: **`[RESOLVED PAGE]` text first; url_context for its gaps and
+       page metadata / upload date / video content (+ FileData)**.
        For video URLs like YouTube, page metadata and video frames are complementary:
        - url_context → upload date, uploader name, page title/description
        - FileData → observable video content (speech, visuals, on-screen text)

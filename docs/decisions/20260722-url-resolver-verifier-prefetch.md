@@ -149,7 +149,7 @@ flowchart LR
     U["① URL in the writer's<br/>own words"] --> X{"① YouTube or<br/>Cofacts media?"}
     X -->|"yes"| SIB["sibling callbacks<br/>inject FileData"]
     X -->|"no"| C{"② already an<br/>artifact?"}
-    C -->|"miss · within URL cap"| R["③ url-resolver<br/>body text only · html dropped"]
+    C -->|"miss · within URL cap"| R["③ url-resolver<br/>description or body · html dropped"]
     C -->|"miss · past URL cap"| A
     R --> S{"④ why did it fail?"}
     S -->|"RESOLVED"| SV["save artifact"]
@@ -159,7 +159,7 @@ flowchart LR
     C -->|"hit"| B
     SV --> B["⑦ share 200k chars<br/>across the turn"]
     A -->|"yes"| B
-    B -->|"fresh text"| O1["[RESOLVED PAGE] url<br/>verbatim body text"]
+    B -->|"fresh text"| O1["[RESOLVED PAGE] url<br/>verbatim fetched text"]
     B -->|"archived text"| O5["[ARCHIVED PAGE] url<br/>crawl date · background only"]
 
     O1 --> S1["⑧ in sources<br/>the verifier read it"]
@@ -206,7 +206,23 @@ Every model call re-injects the page, because ADK rebuilds `llm_request.contents
 events and parts appended to the request are gone by the next call. The cache stops that from
 costing a re-fetch, but the tokens are still re-sent.
 
-#### ③ url-resolver returns body text, never HTML
+#### ③ url-resolver returns page text, never HTML
+
+What url-resolver returns as `summary` is not always the article body. It fetches the page's
+metadata over plain HTTP first. When canonical, title, description and image are all present,
+`summary` is the page's own description (`twitter:description || og:description ||
+description`), often one or two sentences. Only when the metadata is incomplete does it drive
+a headless browser and return the Readability-extracted body. The verifier prompt therefore
+does not call `[RESOLVED PAGE]` the body text. It calls it a verbatim fetch that is sometimes
+only the page's short description, so the verifier quotes from it and turns to `url_context`
+where it is too short to settle a claim. A claim missing from a one-line description is then
+not mistaken for one the page does not support.
+
+Deliberately **not** done: making url-resolver always return the body. The same service
+produces the link previews on the Cofacts site, where the description is exactly what is
+wanted. A request option (always extract the body, never send `html`) would be the way to get
+it for the verifier without changing that. How often a verifier URL gets only a description has
+not been measured. The one news page checked end to end (CNA, see Confirmation) did.
 
 The gRPC client (`adk/cofacts_ai/url_resolver/`) drops `html` unconditionally. That is the
 one rule in the module that cannot bend: raw HTML is 100 KB+ per page and must never reach a
@@ -353,8 +369,9 @@ it does not lose the fetched sources too.
 
 ### Around the hook
 
-- **Prompt.** The verifier takes body text from `[RESOLVED PAGE]` and metadata, upload dates
-  and video content from `url_context`, whose must-call rule is kept. Each injected marker
+- **Prompt.** The verifier relies on `[RESOLVED PAGE]` text first, where it covers the claim.
+  It takes the rest of a page that text does not cover, plus metadata, upload dates and video
+  content, from `url_context`, whose must-call rule is kept. Each injected marker
   (`[RESOLVED PAGE]`, `[LINK NOT FOUND]`, `[ARCHIVED PAGE]`) has its own rule, and a URL with
   none of them is described as "fall back to url_context".
 - **Generated stubs are committed.** The `.proto` files are vendored from `cofacts/url-resolver`
@@ -392,6 +409,10 @@ it does not lose the fetched sources too.
 - Bad, because every page is now fetched **twice** (url-resolver's puppeteer and Gemini's
   `url_context`), adding latency and load; url-resolver re-scrapes per call with a 5 s per-URL
   fetch timeout, so a 20-URL batch can develop a long tail.
+- Bad, because for a page whose metadata is complete, `[RESOLVED PAGE]` is only its own
+  description (③). A claim that the description doesn't cover is judged from `url_context`
+  again: the page's URL was verifiably fetched, but its body was not in context. For those
+  claims, the guarantee is back to what `url_context` gives.
 - Bad, because the ADK backend gains a **runtime dependency on another service**. It degrades
   gracefully, but when url-resolver is down the anti-hallucination guarantee silently reverts to
   the old `url_context`-only behaviour — the pipeline is quieter about this than an outage
@@ -435,9 +456,11 @@ it does not lose the fetched sources too.
 - `ruff check`, `ruff format --check` and `ty check` clean; protoc-generated stubs are excluded
   from both via `pyproject.toml`.
 - The end-to-end check against a live resolver is done, against #123's real preview deployment
-  (Cloudflare Browser Rendering backend) rather than local Docker: a real CNA news URL resolved
-  via url-resolver's `parseMeta()` fast path (plain HTTP, matching the page's own
-  `<meta name="description">` exactly) without ever reaching the browser, while a URL that
+  (Cloudflare Browser Rendering backend) rather than local Docker. A real CNA news URL resolved
+  via url-resolver's `parseMeta()` fast path without ever reaching the browser, and the injected
+  text matched the page's own `<meta name="description">` exactly. That confirms the fast path
+  works, and also that a news page with complete metadata yields only its description (③).
+  Meanwhile, a URL that
   structurally cannot satisfy that fast path (a Wikipedia article — no meta description, no
   `og:description`) did exercise the real Puppeteer/Cloudflare `scrap()` path and returned full
   Readability-extracted body text (16.5k chars, correct enough that the verifier caught a
@@ -466,7 +489,8 @@ it does not lose the fetched sources too.
   [cofacts/kb](https://github.com/cofacts/kb) `src/meetings/2026/` — `20260616.md` (the
   investigator→verifier hallucination chain and the requirement quoted above), with earlier
   instances in `20260515.md`, `20260602.md` and `20260609.md`.
-- Revisit if: the double fetch proves too slow (drop `url_context` for non-video URLs and build
+- Revisit if: description-only pages turn out to be common among the URLs the verifier is
+  asked about (ask url-resolver for the body, see ③); the double fetch proves too slow (drop `url_context` for non-video URLs and build
   `sources` from the resolver alone); truncation loses relevant passages (claim-aware windowing);
   or bad URLs are better killed at the source (an investigator-side pre-screen, deliberately out
   of scope here).
