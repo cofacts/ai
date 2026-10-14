@@ -9,23 +9,24 @@ Coverage follows the copy's path: `TestStage` / `TestUnpack` are the two ends
 of the hand-off in `cofacts_ai.archived_pages` (the writer stages the copies
 into the verifier's request, the verifier takes them back out before its model
 sees the text); `TestArchivedFallback` is how `inject_resolved_url_content`
-uses them; and `TestThroughAgentTool` runs the whole path through a real
-AgentTool, since that boundary is what dropped the earlier `temp:` state.
+uses them.
+
+The whole path through a real AgentTool -- the boundary that dropped the
+earlier `temp:` state -- is in `test_verifier_model_input.py`, which also
+pins the basic outcomes: an unfetchable URL gets its archived copy with the
+crawl date, a DEAD one gets none, one without a copy gets nothing, and the
+staged block never reaches the model. The tests here cover what that one
+request does not.
 """
 
 from types import SimpleNamespace
-from typing import AsyncGenerator, cast
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.events import Event
-from google.adk.models.base_llm import BaseLlm
-from google.adk.models.llm_response import LlmResponse
-from google.adk.runners import InMemoryRunner
-from google.adk.tools.agent_tool import AgentTool
 from google.adk.tools.base_tool import BaseTool
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
@@ -266,21 +267,6 @@ class TestStage:
 class TestUnpack:
     """The verifier side: the model must never see the raw block."""
 
-    def test_removes_the_block_and_keeps_the_request(self):
-        request = f"請查核 {URL}"
-        args = stage(
-            [
-                fr_event(
-                    "get_single_cofacts_article", {"article": {"hyperlinks": [link()]}}
-                )
-            ],
-            request,
-        )
-        assert args["request"] != request
-        found, remaining = unpack(args["request"])
-        assert remaining == [request]
-        assert URL in found
-
     def test_no_block_means_no_archive(self):
         found, remaining = unpack(f"請查核 {URL}")
         assert found == {}
@@ -300,20 +286,6 @@ class TestUnpack:
 
 
 class TestArchivedFallback:
-    async def test_unfetchable_url_falls_back_to_the_archived_copy(self):
-        ctx = make_context({ARCHIVED_LINKS_STATE_KEY: {URL: link()}})
-        request = make_request(f"請查核 {URL}")
-
-        with patch(
-            "cofacts_ai.resolved_pages.resolve_urls",
-            AsyncMock(return_value=[unfetchable()]),
-        ):
-            await inject_resolved_url_content(ctx, request)
-
-        [part] = [t for t in texts(request) if t.startswith("[ARCHIVED PAGE]")]
-        assert "舊的內文" in part
-        assert "2018-09-25" in part, "the crawl date must be stated in the prompt"
-
     async def test_archived_text_never_becomes_a_source(self):
         """The safety property. resolved_meta is what becomes `sources`, so an
         archived page appearing there would present a page nobody could fetch as
@@ -344,42 +316,6 @@ class TestArchivedFallback:
 
         assert any(t.startswith("[ARCHIVED PAGE]") for t in texts(request))
 
-    async def test_dead_url_gets_no_archived_copy(self):
-        """A URL that does not resolve at all is broken now. Pairing the advisory
-        note with the text it served years ago invites the citation the note is
-        trying to prevent."""
-        ctx = make_context({ARCHIVED_LINKS_STATE_KEY: {URL: link()}})
-        request = make_request(f"請查核 {URL}")
-        dead = ResolvedUrl(
-            url=URL,
-            canonical=None,
-            title=None,
-            summary=None,
-            http_status=None,
-            status=ResolveStatus.DEAD,
-            error="domain name could not be resolved",
-        )
-
-        with patch(
-            "cofacts_ai.resolved_pages.resolve_urls", AsyncMock(return_value=[dead])
-        ):
-            await inject_resolved_url_content(ctx, request)
-
-        assert not any(t.startswith("[ARCHIVED PAGE]") for t in texts(request))
-        assert any(t.startswith("[LINK NOT FOUND]") for t in texts(request))
-
-    async def test_no_archive_injects_nothing(self):
-        ctx = make_context()
-        request = make_request(f"請查核 {URL}")
-
-        with patch(
-            "cofacts_ai.resolved_pages.resolve_urls",
-            AsyncMock(return_value=[unfetchable()]),
-        ):
-            await inject_resolved_url_content(ctx, request)
-
-        assert texts(request) == [f"請查核 {URL}"]
-
     async def test_a_live_fetch_is_never_replaced_by_the_archive(self):
         ctx = make_context({ARCHIVED_LINKS_STATE_KEY: {URL: link()}})
         request = make_request(f"請查核 {URL}")
@@ -401,92 +337,3 @@ class TestArchivedFallback:
         assert any(t.startswith("[RESOLVED PAGE]") for t in texts(request))
         assert not any(t.startswith("[ARCHIVED PAGE]") for t in texts(request))
         assert ctx.state[RESOLVED_META_STATE_KEY][URL]["status"] == "resolved"
-
-
-class ScriptedLlm(BaseLlm):
-    """Replies from a script, one response per model call, and keeps every
-    request it was sent so a test can inspect what the model actually saw."""
-
-    script: list
-    seen: list = []
-
-    async def generate_content_async(
-        self, llm_request: LlmRequest, stream: bool = False
-    ) -> AsyncGenerator[LlmResponse, None]:
-        self.seen.append(llm_request)
-        yield LlmResponse(content=self.script.pop(0))
-
-
-class TestThroughAgentTool:
-    """Both ends wired as in production, with a real AgentTool between them.
-
-    The earlier hand-off through `temp:` state passed every unit test and never
-    worked: AgentTool seeds the verifier's session through `create_session`,
-    which drops `temp:` keys. Unit tests built the verifier's state by hand and
-    could not see that, so this one goes through the real boundary.
-    """
-
-    async def test_verifier_gets_the_archived_copy_and_never_the_block(self):
-        verifier_llm = ScriptedLlm(
-            model="fake",
-            script=[genai_types.ModelContent(parts=[genai_types.Part(text="done")])],
-            seen=[],
-        )
-        verifier = LlmAgent(
-            name="verifier",
-            model=verifier_llm,
-            before_model_callback=[unpack_archived_links, inject_resolved_url_content],
-        )
-        writer = LlmAgent(
-            name="writer",
-            model=ScriptedLlm(
-                model="fake",
-                script=[
-                    genai_types.ModelContent(
-                        parts=[
-                            genai_types.Part(
-                                function_call=genai_types.FunctionCall(
-                                    name="verifier", args={"request": f"請查核 {URL}"}
-                                )
-                            )
-                        ]
-                    ),
-                    genai_types.ModelContent(parts=[genai_types.Part(text="ok")]),
-                ],
-                seen=[],
-            ),
-            tools=[AgentTool(verifier)],
-            before_tool_callback=[stage_archived_links],
-        )
-        runner = InMemoryRunner(agent=writer, app_name="archived_pages_test")
-        session = await runner.session_service.create_session(
-            app_name=runner.app_name, user_id="u"
-        )
-        # An earlier turn's Cofacts lookup, already in the writer's history.
-        await runner.session_service.append_event(
-            session,
-            fr_event(
-                "get_single_cofacts_article", {"article": {"hyperlinks": [link()]}}
-            ),
-        )
-
-        with patch(
-            "cofacts_ai.resolved_pages.resolve_urls",
-            AsyncMock(return_value=[unfetchable()]),
-        ):
-            async for _ in runner.run_async(
-                user_id="u",
-                session_id=session.id,
-                new_message=genai_types.UserContent(
-                    parts=[genai_types.Part(text="繼續查")]
-                ),
-            ):
-                pass
-
-        [seen] = verifier_llm.seen
-        verifier_texts = [
-            p.text for c in seen.contents for p in c.parts or [] if p.text
-        ]
-        [archived] = [t for t in verifier_texts if t.startswith("[ARCHIVED PAGE]")]
-        assert "舊的內文" in archived
-        assert not any("cofacts-archived-links-" in t for t in verifier_texts)

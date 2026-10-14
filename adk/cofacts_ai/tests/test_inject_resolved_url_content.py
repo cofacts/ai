@@ -8,14 +8,18 @@ cache and to persist the full page text for the UI. That fake's
 `get_artifact_version` raises, matching the `ForwardingArtifactService` an
 `AgentTool`-hosted agent actually gets -- see the class docstring.
 
-Coverage: a resolved URL gets a `[RESOLVED PAGE]` part; a dead URL (DNS
-failure) gets an advisory `[LINK NOT FOUND]` note, not a ban; every other
-failure -- a URL the resolver couldn't fetch (e.g. a PDF), a timeout, a
-resolver outage, a URL past the `URL_RESOLVER_MAX_URLS` cap -- gets
+The exact parts each url-resolver outcome injects -- `[RESOLVED PAGE]`, the
+advisory `[LINK NOT FOUND]` note for a DEAD URL, nothing for an unfetchable
+one -- and the URLs that are never fetched (inside a hoisted citation block,
+YouTube, Cofacts media) are pinned end to end in
+`test_verifier_model_input.py`.
+
+Coverage here: a resolved URL is recorded as such for `sources`; every
+failure other than DEAD -- a URL the resolver couldn't fetch (e.g. a PDF), a
+timeout, a resolver outage, a URL past the `URL_RESOLVER_MAX_URLS` cap -- gets
 nothing injected (absent an archived copy) so url_context gets a clean shot
-at it; URLs inside a hoisted citation block are not fetched; the cap counts
-only uncached URLs; YouTube and Cofacts-media URLs are
-excluded (handled elsewhere via FileData); the next model call of a turn
+at it; only the requested URL, not a cited one, is recorded; the cap counts
+only uncached URLs; the next model call of a turn
 re-injects from the artifact cache without re-fetching; a misconfigured char
 budget raises instead of degrading silently; a resolver outage injects nothing; and
 the artifact cache round-trips page text plus title/canonical without the
@@ -188,25 +192,6 @@ class TestInjectResolvedUrlContent:
             == "resolved"
         )
 
-    async def test_dead_url_gets_advisory_note_not_a_ban(self):
-        request = make_request(user_text("https://dead.example"))
-        context = make_context()
-
-        with patch(
-            "cofacts_ai.resolved_pages.resolve_urls",
-            AsyncMock(return_value=[dead("https://dead.example")]),
-        ):
-            await inject_resolved_url_content(context, request)
-
-        [part] = [
-            t
-            for t in text_parts(request.contents[0])
-            if t.startswith("[LINK NOT FOUND]")
-        ]
-        assert "https://dead.example" in part
-        assert "url_context" in part
-        assert "do NOT claim" in part
-
     async def test_no_signal_without_archive_injects_nothing(self):
         """Whatever the reason url-resolver gave no text, the verifier's next
         step is the same -- url_context -- so no per-cause note is added."""
@@ -239,17 +224,6 @@ class TestInjectResolvedUrlContent:
         # an earlier model call's meta stand in for this one (see
         # TestResolvedMetaDescribesOnlyThisModelCall).
         assert context.state[RESOLVED_META_STATE_KEY] == {}
-
-    async def test_cofacts_media_url_excluded_from_resolution(self):
-        url = "https://storage.googleapis.com/cofacts-media-collection/production/video/x/original"
-        request = make_request(user_text(url))
-        context = make_context()
-        resolve_mock = AsyncMock(return_value=[])
-
-        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
-            await inject_resolved_url_content(context, request)
-
-        resolve_mock.assert_not_called()
 
     async def test_second_model_call_reinjects_from_the_artifact_cache(self):
         """The next model call of a turn re-injects, and that is correct.
@@ -553,13 +527,6 @@ class TestUrlExtraction:
             "https://x.com/a",
             "https://x.com/b",
         ]
-
-    def test_youtube_and_cofacts_media_are_still_excluded(self):
-        assert self.urls(
-            "https://www.youtube.com/watch?v=abc123 和 "
-            "https://storage.googleapis.com/cofacts-media-collection/production/"
-            "video/x/original 和 https://example.com/x"
-        ) == ["https://example.com/x"]
 
 
 class TestResolvedMetaDescribesOnlyThisModelCall:
