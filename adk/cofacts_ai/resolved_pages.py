@@ -25,7 +25,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 from typing import Optional
 
 from google.adk.agents.callback_context import CallbackContext
@@ -321,13 +320,19 @@ async def inject_resolved_url_content(
     # Parsed up front, outside the guard below: a malformed
     # URL_RESOLVER_TOTAL_CHAR_BUDGET or URL_RESOLVER_MAX_URLS is a
     # misconfiguration and should crash loudly, not read as "this message had
-    # no links".
-    budget = int(
-        os.environ.get("URL_RESOLVER_TOTAL_CHAR_BUDGET", _DEFAULT_TOTAL_CHAR_BUDGET)
-    )
+    # no links". So is a value below 1, which would inject nothing at all.
+    budget = env_number("URL_RESOLVER_TOTAL_CHAR_BUDGET", int)
+    if budget is None:
+        budget = _DEFAULT_TOTAL_CHAR_BUDGET
     max_urls = env_number("URL_RESOLVER_MAX_URLS", int)
     if max_urls is None:
         max_urls = _DEFAULT_MAX_URLS
+    for name, value in (
+        ("URL_RESOLVER_TOTAL_CHAR_BUDGET", budget),
+        ("URL_RESOLVER_MAX_URLS", max_urls),
+    ):
+        if value < 1:
+            raise UrlResolverConfigError(f"{name}={value} must be at least 1")
 
     resolved_meta: dict[str, dict] = {}
     injected_parts: list[genai_types.Part] = []

@@ -294,7 +294,7 @@ class TestInjectResolvedUrlContent:
                 AsyncMock(return_value=[resolved("https://good.com")]),
             ),
             patch.dict(os.environ, {"URL_RESOLVER_TOTAL_CHAR_BUDGET": "lots"}),
-            pytest.raises(ValueError),
+            pytest.raises(UrlResolverConfigError),
         ):
             await inject_resolved_url_content(context, request)
 
@@ -306,6 +306,25 @@ class TestInjectResolvedUrlContent:
 
         with (
             patch.dict(os.environ, {"URL_RESOLVER_MAX_URLS": "twenty"}),
+            pytest.raises(UrlResolverConfigError),
+        ):
+            await inject_resolved_url_content(context, request)
+
+    @pytest.mark.parametrize(
+        "name", ["URL_RESOLVER_TOTAL_CHAR_BUDGET", "URL_RESOLVER_MAX_URLS"]
+    )
+    @pytest.mark.parametrize("value", ["0", "-5"])
+    async def test_setting_below_one_raises(self, name, value):
+        # Parses fine, but a zero budget or cap silently injects nothing.
+        context = make_context()
+        request = make_request(user_text("https://good.com"))
+
+        with (
+            patch(
+                "cofacts_ai.resolved_pages.resolve_urls",
+                AsyncMock(return_value=[resolved("https://good.com")]),
+            ),
+            patch.dict(os.environ, {name: value}),
             pytest.raises(UrlResolverConfigError),
         ):
             await inject_resolved_url_content(context, request)
