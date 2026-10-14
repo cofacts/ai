@@ -5,8 +5,12 @@ An article or reply carries the page text Cofacts' own url-resolver crawled at
 but it is evidence of what a page said *then*, so it is injected under its own
 `[ARCHIVED PAGE]` marker and, critically, never counted as a source.
 
-The data reaches the verifier through state rather than by parsing it back out
-of the citation block the writer sends: see ARCHIVED_LINKS_STATE_KEY.
+Coverage follows the copy's path: `TestStage` / `TestUnpack` are the two ends
+of the hand-off in `cofacts_ai.archived_pages` (the writer stages the copies
+into the verifier's request, the verifier takes them back out before its model
+sees the text); `TestArchivedFallback` is how `inject_resolved_url_content`
+uses them; and `TestThroughAgentTool` runs the whole path through a real
+AgentTool, since that boundary is what dropped the earlier `temp:` state.
 """
 
 from types import SimpleNamespace
