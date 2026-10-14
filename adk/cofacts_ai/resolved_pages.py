@@ -33,7 +33,12 @@ from google.genai import types as genai_types
 
 from .archived_pages import ARCHIVED_LINKS_STATE_KEY
 from .media_filedata import _COFACTS_MEDIA_URL_RE, _YOUTUBE_URL_RE
-from .url_resolver.client import ResolveStatus, resolve_urls
+from .url_resolver.client import (
+    ResolvedUrl,
+    ResolveStatus,
+    UrlResolverConfigError,
+    resolve_urls,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +191,47 @@ def _decode_resolved_artifact(data: bytes) -> tuple[str, Optional[str], Optional
     )
 
 
+async def _load_cached_page(
+    callback_context: CallbackContext, url: str
+) -> Optional[tuple[str, Optional[str], Optional[str]]]:
+    """(text, title, canonical) from the artifact cache, or None on a miss.
+
+    A failed read is also a miss: the page is fetched again rather than the
+    whole injection being abandoned over one storage error.
+    """
+    try:
+        cached = await callback_context.load_artifact(_resolved_artifact_filename(url))
+    except Exception:
+        logger.exception("could not read the cached page for %s; refetching", url)
+        return None
+    if cached is None or not cached.inline_data or not cached.inline_data.data:
+        return None
+    return _decode_resolved_artifact(cached.inline_data.data)
+
+
+async def _save_cached_page(
+    callback_context: CallbackContext,
+    url: str,
+    text: str,
+    title: Optional[str],
+    canonical: Optional[str],
+) -> None:
+    """Cache a fetched page. A failed write is logged and dropped: the text is
+    already in hand for this call, and only the next call's cache hit is lost."""
+    try:
+        await callback_context.save_artifact(
+            filename=_resolved_artifact_filename(url),
+            artifact=genai_types.Part(
+                inline_data=genai_types.Blob(
+                    mime_type="text/plain",
+                    data=_encode_resolved_artifact(text, title, canonical),
+                )
+            ),
+        )
+    except Exception:
+        logger.exception("could not cache the page for %s", url)
+
+
 def _water_fill(lengths: dict[str, int], budget: int) -> dict[str, int]:
     """Max-min fair allocation of `budget` chars across `lengths`.
 
@@ -328,84 +374,91 @@ async def inject_resolved_url_content(
     titles: dict[str, str] = {}
     canonicals: dict[str, Optional[str]] = {}
 
-    # Only the network call and artifact I/O are guarded. A resolver
-    # outage must degrade to url_context rather than fail the turn, but a
-    # bug in extraction, budgeting or part assembly is ours and must be
-    # visible instead of masquerading as a message with no links.
-    try:
-        to_fetch: list[str] = []
-        for url in urls:
-            filename = _resolved_artifact_filename(url)
-            cached = await callback_context.load_artifact(filename)
-            if cached is not None and cached.inline_data and cached.inline_data.data:
-                text, title, canonical = _decode_resolved_artifact(
-                    cached.inline_data.data
-                )
-                full_texts[url] = text
-                lengths[url] = len(text)
-                titles[url] = title or url
-                canonicals[url] = canonical
-            else:
-                to_fetch.append(url)
+    # Only the network call and the artifact I/O are guarded, and each on its
+    # own. A resolver outage must degrade to url_context rather than fail the
+    # turn, and a storage hiccup on one page must not cost the others: a
+    # failed read is a cache miss, a failed write only loses the cache entry.
+    # A bug in extraction, budgeting or part assembly is ours and must be
+    # visible instead of masquerading as a message with no links -- and so is
+    # a malformed URL_RESOLVER_* setting (UrlResolverConfigError).
+    to_fetch: list[str] = []
+    for url in urls:
+        cached = await _load_cached_page(callback_context, url)
+        if cached is None:
+            to_fetch.append(url)
+            continue
+        text, title, canonical = cached
+        full_texts[url] = text
+        lengths[url] = len(text)
+        titles[url] = title or url
+        canonicals[url] = canonical
 
-        if to_fetch:
+    if to_fetch:
+        try:
             results = await resolve_urls(to_fetch)
-            for r in results:
-                if r.status == ResolveStatus.RESOLVED and r.summary:
-                    full_texts[r.url] = r.summary
-                    lengths[r.url] = len(r.summary)
-                    titles[r.url] = r.title or r.url
-                    canonicals[r.url] = r.canonical
-                    await callback_context.save_artifact(
-                        filename=_resolved_artifact_filename(r.url),
-                        artifact=genai_types.Part(
-                            inline_data=genai_types.Blob(
-                                mime_type="text/plain",
-                                data=_encode_resolved_artifact(
-                                    r.summary, r.title, r.canonical
-                                ),
-                            )
-                        ),
-                    )
-                elif r.status == ResolveStatus.DEAD:
-                    resolved_meta[r.url] = {
-                        "status": ResolveStatus.DEAD.value,
-                        "error": r.error,
-                    }
-                    injected_parts.append(
-                        genai_types.Part(
-                            text=(
-                                f"{_LINK_NOT_FOUND_PREFIX}{r.url}: {r.error}. "
-                                "url-resolver could not resolve this URL (likely "
-                                "nonexistent/malformed). Verify with url_context; "
-                                "if it also retrieves no content, do NOT claim "
-                                "this link supports any claim."
-                            )
+        except UrlResolverConfigError:
+            raise
+        except Exception:
+            # resolve_urls already turns gRPC failures into
+            # RESOLVER_UNAVAILABLE; this is anything else it did not expect.
+            # Same treatment, so cached pages and archived copies still go in.
+            logger.exception(
+                "url-resolver call failed; treating %d URL(s) as unavailable",
+                len(to_fetch),
+            )
+            results = [
+                ResolvedUrl(
+                    url=url,
+                    canonical=None,
+                    title=None,
+                    summary=None,
+                    http_status=None,
+                    status=ResolveStatus.RESOLVER_UNAVAILABLE,
+                    error="url-resolver call failed",
+                )
+                for url in to_fetch
+            ]
+        for r in results:
+            if r.status == ResolveStatus.RESOLVED and r.summary:
+                full_texts[r.url] = r.summary
+                lengths[r.url] = len(r.summary)
+                titles[r.url] = r.title or r.url
+                canonicals[r.url] = r.canonical
+                await _save_cached_page(
+                    callback_context, r.url, r.summary, r.title, r.canonical
+                )
+            elif r.status == ResolveStatus.DEAD:
+                resolved_meta[r.url] = {
+                    "status": ResolveStatus.DEAD.value,
+                    "error": r.error,
+                }
+                injected_parts.append(
+                    genai_types.Part(
+                        text=(
+                            f"{_LINK_NOT_FOUND_PREFIX}{r.url}: {r.error}. "
+                            "url-resolver could not resolve this URL (likely "
+                            "nonexistent/malformed). Verify with url_context; "
+                            "if it also retrieves no content, do NOT claim "
+                            "this link supports any claim."
                         )
                     )
-                else:
-                    # Everything else -- RESOLVER_CANT_FETCH (PDF, blocked,
-                    # TLS), TIMEOUT, RESOLVER_UNAVAILABLE, NOT_ATTEMPTED (the
-                    # batch cap) -- is "no signal from url-resolver". The
-                    # reasons differ but what the verifier should do does
-                    # not: read the page with url_context, which it is told
-                    # to call for every URL anyway. So all four get the same
-                    # treatment: Cofacts' older crawl if there is one, and
-                    # otherwise nothing. A per-cause note would only restate
-                    # "use url_context", and a resolver hiccup surfaced as
-                    # one risks being read as evidence the link is bad.
-                    #
-                    # DEAD is deliberately excluded above: there the URL
-                    # itself does not resolve, and pairing "this link is
-                    # broken" with the text it served years ago invites
-                    # exactly the citation the advisory note is trying to
-                    # prevent.
-                    _stage_archived(r.url, cofacts_links, archived, lengths)
-    except Exception:
-        logger.exception(
-            "inject_resolved_url_content failed; skipping url-resolver injection"
-        )
-        return None
+                )
+            else:
+                # Everything else -- RESOLVER_CANT_FETCH (PDF, blocked, TLS),
+                # TIMEOUT, RESOLVER_UNAVAILABLE, NOT_ATTEMPTED (the batch
+                # cap) -- is "no signal from url-resolver". The reasons differ
+                # but what the verifier should do does not: read the page with
+                # url_context, which it is told to call for every URL anyway.
+                # So all four get the same treatment: Cofacts' older crawl if
+                # there is one, and otherwise nothing. A per-cause note would
+                # only restate "use url_context", and a resolver hiccup
+                # surfaced as one risks being read as evidence the link is bad.
+                #
+                # DEAD is deliberately excluded above: there the URL itself
+                # does not resolve, and pairing "this link is broken" with the
+                # text it served years ago invites exactly the citation the
+                # advisory note is trying to prevent.
+                _stage_archived(r.url, cofacts_links, archived, lengths)
 
     allocation = _water_fill(lengths, budget)
     for url, full_text in full_texts.items():

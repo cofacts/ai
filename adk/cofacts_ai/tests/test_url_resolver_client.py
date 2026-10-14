@@ -27,7 +27,11 @@ import grpc.aio
 import pytest
 
 from cofacts_ai.url_resolver._generated import resolve_error_pb2, url_resolver_pb2
-from cofacts_ai.url_resolver.client import ResolveStatus, resolve_urls
+from cofacts_ai.url_resolver.client import (
+    ResolveStatus,
+    UrlResolverConfigError,
+    resolve_urls,
+)
 
 
 def make_reply(url: str, **kwargs) -> url_resolver_pb2.UrlReply:
@@ -277,6 +281,39 @@ class TestResolveUrlsTimeout:
         from cofacts_ai.url_resolver.client import DEFAULT_TIMEOUT
 
         assert stub_ctor.return_value.last_timeout == DEFAULT_TIMEOUT
+
+
+class TestResolveUrlsConfig:
+    """A malformed setting is a deployment bug, not an outage: it must raise
+    its own error so the verifier callback can let it through instead of
+    reading it as "resolver down" on every turn."""
+
+    @pytest.mark.parametrize(
+        "env",
+        [{"URL_RESOLVER_TIMEOUT": "120s"}, {"URL_RESOLVER_MAX_URLS": "twenty"}],
+        ids=["timeout", "max_urls"],
+    )
+    async def test_malformed_setting_raises_config_error(self, env):
+        p1, p2 = patched_client(FakeUnaryStreamCall())
+        with p1 as channel_ctor, p2, patch.dict(os.environ, env):
+            with pytest.raises(UrlResolverConfigError, match=next(iter(env))):
+                await resolve_urls(["https://a.com"])
+        channel_ctor.assert_not_called()
+
+    async def test_channel_accepts_messages_past_the_4mb_default(self):
+        """url-resolver sends each page's raw `html` on the wire. At gRPC's
+        default 4MB limit one heavy page ends the whole stream."""
+        call = FakeUnaryStreamCall(
+            replies=[
+                make_reply("https://a.com", successfully_resolved=True, summary="a")
+            ]
+        )
+        p1, p2 = patched_client(call)
+        with p1 as channel_ctor, p2:
+            await resolve_urls(["https://a.com"])
+
+        options = dict(channel_ctor.call_args.kwargs["options"])
+        assert options["grpc.max_receive_message_length"] > 4 * 1024 * 1024
 
 
 class TestResolveUrlsErrorBucketing:
