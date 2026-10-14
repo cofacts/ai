@@ -19,26 +19,13 @@ from google.adk.models.llm_response import LlmResponse
 from google.genai import types as genai_types
 
 from cofacts_ai.agent import append_verifier_sources
-from cofacts_ai.resolved_pages import (
-    REQUESTED_URLS_STATE_KEY,
-    RESOLVED_META_STATE_KEY,
-)
+from cofacts_ai.resolved_pages import RESOLVED_META_STATE_KEY
 
 
-def make_context(
-    resolved_meta: dict | None = None, requested_urls: list | None = None
-) -> CallbackContext:
-    resolved_meta = resolved_meta or {}
+def make_context(resolved_meta: dict | None = None) -> CallbackContext:
     return cast(
         CallbackContext,
-        SimpleNamespace(
-            state={
-                RESOLVED_META_STATE_KEY: resolved_meta,
-                REQUESTED_URLS_STATE_KEY: (
-                    list(resolved_meta) if requested_urls is None else requested_urls
-                ),
-            }
-        ),
+        SimpleNamespace(state={RESOLVED_META_STATE_KEY: resolved_meta or {}}),
     )
 
 
@@ -181,34 +168,6 @@ class TestAppendVerifierSources:
         assert len(sources) == 1
         assert sources[0]["url"] == "https://a.com/?utm_source=line"
         assert sources[0]["title"] == "Resolver Title"
-
-    async def test_canonical_does_not_hide_another_requested_url(self):
-        """The article's og:url is the homepage, and the verifier was also asked
-        about the homepage itself: url-resolver failed on it, url_context
-        grounded it. That is a second page the verifier read, not the article
-        under another name."""
-        article = "https://site.tw/news/123"
-        context = make_context(
-            {
-                article: {
-                    "status": "resolved",
-                    "title": "Article",
-                    "canonical": "https://site.tw/",
-                }
-            },
-            requested_urls=[article, "https://site.tw/"],
-        )
-        response = make_response(
-            grounding_chunks=[web_chunk("https://site.tw/", "Homepage")]
-        )
-
-        result = await append_verifier_sources(context, response)
-
-        assert result is not None
-        assert sources_of(result) == [
-            {"title": "Article", "url": article},
-            {"title": "Homepage", "url": "https://site.tw/"},
-        ]
 
     async def test_wraps_response_even_without_grounding_metadata(self):
         # A lazy/misbehaving model that skipped url_context should not also

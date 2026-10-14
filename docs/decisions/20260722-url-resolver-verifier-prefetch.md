@@ -293,8 +293,7 @@ session that `AgentTool` creates for every call. So the data has to cross that b
 it rides in the verifier's `request` (`adk/cofacts_ai/archived_pages.py`):
 
 - `stage_archived_links`, a writer `before_tool_callback` placed after `resolve_citations`,
-  walks the writer's events. It keeps the hyperlinks whose URL the verifier will fetch (the same
-  extraction, hoisted blocks skipped, matched exactly), and appends
+  walks the writer's events. It keeps the hyperlinks whose URL the request mentions, and appends
   them to the request as a JSON block. `_citable_index` already walks the same events to resolve
   citations. ADK hands callbacks a deep copy of the call's arguments, so the block never enters
   the writer's own history.

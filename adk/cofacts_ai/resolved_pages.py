@@ -25,13 +25,15 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from typing import NamedTuple, Optional
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
-from .archived_pages import ARCHIVED_LINKS_STATE_KEY, web_urls_in
+from .archived_pages import ARCHIVED_LINKS_STATE_KEY
+from .media_filedata import _COFACTS_MEDIA_URL_RE, _YOUTUBE_URL_RE
 from .url_resolver.client import (
     ResolvedUrl,
     ResolveStatus,
@@ -39,6 +41,7 @@ from .url_resolver.client import (
     env_number,
     resolve_urls,
 )
+from .writer_citations import strip_hoisted_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +54,59 @@ logger = logging.getLogger(__name__)
 # inject_resolved_url_content.
 RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
 
-# Every URL the same model call was asked to check, fetched or not, in the same
-# handoff style: append_verifier_sources must not let one page's canonical stand
-# in for another URL the verifier was asked about.
-REQUESTED_URLS_STATE_KEY = "temp:cofacts_requested_urls"
+
+# CJK sentence punctuation ends a URL. It has to be excluded from the match
+# itself, not merely stripped afterwards: Chinese prose has no spaces, so
+# `https://example.com/a，另一個` would otherwise capture the following words
+# into the URL, which then resolves DEAD and gets the verifier told not to
+# trust a perfectly good source.
+#
+# Full-width BRACKETS are deliberately absent from this set -- they can be part
+# of a URL and are handled by _trim_url_punctuation below.
+_CJK_URL_STOP = "，。、！？；：〜～…—「」『』〈〉《》【】"
+
+# A `[^` ends a URL too: it opens a citation marker (`writer_citations`), which
+# the writer may put flush against the URL it cites.
+_HTTP_URL_RE = re.compile(r"https?://(?:(?!\[\^)[^\s\"'<>" + _CJK_URL_STOP + r"])+")
+
+# Closing bracket -> its opener. A trailing closer is part of the URL when the
+# URL contains a matching opener (`.../Mercury_(planet)`) and prose punctuation
+# when it does not (`(https://example.com)`).
+_URL_CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{", "）": "（"}
+
+# Punctuation that commonly ends a sentence right after a URL, plus Markdown's
+# `**bold**` and `` `code` `` wrappers. Brackets are handled by the balance rule
+# above instead of appearing here.
+_URL_TRAILING_CHARS = ".,;:!?\"'*`"
+
+
+def _trim_url_punctuation(url: str) -> str:
+    """Strip prose punctuation from the end of an extracted URL.
+
+    Mirrors what rumors-site gets from `linkifyjs.tokenize()` (`lib/text.tsx`),
+    whose behaviour is pinned by its own `parses half-width brackets correctly`
+    / `parses full-width brackets correctly` tests. A plain `rstrip` of a
+    punctuation set cannot do this: it would break `.../Mercury_(planet)` by
+    taking the closing paren that belongs to the URL, and it cannot tell that
+    apart from the wrapping paren in `(https://example.com)`.
+
+    `linkify-it-py` was tried instead of hand-rolling this and rejected -- it
+    handles half-width brackets but keeps a trailing full-width `）` and, more
+    importantly, swallows following words in CJK prose exactly as the old
+    regex did.
+    """
+    while url:
+        last = url[-1]
+        opener = _URL_CLOSING_BRACKETS.get(last)
+        if opener is not None:
+            if url.count(opener) >= url.count(last):
+                break  # balanced -- the bracket belongs to the URL
+            url = url[:-1]
+        elif last in _URL_TRAILING_CHARS:
+            url = url[:-1]
+        else:
+            break
+    return url
 
 
 _RESOLVED_PAGE_PREFIX = "[RESOLVED PAGE] "
@@ -252,8 +304,15 @@ def _extract_web_urls(
             continue
         found_here = []
         for part in content.parts:
-            if part.text:
-                found_here.extend(web_urls_in(part.text))
+            if not part.text:
+                continue
+            for match in _HTTP_URL_RE.findall(strip_hoisted_blocks(part.text)):
+                url = _trim_url_punctuation(match)
+                if _YOUTUBE_URL_RE.fullmatch(url) or _COFACTS_MEDIA_URL_RE.fullmatch(
+                    url
+                ):
+                    continue
+                found_here.append(url)
         if not found_here:
             continue
         target_content = content
@@ -315,7 +374,6 @@ async def inject_resolved_url_content(
     callback_context.state[RESOLVED_META_STATE_KEY] = {}
 
     urls, target_content = _extract_web_urls(llm_request)
-    callback_context.state[REQUESTED_URLS_STATE_KEY] = urls
     if not urls or target_content is None or target_content.parts is None:
         return None
 
