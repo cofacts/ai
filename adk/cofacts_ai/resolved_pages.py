@@ -25,7 +25,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
@@ -68,12 +68,7 @@ _LINK_NOT_FOUND_PREFIX = "[LINK NOT FOUND] "
 _ARCHIVED_PAGE_PREFIX = "[ARCHIVED PAGE] "
 
 
-def _stage_archived(
-    url: str,
-    cofacts_links: dict,
-    archived: dict,
-    lengths: dict,
-) -> None:
+def _stage_archived(url: str, cofacts_links: dict, archived: dict) -> None:
     """Queue Cofacts' stored copy of `url` for injection, if it has one."""
     entry = cofacts_links.get(url)
     if not isinstance(entry, dict):
@@ -82,7 +77,14 @@ def _stage_archived(
     if not isinstance(summary, str) or not summary.strip():
         return
     archived[url] = entry
-    lengths[url] = len(summary)
+
+
+class _Page(NamedTuple):
+    """A page injected as [RESOLVED PAGE]: fetched now, or from the cache."""
+
+    text: str
+    title: str  # the URL when the page has no title
+    canonical: Optional[str]
 
 
 _DEFAULT_TOTAL_CHAR_BUDGET = 200_000
@@ -340,10 +342,7 @@ async def inject_resolved_url_content(
     cofacts_links = callback_context.state.get(ARCHIVED_LINKS_STATE_KEY) or {}
     if not isinstance(cofacts_links, dict):
         cofacts_links = {}
-    lengths: dict[str, int] = {}
-    full_texts: dict[str, str] = {}
-    titles: dict[str, str] = {}
-    canonicals: dict[str, Optional[str]] = {}
+    pages: dict[str, _Page] = {}
 
     # Only the network call and the artifact I/O are guarded, and each on its
     # own. A resolver outage must degrade to url_context rather than fail the
@@ -362,10 +361,7 @@ async def inject_resolved_url_content(
             to_fetch.append(url)
             continue
         text, title, canonical = cached
-        full_texts[url] = text
-        lengths[url] = len(text)
-        titles[url] = title or url
-        canonicals[url] = canonical
+        pages[url] = _Page(text, title or url, canonical)
 
     # The cap bounds fetch work, so cache hits do not count toward it. Past
     # it, a URL gets what any unfetched one gets: Cofacts' archived copy if
@@ -379,7 +375,7 @@ async def inject_resolved_url_content(
             max_urls,
         )
         for url in over_cap:
-            _stage_archived(url, cofacts_links, archived, lengths)
+            _stage_archived(url, cofacts_links, archived)
 
     if to_fetch:
         try:
@@ -395,23 +391,12 @@ async def inject_resolved_url_content(
                 len(to_fetch),
             )
             results = [
-                ResolvedUrl(
-                    url=url,
-                    canonical=None,
-                    title=None,
-                    summary=None,
-                    http_status=None,
-                    status=ResolveStatus.RESOLVER_UNAVAILABLE,
-                    error="url-resolver call failed",
-                )
+                ResolvedUrl.unavailable(url, "url-resolver call failed")
                 for url in to_fetch
             ]
         for r in results:
             if r.status == ResolveStatus.RESOLVED and r.summary:
-                full_texts[r.url] = r.summary
-                lengths[r.url] = len(r.summary)
-                titles[r.url] = r.title or r.url
-                canonicals[r.url] = r.canonical
+                pages[r.url] = _Page(r.summary, r.title or r.url, r.canonical)
             elif r.status == ResolveStatus.DEAD:
                 resolved_meta[r.url] = {
                     "status": ResolveStatus.DEAD.value,
@@ -444,7 +429,7 @@ async def inject_resolved_url_content(
                 # does not resolve, and pairing "this link is broken" with the
                 # text it served years ago invites exactly the citation the
                 # advisory note is trying to prevent.
-                _stage_archived(r.url, cofacts_links, archived, lengths)
+                _stage_archived(r.url, cofacts_links, archived)
         await asyncio.gather(
             *(
                 _save_cached_page(
@@ -455,12 +440,15 @@ async def inject_resolved_url_content(
             )
         )
 
+    lengths = {url: len(page.text) for url, page in pages.items()}
+    lengths.update((url, len(entry["summary"])) for url, entry in archived.items())
     allocation = _water_fill(lengths, budget)
-    for url, full_text in full_texts.items():
+    for url, page in pages.items():
+        full_text = page.text
         allowed = allocation.get(url, len(full_text))
         truncated = allowed < len(full_text)
         body = full_text if not truncated else full_text[:allowed]
-        text = f"{_RESOLVED_PAGE_PREFIX}{url}\nTITLE: {titles[url]}\n---\n{body}"
+        text = f"{_RESOLVED_PAGE_PREFIX}{url}\nTITLE: {page.title}\n---\n{body}"
         if truncated:
             text += (
                 f"\n---(truncated from {len(full_text)} chars; full text "
@@ -469,8 +457,8 @@ async def inject_resolved_url_content(
         injected_parts.append(genai_types.Part(text=text))
         resolved_meta[url] = {
             "status": ResolveStatus.RESOLVED.value,
-            "title": titles[url],
-            "canonical": canonicals[url],
+            "title": page.title,
+            "canonical": page.canonical,
         }
 
     # Archived copies share the same char budget -- they cost the same

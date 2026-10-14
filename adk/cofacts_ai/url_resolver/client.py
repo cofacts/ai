@@ -149,6 +149,19 @@ class ResolvedUrl:
     status: ResolveStatus
     error: Optional[str]
 
+    @classmethod
+    def unavailable(cls, url: str, error: str) -> "ResolvedUrl":
+        """`url` with no answer from url-resolver at all: RESOLVER_UNAVAILABLE."""
+        return cls(
+            url=url,
+            canonical=None,
+            title=None,
+            summary=None,
+            http_status=None,
+            status=ResolveStatus.RESOLVER_UNAVAILABLE,
+            error=error,
+        )
+
 
 def _bucket_error(error_enum: int) -> tuple[ResolveStatus, str]:
     status = (
@@ -250,15 +263,7 @@ async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
                     len(to_send),
                 )
                 return [
-                    ResolvedUrl(
-                        url=url,
-                        canonical=None,
-                        title=None,
-                        summary=None,
-                        http_status=None,
-                        status=ResolveStatus.RESOLVER_UNAVAILABLE,
-                        error=str(e.details() or e),
-                    )
+                    ResolvedUrl.unavailable(url, str(e.details() or e))
                     for url in to_send
                 ]
             # Partial results already arrived; treat the rest as timed out
