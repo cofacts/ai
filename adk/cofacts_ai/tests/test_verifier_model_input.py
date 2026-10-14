@@ -9,7 +9,10 @@ so a change to any injected part's tag or wording shows up here as a diff.
 
 One URL per url-resolver outcome: resolved, DEAD (whose archived copy is
 withheld), a fetch failure with an archived copy, and a fetch failure without
-one, which gets nothing so url_context has a clean shot at it.
+one, which gets nothing so url_context has a clean shot at it. The request also
+cites the Cofacts message, whose URL arrives inside the hoisted citation and
+must not be fetched: cited text is context to read, and the writer asks for a
+page only by writing its URL in the request.
 """
 
 from typing import AsyncGenerator
@@ -31,8 +34,13 @@ RESOLVED = "https://news.example.com/live"
 DEAD = "https://gone.example.com/a"
 ARCHIVED = "https://news.example.com/blocked"
 NOTHING = "https://news.example.com/report.pdf"
+# Only inside the cited Cofacts message.
+CITED = "https://rumor.example.com/post"
 
-REQUEST = f"""請查核：疫苗含有微晶片。
+ARTICLE_TEXT = f"疫苗含有微晶片！轉傳 {CITED}"
+CITE_ID = "get_single_cofacts_article-art1"
+
+REQUEST = f"""請查核 [^{CITE_ID}] 的說法：疫苗含有微晶片。
 {RESOLVED}
 {DEAD}
 {ARCHIVED}
@@ -94,9 +102,10 @@ class ScriptedLlm(BaseLlm):
         yield LlmResponse(content=self.script.pop(0))
 
 
-async def verifier_model_input() -> list[genai_types.Content]:
+async def verifier_model_input() -> tuple[list[genai_types.Content], AsyncMock]:
     """Have a writer call the verifier once with REQUEST; return the contents
-    of the one request the verifier's model was sent."""
+    of the one request the verifier's model was sent, and the faked
+    url-resolver so a test can see which URLs were fetched."""
     verifier_llm = ScriptedLlm(
         model="fake",
         script=[genai_types.ModelContent(parts=[genai_types.Part(text="done")])],
@@ -135,8 +144,9 @@ async def verifier_model_input() -> list[genai_types.Content]:
     session = await runner.session_service.create_session(
         app_name=runner.app_name, user_id="u"
     )
-    # An earlier Cofacts lookup in the writer's history, holding archived
-    # copies of the DEAD URL and of ARCHIVED -- but not of NOTHING.
+    # An earlier Cofacts lookup in the writer's history: the message the
+    # writer cites, and archived copies of the DEAD URL and of ARCHIVED -- but
+    # not of NOTHING.
     await runner.session_service.append_event(
         session,
         Event(
@@ -146,14 +156,17 @@ async def verifier_model_input() -> list[genai_types.Content]:
                 parts=[
                     genai_types.Part(
                         function_response=genai_types.FunctionResponse(
+                            id="art1",
                             name="get_single_cofacts_article",
                             response={
+                                "cite_as": f"[^{CITE_ID}]",
                                 "article": {
+                                    "text": ARTICLE_TEXT,
                                     "hyperlinks": [
                                         cofacts_link(DEAD),
                                         cofacts_link(ARCHIVED),
-                                    ]
-                                }
+                                    ],
+                                },
                             },
                         )
                     )
@@ -162,10 +175,8 @@ async def verifier_model_input() -> list[genai_types.Content]:
         ),
     )
 
-    with patch(
-        "cofacts_ai.resolved_pages.resolve_urls",
-        AsyncMock(return_value=RESOLVER_RESULTS),
-    ):
+    resolver = AsyncMock(return_value=RESOLVER_RESULTS)
+    with patch("cofacts_ai.resolved_pages.resolve_urls", resolver):
         async for _ in runner.run_async(
             user_id="u",
             session_id=session.id,
@@ -174,17 +185,27 @@ async def verifier_model_input() -> list[genai_types.Content]:
             pass
 
     [request] = verifier_llm.seen
-    return request.contents
+    return request.contents, resolver
 
 
 async def test_what_the_verifier_model_receives():
-    assert await verifier_model_input() == [
+    contents, resolver = await verifier_model_input()
+
+    # Every URL the writer wrote, and not CITED.
+    resolver.assert_awaited_once_with([RESOLVED, DEAD, ARCHIVED, NOTHING])
+    assert contents == [
         genai_types.Content(
             role="user",
             parts=[
-                # The writer's request, with the archived-links block it staged
-                # already taken back out.
-                genai_types.Part(text=REQUEST),
+                # The writer's request with the cited message hoisted above it,
+                # and the archived-links block it staged already taken back out.
+                genai_types.Part(
+                    text=f"<{CITE_ID}>\n"
+                    f"{ARTICLE_TEXT}\n"
+                    f"</{CITE_ID}>\n"
+                    "\n---\n\n"
+                    f"{REQUEST}"
+                ),
                 # Injected notes and pages follow, grouped by kind. NOTHING has
                 # no part at all.
                 genai_types.Part(
