@@ -65,16 +65,19 @@ RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
 # of a URL and are handled by _trim_url_punctuation below.
 _CJK_URL_STOP = "，。、！？；：〜～…—「」『』〈〉《》【】"
 
-_HTTP_URL_RE = re.compile(r"https?://[^\s\"'<>" + _CJK_URL_STOP + r"]+")
+# A `[^` ends a URL too: it opens a citation marker (`writer_citations`), which
+# the writer may put flush against the URL it cites.
+_HTTP_URL_RE = re.compile(r"https?://(?:(?!\[\^)[^\s\"'<>" + _CJK_URL_STOP + r"])+")
 
 # Closing bracket -> its opener. A trailing closer is part of the URL when the
 # URL contains a matching opener (`.../Mercury_(planet)`) and prose punctuation
 # when it does not (`(https://example.com)`).
 _URL_CLOSING_BRACKETS = {")": "(", "]": "[", "}": "{", "）": "（"}
 
-# Punctuation that commonly ends a sentence right after a URL. Brackets are
-# handled by the balance rule above instead of appearing here.
-_URL_TRAILING_CHARS = ".,;:!?\"'"
+# Punctuation that commonly ends a sentence right after a URL, plus Markdown's
+# `**bold**` and `` `code` `` wrappers. Brackets are handled by the balance rule
+# above instead of appearing here.
+_URL_TRAILING_CHARS = ".,;:!?\"'*`"
 
 
 def _trim_url_punctuation(url: str) -> str:

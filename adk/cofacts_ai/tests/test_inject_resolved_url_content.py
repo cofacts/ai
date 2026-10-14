@@ -521,6 +521,19 @@ class TestUrlExtraction:
             "https://example.com/s?q=a&b=1"
         ]
 
+    def test_citation_marker_right_after_a_url_is_not_part_of_it(self):
+        # The writer prompt lets a marker go anywhere, including flush against
+        # the URL it is citing.
+        assert self.urls(
+            "https://example.com/a[^get_single_cofacts_article-1a2b3c] 說"
+        ) == ["https://example.com/a"]
+
+    def test_markdown_emphasis_and_code_are_not_part_of_the_url(self):
+        assert self.urls("**https://x.com/a** 和 `https://x.com/b`") == [
+            "https://x.com/a",
+            "https://x.com/b",
+        ]
+
     def test_youtube_and_cofacts_media_are_still_excluded(self):
         assert self.urls(
             "https://www.youtube.com/watch?v=abc123 和 "
