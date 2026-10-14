@@ -37,10 +37,10 @@ NOTHING = "https://news.example.com/report.pdf"
 # Only inside the cited Cofacts message.
 CITED = "https://rumor.example.com/post"
 
-ARTICLE_TEXT = f"疫苗含有微晶片！轉傳 {CITED}"
+ARTICLE_TEXT = f"Vaccines contain microchips! Forward this: {CITED}"
 CITE_ID = "get_single_cofacts_article-art1"
 
-REQUEST = f"""請查核 [^{CITE_ID}] 的說法：疫苗含有微晶片。
+REQUEST = f"""Check the claim in [^{CITE_ID}]: vaccines contain microchips.
 {RESOLVED}
 {DEAD}
 {ARCHIVED}
@@ -68,7 +68,10 @@ def outcome(
 
 RESOLVER_RESULTS = [
     outcome(
-        RESOLVED, ResolveStatus.RESOLVED, title="今日新聞", summary="今天抓到的內文"
+        RESOLVED,
+        ResolveStatus.RESOLVED,
+        title="Today's news",
+        summary="Page text fetched today",
     ),
     outcome(DEAD, ResolveStatus.DEAD, error="domain name could not be resolved"),
     outcome(ARCHIVED, ResolveStatus.RESOLVER_CANT_FETCH, error="blocked"),
@@ -80,8 +83,8 @@ def cofacts_link(url: str) -> dict:
     """A hyperlink as Cofacts stored it from its own earlier crawl."""
     return {
         "url": url,
-        "title": "舊標題",
-        "summary": "Cofacts 當年抓到的內文",
+        "title": "Old title",
+        "summary": "Page text Cofacts crawled back then",
         "fetchedAt": "2018-09-25T00:00:00.000Z",
         "status": 200,
         "error": None,
@@ -180,7 +183,7 @@ async def verifier_model_input() -> tuple[list[genai_types.Content], AsyncMock]:
         async for _ in runner.run_async(
             user_id="u",
             session_id=session.id,
-            new_message=genai_types.UserContent(parts=[genai_types.Part(text="查")]),
+            new_message=genai_types.UserContent(parts=[genai_types.Part(text="Go on")]),
         ):
             pass
 
@@ -217,13 +220,13 @@ async def test_what_the_verifier_model_receives():
                 ),
                 genai_types.Part(
                     text=f"[RESOLVED PAGE] {RESOLVED}\n"
-                    "TITLE: 今日新聞\n"
+                    "TITLE: Today's news\n"
                     "---\n"
-                    "今天抓到的內文"
+                    "Page text fetched today"
                 ),
                 genai_types.Part(
                     text=f"[ARCHIVED PAGE] {ARCHIVED}\n"
-                    "TITLE: 舊標題\n"
+                    "TITLE: Old title\n"
                     "url-resolver could not reach this page just now. The text "
                     "below is what Cofacts crawled on 2018-09-25, NOT what the "
                     "page says today — it may have changed or gone. Use it as "
@@ -231,7 +234,7 @@ async def test_what_the_verifier_model_receives():
                     "link currently supports a claim, and prefer url_context if "
                     "that can still read the page.\n"
                     "---\n"
-                    "Cofacts 當年抓到的內文"
+                    "Page text Cofacts crawled back then"
                 ),
             ],
         )
