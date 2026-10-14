@@ -47,6 +47,7 @@ from .media_filedata import (
     inject_cofacts_media_filedata,
 )
 from .resolved_pages import (
+    REQUESTED_URLS_STATE_KEY,
     RESOLVED_META_STATE_KEY,
     inject_resolved_url_content,
 )
@@ -188,6 +189,7 @@ async def append_verifier_sources(
         return None
 
     resolved_meta = callback_context.state.get(RESOLVED_META_STATE_KEY) or {}
+    requested_urls = set(callback_context.state.get(REQUESTED_URLS_STATE_KEY) or [])
     sources_list = []
     seen_urls: set[str] = set()
     for url, meta in resolved_meta.items():
@@ -200,10 +202,12 @@ async def append_verifier_sources(
         # which many sites point at their homepage or a section page.
         sources_list.append({"title": meta.get("title") or url, "url": url})
         # The canonical still claims the page, so that url_context grounding it
-        # under that other name does not add it a second time.
+        # under that other name does not add it a second time -- unless the
+        # verifier was asked about that URL too. Then it is a page of its own
+        # (an article whose og:url is a homepage it was also asked to check).
         seen_urls.add(url)
         canonical = meta.get("canonical")
-        if canonical:
+        if canonical and canonical not in requested_urls:
             seen_urls.add(canonical)
 
     metadata = llm_response.grounding_metadata

@@ -54,6 +54,11 @@ logger = logging.getLogger(__name__)
 # inject_resolved_url_content.
 RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
 
+# Every URL the same model call was asked to check, fetched or not, in the same
+# handoff style: append_verifier_sources must not let one page's canonical stand
+# in for another URL the verifier was asked about.
+REQUESTED_URLS_STATE_KEY = "temp:cofacts_requested_urls"
+
 
 # CJK sentence punctuation ends a URL. It has to be excluded from the match
 # itself, not merely stripped afterwards: Chinese prose has no spaces, so
@@ -372,6 +377,7 @@ async def inject_resolved_url_content(
     callback_context.state[RESOLVED_META_STATE_KEY] = {}
 
     urls, target_content = _extract_web_urls(llm_request)
+    callback_context.state[REQUESTED_URLS_STATE_KEY] = urls
     if not urls or target_content is None or target_content.parts is None:
         return None
 
