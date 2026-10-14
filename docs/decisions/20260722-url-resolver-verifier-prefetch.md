@@ -453,9 +453,9 @@ it does not lose the fetched sources too.
   the timeout scales with the number of URLs sent unless `URL_RESOLVER_TIMEOUT` is set; and
   every non-`DEAD` failure injects an archived copy when Cofacts has one and nothing otherwise.
 - The archived-copy hand-off is tested end to end through a real `AgentTool`, with a scripted
-  model on both sides. A hyperlink in an earlier turn's Cofacts response reaches the verifier as
-  `[ARCHIVED PAGE]`, and the staged block never reaches the verifier's model. Swapping in the
-  old `temp:` hand-off makes the test fail.
+  model on both sides, in `test_verifier_model_input.py`. A hyperlink in an earlier turn's
+  Cofacts response reaches the verifier as `[ARCHIVED PAGE]`, and the staged block never reaches
+  the verifier's model. Swapping in the old `temp:` hand-off makes that test fail.
 - `ruff check`, `ruff format --check` and `ty check` clean; protoc-generated stubs are excluded
   from both via `pyproject.toml`.
 - The end-to-end check against a live resolver is done, against #123's real preview deployment

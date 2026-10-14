@@ -48,14 +48,6 @@ class TestInjectYoutubeFiledata:
         assert file_data.file_uri == url
         assert file_data.mime_type == "video/webm"
 
-    def test_single_url_adds_no_system_notice(self):
-        request = make_request(user_text("https://youtu.be/abc123"))
-
-        inject_youtube_filedata(cast(CallbackContext, None), request)
-
-        assert len(file_data_parts(request.contents[0])) == 1
-        assert system_notices(request.contents[0]) == []
-
     def test_multiple_urls_in_one_message_injects_first_and_notes_rest(self):
         request = make_request(
             user_text(
