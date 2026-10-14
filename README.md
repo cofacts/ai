@@ -161,6 +161,8 @@ The following scripts can also be run using pnpm:
 - `format` - Formats code using Prettier
 - `check` - Runs both Prettier and ESLint (format and lint)
 - `install:agent` - Installs Python dependencies for the agent using `uv`
+- `storybook` - Starts Storybook (component catalog) on port 6006
+- `build-storybook` - Builds static Storybook; deployed images serve it at `/storybook/`
 - `codegen` - Regenerates `src/server/gql/` from the rumors-api GraphQL schema. Run after editing any `graphql(\`...\`)` document so the generated types stay in sync.
 
 ### GraphQL Codegen
