@@ -151,59 +151,161 @@ export type AllTools = {
     args: { article_id?: string }
     resp: {
       article_id: string
+      /** The article's page on the Cofacts site. Absent on the error path. */
+      article_url?: string
       error?: string
-      article?: {
+      article?: CofactsArticle | null
+    }
+  }
+  search_cofacts_database: {
+    args: {
+      query?: string
+      article_ids?: Array<string>
+      limit?: number
+      after?: string
+      reply_count_max?: number
+      days_back?: number
+      order_by?: string
+    }
+    resp:
+      | {
+          data: {
+            totalCount: number
+            // Cursors are opaque strings, and null on an empty result set.
+            pageInfo: {
+              firstCursor: string | null
+              lastCursor: string | null
+            }
+            edges: Array<{
+              node: CofactsArticle
+              score: number
+              cursor: string
+            }>
+          }
+        }
+      | { error: string }
+  }
+  /**
+   * The receptionist's intake search. Intentionally NOT the same shape as
+   * `search_cofacts_database`: it returns only what is needed to pick a message
+   * out of a list, because everything it returns is replayed into the writer's
+   * context as flattened text once the conversation transfers.
+   */
+  search_suspicious_messages: {
+    args: { query?: string; limit?: number }
+    resp:
+      | {
+          data: {
+            totalCount: number
+            results: Array<{
+              id: string
+              text: string | null
+              articleType: string
+              createdAt: string
+              factCheckCount: number
+              communityDemandCount: number
+            }>
+          }
+        }
+      | { error: string }
+  }
+  /**
+   * Reverse image search (Google Vision WEB_DETECTION). The match-image URL
+   * lists are dropped backend-side on purpose, so this is the whole shape.
+   */
+  search_image_web: {
+    args: { image_url?: string }
+    resp:
+      | {
+          bestGuessLabels: Array<string>
+          webEntities: Array<{ description: string; score: number }>
+          pagesWithMatchingImages: Array<{ url: string; pageTitle: string }>
+        }
+      | { error: string; image_url?: string }
+  }
+  /**
+   * Files a message that is not in Cofacts yet — the receptionist's only
+   * write that creates something. The article exists once this resolves.
+   */
+  submit_suspicious_message: {
+    args: { text?: string; reason?: string; source_url?: string }
+    resp:
+      | {
+          success: true
+          article_id: string
+          /** The new article's page on the Cofacts site. */
+          article_url: string
+        }
+      | { error: string; message?: string }
+  }
+  request_fact_check: {
+    args: { article_id?: string; reason?: string }
+    resp:
+      | {
+          success: true
+          article_id: string
+          /** Already includes the request just recorded. */
+          communityDemandCount: number
+        }
+      | { error: string; message?: string; article_id?: string }
+  }
+}
+
+/**
+ * One Cofacts article as the agent's tools return it — the `COMMON_ARTICLE_FIELDS`
+ * fragment in `adk/cofacts_ai/tools.py`, narrowed to the fields the UI reads.
+ * Shared by `get_single_cofacts_article` and `search_cofacts_database`, which
+ * select the same fragment.
+ */
+export type CofactsArticle = {
+  id: string
+  text: string
+  createdAt: string
+  articleType: string
+  attachmentUrl: string | null
+  factCheckCount: number
+  communityDemandCount: number
+  factCheckResponses: Array<{
+    reply: {
+      id: string
+      type: string
+      text: string
+      createdAt: string
+      reference: string
+      user: { name: string }
+    }
+    user: { name: string }
+    createdAt: string
+    helpfulCount: number
+    unhelpfulCount: number
+  }>
+  relatedArticles: {
+    totalCount: number
+    edges: Array<{
+      node: {
         id: string
         text: string
-        createdAt: string
         articleType: string
-        attachmentUrl: string | null
         factCheckCount: number
-        communityDemandCount: number
+        createdAt: string
         factCheckResponses: Array<{
-          reply: {
-            id: string
-            type: string
-            text: string
-            createdAt: string
-            reference: string
-            user: { name: string }
-          }
-          user: { name: string }
-          createdAt: string
+          reply: { id: string; type: string; text: string }
           helpfulCount: number
           unhelpfulCount: number
         }>
-        relatedArticles: {
-          totalCount: number
-          edges: Array<{
-            node: {
-              id: string
-              text: string
-              articleType: string
-              factCheckCount: number
-              createdAt: string
-              factCheckResponses: Array<{
-                reply: { id: string; type: string; text: string }
-                helpfulCount: number
-                unhelpfulCount: number
-              }>
-            }
-            score: number
-          }>
-        }
-        stats: Array<{
-          date: string
-          lineUser: number
-          lineVisit: number
-          webUser: number
-          webVisit: number
-          downstreamBotUsers: number
-          downstreamBotVisits: number
-        }>
-      } | null
-    }
+      }
+      score: number
+    }>
   }
+  stats: Array<{
+    date: string
+    lineUser: number
+    lineVisit: number
+    webUser: number
+    webVisit: number
+    downstreamBotUsers: number
+    downstreamBotVisits: number
+  }>
 }
 
 type AdkCallBase = Omit<components['schemas']['FunctionCall'], 'name' | 'args'>
