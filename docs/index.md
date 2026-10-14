@@ -41,8 +41,10 @@ flowchart LR
 - **Prod:** a single **Cloud Run** service with three containers — `ingress` (frontend/BFF),
   `backend` (ADK), and `cloudsql-proxy` — defined by `service.template.yaml` and deployed by
   `.github/workflows/deploy.yml`. Containers talk over `localhost`.
+  The `ingress` image also serves the built Storybook at `/storybook/`.
   → decisions: [Cloud Run multi-container deploy](decisions/20260303-cloud-run-multi-container-deploy.md),
-  [Postgres session persistence](decisions/20260506-postgres-session-persistence.md).
+  [Postgres session persistence](decisions/20260506-postgres-session-persistence.md),
+  [Storybook in the frontend image](decisions/20261014-serve-storybook-from-frontend-image.md).
 
 ## The ADK multi-agent system
 
