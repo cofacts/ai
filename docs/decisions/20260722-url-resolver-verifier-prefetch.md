@@ -122,7 +122,7 @@ the model produces a token. There is no branch in which the model "skips the too
 
 ```mermaid
 flowchart TB
-    W["ai_writer"] -->|"AgentTool · one call per claim"| H1
+    W["ai_writer"] -->|"AgentTool · claims + URLs per call"| H1
     ART[("ADK artifacts<br/>resolved-sha1(url).txt<br/>fetch cache + audit record")]
 
     subgraph V["inside one ai_verifier call"]
