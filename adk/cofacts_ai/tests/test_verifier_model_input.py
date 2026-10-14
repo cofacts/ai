@@ -15,6 +15,7 @@ must not be fetched: cited text is context to read, and the writer asks for a
 page only by writing its URL in the request.
 """
 
+from textwrap import dedent
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock, patch
 
@@ -203,11 +204,18 @@ async def test_what_the_verifier_model_receives():
                 # The writer's request with the cited message hoisted above it,
                 # and the archived-links block it staged already taken back out.
                 genai_types.Part(
-                    text=f"<{CITE_ID}>\n"
-                    f"{ARTICLE_TEXT}\n"
-                    f"</{CITE_ID}>\n"
-                    "\n---\n\n"
-                    f"{REQUEST}"
+                    text=dedent(f"""\
+                        <get_single_cofacts_article-art1>
+                        Vaccines contain microchips! Forward this: {CITED}
+                        </get_single_cofacts_article-art1>
+
+                        ---
+
+                        Check the claim in [^get_single_cofacts_article-art1]: vaccines contain microchips.
+                        {RESOLVED}
+                        {DEAD}
+                        {ARCHIVED}
+                        {NOTHING}""")
                 ),
                 # Injected notes and pages follow, grouped by kind. NOTHING has
                 # no part at all.
