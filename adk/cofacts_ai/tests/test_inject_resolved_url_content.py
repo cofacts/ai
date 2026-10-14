@@ -31,8 +31,8 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
+from cofacts_ai.archived_pages import ARCHIVED_LINKS_STATE_KEY
 from cofacts_ai.resolved_pages import (
-    COFACTS_HYPERLINKS_STATE_KEY,
     RESOLVED_META_STATE_KEY,
     _extract_web_urls,
     _resolved_artifact_filename,
@@ -96,10 +96,9 @@ class FakeArtifactStore:
 def make_context(
     store: FakeArtifactStore | None = None, state: dict | None = None
 ) -> CallbackContext:
-    """`state` seeds the context the way agent_tool.py seeds a child session
-    from the parent's state (`agent_tool.py:236-244`), which is why `temp:`
-    keys survive from one ai_verifier call to the next. Leaving it always
-    empty would make the fake kinder than production and hide the leak."""
+    """`state` seeds the context with what an earlier model call of the same
+    verifier call left behind: the callbacks re-run on every model call, and
+    `temp:` keys persist between them within one child session."""
     store = store or FakeArtifactStore()
     ctx = AsyncMock()
     ctx.state = dict(state or {})
@@ -247,7 +246,7 @@ class TestInjectResolvedUrlContent:
         request = make_request(user_text(url))
         context = make_context(
             state={
-                COFACTS_HYPERLINKS_STATE_KEY: {
+                ARCHIVED_LINKS_STATE_KEY: {
                     url: {
                         "summary": "archived body text",
                         "title": "Archived Title",
@@ -282,9 +281,9 @@ class TestInjectResolvedUrlContent:
             await inject_resolved_url_content(context, request)
 
         assert request.contents[0].parts == original_parts
-        # Present and empty, not absent: leaving the key untouched is what let
-        # a previous call's meta stand in for this one (see
-        # TestResolvedMetaDoesNotLeakAcrossCalls).
+        # Present and empty, not absent: leaving the key untouched would let
+        # an earlier model call's meta stand in for this one (see
+        # TestResolvedMetaDescribesOnlyThisModelCall).
         assert context.state[RESOLVED_META_STATE_KEY] == {}
 
     async def test_cofacts_media_url_excluded_from_resolution(self):
@@ -565,18 +564,19 @@ class TestUrlExtraction:
         ) == ["https://example.com/x"]
 
 
-class TestResolvedMetaDoesNotLeakAcrossCalls:
-    """`temp:cofacts_resolved_meta` must describe only the current call.
+class TestResolvedMetaDescribesOnlyThisModelCall:
+    """`temp:cofacts_resolved_meta` must describe only the current model call.
 
-    ai_verifier runs as an AgentTool, once per claim, and `temp:` is not
-    scoped per call -- agent_tool.py seeds the child session from the parent's
-    state and forwards the child's delta back up. So a call that resolves
-    nothing used to inherit the previous call's meta, and
-    append_verifier_sources reported pages that response never read: a claim
-    citing the *previous* claim's URLs.
+    One verifier call is one child session, and the callbacks re-run on each of
+    its ~2 model calls with the session's state carried over. A later call that
+    resolves nothing must not keep the earlier call's meta, or
+    append_verifier_sources would list pages missing from the request the
+    final answer was written from.
 
-    Each test seeds the second context with the first call's meta, which is
-    what agent_tool.py actually does.
+    (Between verifier calls the key cannot leak at all: AgentTool seeds the
+    child session without `temp:` keys and forwards deltas trimmed of them.)
+
+    Each test seeds the context with an earlier model call's meta.
     """
 
     STALE = {

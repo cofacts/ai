@@ -31,6 +31,7 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
+from .archived_pages import ARCHIVED_LINKS_STATE_KEY
 from .media_filedata import _COFACTS_MEDIA_URL_RE, _YOUTUBE_URL_RE
 from .url_resolver.client import ResolveStatus, resolve_urls
 
@@ -38,31 +39,12 @@ logger = logging.getLogger(__name__)
 
 # Handoff from this module's before-model callback to append_verifier_sources'
 # after-model callback: {url: {"status", "title", "canonical"}} for what
-# url-resolver fetched on this call. `temp:` keeps it out of the persisted
-# session, but NOT out of the next AgentTool call — see the unconditional
-# reset in inject_resolved_url_content.
+# url-resolver fetched for this model call. `temp:` scopes it to one verifier
+# call: AgentTool's child session is seeded without `temp:` keys, and the deltas
+# it forwards back up are trimmed of them. Within that call it does carry over
+# from one model call to the next -- see the reset in
+# inject_resolved_url_content.
 RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
-
-# Cofacts' own url-resolver output for URLs seen in an article or reply,
-# harvested from the writer's Cofacts tool responses and read here as a
-# last-resort fallback: {url: {"summary", "title", "fetchedAt", "status"}}.
-#
-# Handed over as state rather than parsed back out of the request. The writer
-# cites tool results to the verifier as plain text blocks (see
-# writer_citations._render_block), and for `search_cofacts_database` that block
-# is a whole JSON dump -- digging the hyperlinks back out of a prompt string
-# would be a parser against a format that exists to be read by a model, not by
-# us. `after_tool` already holds the structured response, and agent_tool.py
-# seeds the verifier's child session from the writer's state, so the data can
-# simply be carried.
-#
-# Unlike RESOLVED_META_STATE_KEY this deliberately ACCUMULATES across the turn
-# and is never reset. That key is an assertion about one call ("these are the
-# pages this response read"), so a stale value there is a fabricated citation.
-# This one is a lookup table keyed by URL, where every entry is stamped with
-# the date it was fetched -- an old entry is not wrong, just old, and the
-# injected text says so.
-COFACTS_HYPERLINKS_STATE_KEY = "temp:cofacts_hyperlinks"
 
 
 # CJK sentence punctuation ends a URL. It has to be excluded from the match
@@ -114,59 +96,6 @@ def _trim_url_punctuation(url: str) -> str:
         else:
             break
     return url
-
-
-def harvest_cofacts_hyperlinks(
-    callback_context: CallbackContext, tool_response: object
-) -> None:
-    """Collect `hyperlinks` out of a Cofacts tool response into state.
-
-    Called from ai_writer's after_tool callback, where the response is still a
-    dict. Walks it rather than indexing fixed paths, because the two tools nest
-    the same field differently -- `get_single_cofacts_article` under
-    `article.hyperlinks` plus one list per reply, `search_cofacts_database`
-    under `data.edges[].node.hyperlinks` -- and a walk keeps working if the
-    GraphQL shape moves.
-
-    Only entries with usable text are kept. `status`/`error` record how Cofacts'
-    own crawl went, and a hyperlink whose crawl failed carries no summary worth
-    falling back to.
-    """
-    found: dict[str, dict] = {}
-
-    def walk(node: object) -> None:
-        if isinstance(node, list):
-            for item in node:
-                walk(item)
-            return
-        if not isinstance(node, dict):
-            return
-        links = node.get("hyperlinks")
-        if isinstance(links, list):
-            for link in links:
-                if not isinstance(link, dict):
-                    continue
-                url = link.get("url")
-                summary = link.get("summary")
-                if not isinstance(url, str) or not isinstance(summary, str):
-                    continue
-                if not summary.strip() or link.get("status") != 200:
-                    continue
-                found[url] = {
-                    "summary": summary,
-                    "title": link.get("title"),
-                    "fetchedAt": link.get("fetchedAt"),
-                }
-        for value in node.values():
-            walk(value)
-
-    walk(tool_response)
-    if not found:
-        return
-    existing = callback_context.state.get(COFACTS_HYPERLINKS_STATE_KEY) or {}
-    # Merge rather than replace: one turn can touch several articles, and the
-    # verifier may be called about a URL first seen two tool calls ago.
-    callback_context.state[COFACTS_HYPERLINKS_STATE_KEY] = {**existing, **found}
 
 
 _RESOLVED_PAGE_PREFIX = "[RESOLVED PAGE] "
@@ -362,15 +291,15 @@ async def inject_resolved_url_content(
     costing a re-fetch; it does cost re-sent tokens.
     """
     # Clear first, so every exit below -- the early returns, the `except`, and
-    # the normal path -- leaves this key describing only the current call.
+    # the normal path -- leaves this key describing only the current model
+    # call.
     #
-    # `temp:` is NOT scoped per AgentTool call: agent_tool.py seeds the child
-    # session from the parent's state and forwards the child's delta back up,
-    # so without this a call that resolves nothing inherits the previous
-    # call's meta and append_verifier_sources reports pages this response
-    # never read. ai_verifier runs once per claim, so that is a claim citing
-    # the *previous* claim's URLs -- the fabricated citation this whole
-    # feature exists to prevent.
+    # The key cannot leak between verifier calls (see its definition), but it
+    # does persist across the ~2 model calls of one: the child session is the
+    # same. Without the reset, a later call that exits early -- the resolver
+    # down, an artifact read failing -- would keep the earlier call's meta, and
+    # append_verifier_sources would list pages missing from the request the
+    # final answer was written from.
     #
     # This costs no extra fetches. The fetch cache is the artifact
     # (`resolved-<sha1>.txt`, loaded below); this key is only the handoff to
@@ -391,7 +320,7 @@ async def inject_resolved_url_content(
     resolved_meta: dict[str, dict] = {}
     injected_parts: list[genai_types.Part] = []
     archived: dict[str, dict] = {}
-    cofacts_links = callback_context.state.get(COFACTS_HYPERLINKS_STATE_KEY) or {}
+    cofacts_links = callback_context.state.get(ARCHIVED_LINKS_STATE_KEY) or {}
     if not isinstance(cofacts_links, dict):
         cofacts_links = {}
     lengths: dict[str, int] = {}
