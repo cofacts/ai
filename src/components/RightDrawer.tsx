@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
+import { FactCheckReplyCard } from './cofacts/FactCheckReplyCard'
+import { SuspiciousMessageCard } from './cofacts/SuspiciousMessageCard'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
 
@@ -492,57 +494,6 @@ function DraftFactcheckContent({
 
 // ── Cofacts Article ──────────────────────────────────────────────
 
-type CofactsArticle = NonNullable<
-  AllTools['get_single_cofacts_article']['resp']['article']
->
-type RelatedArticleNode =
-  CofactsArticle['relatedArticles']['edges'][number]['node']
-
-const REPLY_TYPE_INFO: Record<string, { label: string; className: string }> = {
-  RUMOR: {
-    label: '含有不實訊息',
-    className: 'bg-red-50 text-red-700 border border-red-200',
-  },
-  NOT_RUMOR: {
-    label: '不含不實訊息',
-    className: 'bg-green-50 text-green-700 border border-green-200',
-  },
-  OPINIONATED: {
-    label: '含有個人意見',
-    className: 'bg-blue-50 text-blue-700 border border-blue-200',
-  },
-  NOT_ARTICLE: {
-    label: '不是可查核的內容',
-    className: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
-  },
-}
-
-function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
-  return (
-    <a
-      href={`https://cofacts.tw/article/${article.id}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="shrink-0 w-[210px] rounded-lg border border-gray-200 bg-gray-50 p-3 hover:bg-gray-100 transition-colors flex flex-col gap-2"
-    >
-      <p className="text-xs text-gray-700 line-clamp-4 leading-relaxed flex-1">
-        {article.text || `[${article.articleType}]`}
-      </p>
-      <div>
-        {article.factCheckCount > 0 ? (
-          <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.5">
-            {article.factCheckCount} 則查核
-          </span>
-        ) : (
-          <span className="text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
-            待查核
-          </span>
-        )}
-      </div>
-    </a>
-  )
-}
-
 // Fetches a browser-loadable, freshly signed attachment URL for the article
 // (the tool result only carries a non-loadable gs:// URI). Kept as its own
 // component so the useQuery hook is unconditional — CofactsArticleContent
@@ -680,47 +631,17 @@ function CofactsArticleContent({
           <p className="text-sm text-gray-400">尚無查核回應</p>
         ) : (
           <div className="space-y-3">
-            {article.factCheckResponses.map((ar, i) => {
-              const typeInfo = REPLY_TYPE_INFO[ar.reply.type] ?? {
-                label: ar.reply.type,
-                className: 'bg-gray-50 text-gray-700 border border-gray-200',
-              }
-              return (
-                <div
-                  key={i}
-                  className="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2"
-                >
-                  <span
-                    className={`inline-block text-[10px] font-bold rounded px-1.5 py-0.5 ${typeInfo.className}`}
-                  >
-                    {typeInfo.label}
-                  </span>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                    {ar.reply.text}
-                  </p>
-                  {ar.reply.reference && (
-                    <p className="text-xs text-gray-400 whitespace-pre-wrap">
-                      {ar.reply.reference}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <span>{ar.reply.user.name}</span>
-                    <span className="flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-xs">
-                        thumb_up
-                      </span>
-                      {ar.helpfulCount}
-                    </span>
-                    <span className="flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-xs">
-                        thumb_down
-                      </span>
-                      {ar.unhelpfulCount}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
+            {article.factCheckResponses.map((ar, i) => (
+              <FactCheckReplyCard
+                key={i}
+                type={ar.reply.type}
+                text={ar.reply.text}
+                reference={ar.reply.reference}
+                authorName={ar.reply.user.name}
+                helpfulCount={ar.helpfulCount}
+                unhelpfulCount={ar.unhelpfulCount}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -733,7 +654,13 @@ function CofactsArticleContent({
           </SectionLabel>
           <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
             {relatedEdges.map(({ node }) => (
-              <RelatedArticleCard key={node.id} article={node} />
+              <SuspiciousMessageCard
+                key={node.id}
+                text={node.text}
+                articleType={node.articleType}
+                factCheckCount={node.factCheckCount}
+                href={`https://cofacts.tw/article/${node.id}`}
+              />
             ))}
           </div>
         </section>

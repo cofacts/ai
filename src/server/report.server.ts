@@ -1,0 +1,208 @@
+// The report form's four Cofacts calls: search, read, +1, file.
+//
+// Server-only, and named `.server.ts` so TanStack Start's import protection
+// fails the build if client code ever imports it. The route's createServerFn
+// wrappers are the only importers; their handler bodies are stripped from the
+// client bundle, which drops the import with them. Kept apart from the route,
+// and exported, so these can be unit-tested — a server function itself needs
+// the Start runtime and cannot be called from vitest.
+//
+// All of them go through cofactsExec, which attaches the reporter's own JWT from
+// the HttpOnly session cookie and the RUMORS_SITE app id — so what lands in
+// Cofacts is attributed to the person who filed it, and this app never handles a
+// token itself.
+//
+// Search does not require a session (looking is free); the two writes do, and
+// resolveAdkUserIdOrThrow rejects them before any request reaches rumors-api.
+
+import { getArticleUrl, getRepliesUrl } from './cofactsSite'
+import { graphql } from './gql'
+import { resolveAdkUserIdOrThrow } from './adkUser'
+import type {
+  CreateArticleReportMutationVariables,
+  ReportOutcomeArticleQuery,
+  ReportOutcomeArticleQueryVariables,
+  RequestFactCheckMutationVariables,
+  SearchSuspiciousMessagesQuery,
+  SearchSuspiciousMessagesQueryVariables,
+} from './gql/graphql'
+import { cofactsExec } from '@/lib/cofactsExec'
+
+/**
+ * Candidates to show the reporter, so they can say "yes, that's the one" rather
+ * than filing a duplicate.
+ */
+const SearchSuspiciousMessagesDocument = graphql(`
+  query SearchSuspiciousMessages(
+    $like: String!
+    $first: Int!
+    $minimumShouldMatch: String
+  ) {
+    ListArticles(
+      filter: {
+        moreLikeThis: { like: $like, minimumShouldMatch: $minimumShouldMatch }
+      }
+      orderBy: [{ _score: DESC }]
+      first: $first
+    ) {
+      edges {
+        node {
+          id
+          text
+          articleType
+          replyCount
+          replyRequestCount
+        }
+      }
+    }
+  }
+`)
+
+const ReportOutcomeArticleDocument = graphql(`
+  query ReportOutcomeArticle($id: String!) {
+    GetArticle(id: $id) {
+      id
+      articleReplies(statuses: [NORMAL]) {
+        positiveFeedbackCount
+        negativeFeedbackCount
+        reply {
+          type
+          text
+          reference
+          user {
+            name
+          }
+        }
+      }
+    }
+  }
+`)
+
+const RequestFactCheckDocument = graphql(`
+  mutation RequestFactCheck($articleId: String!, $reason: String) {
+    CreateOrUpdateReplyRequest(articleId: $articleId, reason: $reason) {
+      replyRequestCount
+    }
+  }
+`)
+
+const CreateArticleReportDocument = graphql(`
+  mutation CreateArticleReport(
+    $text: String!
+    $reference: ArticleReferenceInput!
+    $reason: String
+  ) {
+    CreateArticle(text: $text, reference: $reference, reason: $reason) {
+      id
+    }
+  }
+`)
+
+export type SearchCandidate = NonNullable<
+  NonNullable<SearchSuspiciousMessagesQuery['ListArticles']>['edges']
+>[number]
+
+export type ReportOutcomeArticle = NonNullable<
+  ReportOutcomeArticleQuery['GetArticle']
+>
+
+/** How many candidates a person can actually read before giving up. */
+const CANDIDATE_LIMIT = 5
+
+/**
+ * How much of the pasted link has to match.
+ *
+ * The report form only accepts a URL, so `like` is always a bare link — and
+ * rumors-api's default (`10<70%`) is tuned for prose and actively wrong for
+ * one. A URL tokenises into `https`, `www`, `facebook`, `com`, `share` and one
+ * unique id, and every Facebook link shares all but the last of those, so on
+ * dev, searching for a share link nobody has reported returns 54 unrelated
+ * Facebook posts, all scoring an identical 225.5. A candidate list of
+ * confident-looking noise is worse than an empty one: it invites the reporter
+ * to +1 somebody else's message.
+ *
+ * At 90% the unique id has to match too, which turns the query into the
+ * question actually being asked — "has anyone posted this same link?" — and it
+ * answers correctly in both directions: 1 hit for a link that is in the
+ * database, 0 for one that is not. 80% is already back in the noise (50 hits).
+ */
+const BARE_LINK_MIN_SHOULD_MATCH = '90%'
+
+export async function findSimilarReports(
+  like: SearchSuspiciousMessagesQueryVariables['like'],
+): Promise<Array<SearchCandidate>> {
+  const data = await cofactsExec(SearchSuspiciousMessagesDocument, {
+    like,
+    first: CANDIDATE_LIMIT,
+    minimumShouldMatch: BARE_LINK_MIN_SHOULD_MATCH,
+  })
+  return data.ListArticles?.edges ?? []
+}
+
+export async function fetchReportOutcome(
+  articleId: ReportOutcomeArticleQueryVariables['id'],
+): Promise<{ article: ReportOutcomeArticle; articleUrl: string } | null> {
+  const data = await cofactsExec(ReportOutcomeArticleDocument, {
+    id: articleId,
+  })
+  if (!data.GetArticle) return null
+  return {
+    article: data.GetArticle,
+    articleUrl: getArticleUrl(data.GetArticle.id),
+  }
+}
+
+/** `reason` is the reporter's own words. Never a summary written for them. */
+export type RequestFactCheckInput = RequestFactCheckMutationVariables
+
+export async function recordFactCheckRequest(
+  input: RequestFactCheckInput,
+): Promise<{ communityDemandCount: number }> {
+  await resolveAdkUserIdOrThrow()
+  const result = await cofactsExec(RequestFactCheckDocument, {
+    articleId: input.articleId,
+    reason: input.reason?.trim() || null,
+  })
+  const article = result.CreateOrUpdateReplyRequest
+  if (!article) throw new Error('Article not found')
+  return { communityDemandCount: article.replyRequestCount ?? 0 }
+}
+
+/**
+ * The mutation's own variables, except that `text` and `reference` collapse
+ * into one `url`: this form files a link and nothing else, so both are derived
+ * from it below.
+ */
+export type CreateArticleReportInput = Pick<
+  CreateArticleReportMutationVariables,
+  'reason'
+> & {
+  /** Where the message is circulating. Also the article's own text. */
+  url: string
+}
+
+export async function fileArticleReport(
+  input: CreateArticleReportInput,
+): Promise<{ articleUrl: string; repliesUrl: string }> {
+  await resolveAdkUserIdOrThrow()
+  const result = await cofactsExec(CreateArticleReportDocument, {
+    // The URL is the article body and the reference alike — one value, so the
+    // two cannot drift apart. rumors-api resolves the link at creation and
+    // fills in `hyperlinks.title/summary`, which is what a reader sees.
+    text: input.url,
+    // Always URL. This entry point only accepts a link, so every report it
+    // files can be described honestly — it never hits the missing enum value
+    // that forces other non-LINE sources to be labelled LINE.
+    reference: { type: 'URL', permalink: input.url },
+    reason: input.reason?.trim() || null,
+  })
+  const articleId = result.CreateArticle?.id
+  if (!articleId) throw new Error('Cofacts did not return an article id')
+  // repliesUrl comes from here rather than being sliced back out of
+  // articleUrl on the client: getSiteBase() is server-only, and one derivation
+  // beats two that can disagree.
+  return {
+    articleUrl: getArticleUrl(articleId),
+    repliesUrl: getRepliesUrl(),
+  }
+}
