@@ -17,21 +17,22 @@ at it. It also cites the Cofacts message, whose URL arrives inside the hoisted
 citation and must not be fetched: cited text is context to read, and the writer
 asks for a page only by writing its URL in the request.
 
-The request also carries a YouTube video and a Cofacts media file. Neither is
-a web page: url-resolver could only scrape a video page's HTML, so neither is
-sent to it and neither gets a page part. Instead each becomes a FileData part
-Gemini perceives as media -- the YouTube URL as is, the Cofacts storage URL
-converted to its `gs://` form -- appended right after the request text, ahead
-of the page parts, because the media callbacks run before the pre-fetch.
+The request also carries a YouTube video and a Cofacts media file, and each
+becomes a FileData part Gemini perceives as media, appended right after the
+request text, ahead of the page parts, because the media callbacks run before
+the pre-fetch. The YouTube URL is also sent to url-resolver like any web page,
+which returns the video page's title and description as a page part. The
+Cofacts media file is not: the writer forwards it in its `gs://` form, which is
+not an http(s) URL, so it is never extracted.
 
 The verifier's model then answers with url_context grounding for the one page
 url-resolver could not read: the PDF. What the writer gets back is that report
 plus `sources`, the pages the verifier actually read this call -- the union of
-what url-resolver resolved and what url_context grounded. So the resolved page
-and the PDF are listed, and nothing else is: the dead link was read by neither,
-and the archived page was read only as Cofacts' old copy, which is background,
-never a source. `sources` is what the writer may cite, so a URL that sneaks in
-here is one a published reply can claim the verifier read.
+what url-resolver resolved and what url_context grounded. So the resolved page,
+the YouTube video and the PDF are listed, and nothing else is: the dead link
+was read by neither, and the archived page was read only as Cofacts' old copy,
+which is background, never a source. `sources` is what the writer may cite, so
+a URL that sneaks in here is one a published reply can claim the verifier read.
 """
 
 from textwrap import dedent
@@ -56,13 +57,11 @@ ARCHIVED_URL = "https://news.example.com/blocked"
 NOTHING_URL = "https://news.example.com/report.pdf"
 # Only inside the cited Cofacts message.
 CITED_URL = "https://rumor.example.com/post"
-# Media, not pages: watched through FileData, never pre-fetched.
+# Watched through FileData, and pre-fetched for its page metadata.
 YOUTUBE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-MEDIA_URL = (
-    "https://storage.googleapis.com/cofacts-media-collection/"
-    "production/video/vid1/original"
-)
-MEDIA_GS_URL = "gs://cofacts-media-collection/production/video/vid1/original"
+# Watched through FileData only. `gs://`, as the writer forwards it: not an
+# http(s) URL, so never pre-fetched.
+MEDIA_URL = "gs://cofacts-media-collection/production/video/vid1/original"
 
 
 def outcome(
@@ -211,6 +210,12 @@ async def test_one_verifier_call():
             outcome(
                 NOTHING_URL, ResolveStatus.RESOLVER_CANT_FETCH, error="unsupported type"
             ),
+            outcome(
+                YOUTUBE_URL,
+                ResolveStatus.RESOLVED,
+                title="Rick Astley - Never Gonna Give You Up",
+                summary="The official video for Never Gonna Give You Up",
+            ),
         ]
     )
 
@@ -262,9 +267,10 @@ async def test_one_verifier_call():
 
     # --- Assert ---
 
-    # Every web page URL the writer wrote: not CITED_URL, and neither media URL.
+    # Every http(s) URL the writer wrote: not CITED_URL, and not the `gs://`
+    # MEDIA_URL.
     resolver.assert_awaited_once_with(
-        [RESOLVED_URL, DEAD_URL, ARCHIVED_URL, NOTHING_URL]
+        [RESOLVED_URL, DEAD_URL, ARCHIVED_URL, NOTHING_URL, YOUTUBE_URL]
     )
     # The one request the verifier's model was sent.
     assert isinstance(verifier.model, ScriptedLlm)
@@ -302,7 +308,7 @@ async def test_one_verifier_call():
                 genai_types.Part(
                     file_data=genai_types.FileData(
                         # Typed from the `/video/` segment of the path.
-                        file_uri=MEDIA_GS_URL,
+                        file_uri=MEDIA_URL,
                         mime_type="video/mp4",
                     )
                 ),
@@ -320,6 +326,12 @@ async def test_one_verifier_call():
                     "TITLE: Today's news\n"
                     "---\n"
                     "Page text fetched today"
+                ),
+                genai_types.Part(
+                    text=f"[RESOLVED PAGE] {YOUTUBE_URL}\n"
+                    "TITLE: Rick Astley - Never Gonna Give You Up\n"
+                    "---\n"
+                    "The official video for Never Gonna Give You Up"
                 ),
                 genai_types.Part(
                     text=f"[ARCHIVED PAGE] {ARCHIVED_URL}\n"
@@ -351,6 +363,12 @@ async def test_one_verifier_call():
                             # Read by url-resolver, and listed under the URL the
                             # writer asked about.
                             {"title": "Today's news", "url": RESOLVED_URL},
+                            # Read by url-resolver too, so listed whether or not
+                            # url_context grounds it.
+                            {
+                                "title": "Rick Astley - Never Gonna Give You Up",
+                                "url": YOUTUBE_URL,
+                            },
                             # url-resolver could not fetch it, but url_context
                             # grounded it.
                             {"title": "Annual report", "url": NOTHING_URL},

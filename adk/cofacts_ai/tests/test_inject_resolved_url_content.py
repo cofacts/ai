@@ -1,5 +1,5 @@
 """Unit tests for `inject_resolved_url_content`, the before-model callback
-that pre-fetches plain web URLs through url-resolver for ai_verifier.
+that pre-fetches http(s) URLs through url-resolver for ai_verifier.
 
 `resolve_urls` is monkeypatched so no network/gRPC is involved; a small fake
 artifact store (dict-backed) stands in for `CallbackContext.load_artifact` /
@@ -11,7 +11,7 @@ cache and to persist the full page text for the UI. That fake's
 The exact parts each url-resolver outcome injects -- `[RESOLVED PAGE]`, the
 advisory `[LINK NOT FOUND]` note for a DEAD URL, nothing for an unfetchable
 one -- and the URLs that are never fetched (inside a hoisted citation block,
-YouTube, Cofacts media) are pinned end to end in
+Cofacts media as `gs://`) are pinned end to end in
 `test_verifier_round_trip.py`. So is the hand-off to `sources`: that test
 asserts what the writer gets back, which lists a resolved page and never a
 cited, dead or archived one.
@@ -503,6 +503,14 @@ class TestUrlExtraction:
             "https://x.com/a",
             "https://x.com/b",
         ]
+
+    def test_youtube_is_extracted_and_gs_media_is_not(self):
+        # YouTube is pre-fetched for its page title and description; Cofacts
+        # media reaches the verifier as `gs://`, which is not an http(s) URL.
+        assert self.urls(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ "
+            "gs://cofacts-media-collection/production/video/vid1/original"
+        ) == ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]
 
 
 class TestResolvedMetaDescribesOnlyThisModelCall:

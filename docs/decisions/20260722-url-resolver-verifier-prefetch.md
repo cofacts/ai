@@ -96,7 +96,7 @@ placements; the fourth emerged in review):
 
 - **url-resolver as a general tool** — expose it to the pipeline as a function tool.
 - **url-resolver as the verifier's tool** — the verifier decides which URLs to read.
-- **Pre-resolution in a `before_model_callback`** — the system fetches every plain web URL
+- **Pre-resolution in a `before_model_callback`** — the system fetches every http(s) URL
   before the verifier's model call and injects the cleaned text. **Chosen.**
 - **A dedicated resolver sub-agent behind `AgentTool`** — isolate fetching and summarizing in
   its own agent so bulk text never enters the orchestrator's context.
@@ -146,9 +146,7 @@ right-hand column shows what each can become in `sources`.
 
 ```mermaid
 flowchart LR
-    U["① URL in the writer's<br/>own words"] --> X{"① YouTube or<br/>Cofacts media?"}
-    X -->|"yes"| SIB["sibling callbacks<br/>inject FileData"]
-    X -->|"no"| C{"② already an<br/>artifact?"}
+    U["① http(s) URL in the<br/>writer's own words"] --> C{"② already an<br/>artifact?"}
     C -->|"miss · within URL cap"| R["③ url-resolver<br/>description or body · html dropped"]
     C -->|"miss · past URL cap"| A
     R --> S{"④ why did it fail?"}
@@ -173,7 +171,7 @@ flowchart LR
     style O4 fill:#f3f4f6,stroke:#6b7280
 ```
 
-#### ① Only URLs the writer wrote, and only plain web ones
+#### ① Only http(s) URLs the writer wrote
 
 The verifier's `request` holds more URLs than it is asked about, because `resolve_citations`
 hoists cited tool results into it. A cited `search_cofacts_database` result alone can carry
@@ -188,9 +186,12 @@ ask the verifier to read a page, so to have a page checked the writer writes its
 request, even when the URL is already in the article it cites. Keeping the rule to "what you
 wrote" avoids a second rule about which kinds of cited block count.
 
-YouTube URLs and Cofacts `gs://` media are left to `inject_youtube_filedata` and
-`inject_cofacts_media_filedata`, which hand Gemini the media itself as `FileData`. url-resolver
-scrapes HTML text, so it has nothing to add for a video. Extraction is CJK-aware.
+YouTube URLs are pre-fetched too. The video page's title and description are metadata the
+verifier needs, and its prompt already asks for them. Pre-fetching also lists the video in
+`sources` deterministically: `url_context` grounded YouTube in only 3 of 8 sampled production
+verifier calls. `inject_youtube_filedata` still hands Gemini the video itself as `FileData`.
+Cofacts media needs no rule: the writer forwards it as `gs://`, which extraction does not match.
+Extraction is CJK-aware.
 
 #### ② The artifact store is the fetch cache
 
@@ -489,8 +490,8 @@ it does not lose the fetched sources too.
 - It reuses the callback-injection pattern established by
   [`20260531-callback-media-injection`](20260531-callback-media-injection.md) and generalized in
   [`20260606-multimodal-perception-vertex-ai`](20260606-multimodal-perception-vertex-ai.md);
-  `inject_resolved_url_content` is the third callback in the same chain and deliberately excludes
-  the URL shapes those two own.
+  `inject_resolved_url_content` is the third callback in the same chain. It also pre-fetches the
+  YouTube page that `inject_youtube_filedata` hands over as video (see ①).
 - Evidence and analysis: the Langfuse traces above, and the Cofacts weekly reviews in
   [cofacts/kb](https://github.com/cofacts/kb) `src/meetings/2026/` — `20260616.md` (the
   investigator→verifier hallucination chain and the requirement quoted above), with earlier
