@@ -9,6 +9,12 @@ injected into the request -- and (b) url_context's grounding_chunks. This is
 what makes a dead URL structurally unable to become a citable source without
 a hard-coded ban list: it's fetched by neither path, so it appears in
 neither and is silently absent from `sources`.
+
+The basic union -- a resolved page listed, a url_context-grounded page
+url-resolver could not fetch listed, a dead link absent -- is pinned end to
+end in `test_verifier_round_trip.py`. The tests here cover what that one call
+does not construct: a canonical that differs from the requested URL, the two
+paths naming the same page, no grounding at all, and an empty reply.
 """
 
 from types import SimpleNamespace
@@ -57,23 +63,6 @@ def sources_of(llm_response: LlmResponse) -> list[dict]:
 
 
 class TestAppendVerifierSources:
-    async def test_resolved_meta_becomes_a_source(self):
-        context = make_context(
-            {
-                "https://a.com": {
-                    "status": "resolved",
-                    "title": "A Title",
-                    "canonical": "https://a.com/canonical",
-                }
-            }
-        )
-        response = make_response(grounding_chunks=[])
-
-        result = await append_verifier_sources(context, response)
-
-        assert result is not None
-        assert sources_of(result) == [{"title": "A Title", "url": "https://a.com"}]
-
     async def test_lists_the_requested_url_not_a_homepage_canonical(self):
         """og:url often points at the site's homepage. Listing it would have
         the published reply cite `https://news.example/` instead of the article
@@ -94,32 +83,6 @@ class TestAppendVerifierSources:
 
         assert result is not None
         assert sources_of(result) == [{"title": "Article", "url": article}]
-
-    async def test_dead_url_never_becomes_a_source(self):
-        context = make_context(
-            {"https://dead.example": {"status": "dead", "error": "nope"}}
-        )
-        response = make_response(grounding_chunks=[])
-
-        result = await append_verifier_sources(context, response)
-
-        assert result is not None
-        assert sources_of(result) == []
-
-    async def test_resolver_cant_fetch_url_still_surfaces_via_url_context(self):
-        # Not in resolved_meta at all (RESOLVER_CANT_FETCH isn't recorded there),
-        # but url_context DID ground it -- it must still appear.
-        context = make_context({})
-        response = make_response(
-            grounding_chunks=[web_chunk("https://pdf.example", "PDF Report")]
-        )
-
-        result = await append_verifier_sources(context, response)
-
-        assert result is not None
-        assert sources_of(result) == [
-            {"title": "PDF Report", "url": "https://pdf.example"}
-        ]
 
     async def test_union_dedups_by_url_preferring_resolver_title(self):
         context = make_context(

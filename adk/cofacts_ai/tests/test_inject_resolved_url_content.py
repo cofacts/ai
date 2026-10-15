@@ -12,15 +12,16 @@ The exact parts each url-resolver outcome injects -- `[RESOLVED PAGE]`, the
 advisory `[LINK NOT FOUND]` note for a DEAD URL, nothing for an unfetchable
 one -- and the URLs that are never fetched (inside a hoisted citation block,
 YouTube, Cofacts media) are pinned end to end in
-`test_verifier_model_input.py`.
+`test_verifier_round_trip.py`. So is the hand-off to `sources`: that test
+asserts what the writer gets back, which lists a resolved page and never a
+cited, dead or archived one.
 
-Coverage here: a resolved URL is recorded as such for `sources`; every
-failure other than DEAD -- a URL the resolver couldn't fetch (e.g. a PDF), a
-timeout, a resolver outage, a URL past the `URL_RESOLVER_MAX_URLS` cap -- gets
-nothing injected (absent an archived copy) so url_context gets a clean shot
-at it; only the requested URL, not a cited one, is recorded; the cap counts
-only uncached URLs; the next model call of a turn
-re-injects from the artifact cache without re-fetching; a misconfigured char
+Coverage here: every failure other than DEAD -- a URL the resolver couldn't
+fetch (e.g. a PDF), a timeout, a resolver outage, a URL past the
+`URL_RESOLVER_MAX_URLS` cap -- gets nothing injected (absent an archived copy)
+so url_context gets a clean shot at it; the cap counts only uncached URLs; the
+next model call of a turn re-injects from the artifact cache without
+re-fetching; a misconfigured char
 budget raises instead of degrading silently; a resolver outage injects nothing; and
 the artifact cache round-trips page text plus title/canonical without the
 version API, including for artifacts written before that envelope existed.
@@ -49,7 +50,6 @@ from cofacts_ai.url_resolver.client import (
     ResolveStatus,
     UrlResolverConfigError,
 )
-from cofacts_ai.writer_citations import _render_block
 
 
 def make_request(*contents: genai_types.Content) -> LlmRequest:
@@ -168,30 +168,6 @@ def unavailable(url: str) -> ResolvedUrl:
 
 
 class TestInjectResolvedUrlContent:
-    async def test_resolved_url_injects_resolved_page_part(self):
-        request = make_request(user_text("請查核 https://good.com/article"))
-        context = make_context()
-
-        with patch(
-            "cofacts_ai.resolved_pages.resolve_urls",
-            AsyncMock(return_value=[resolved("https://good.com/article")]),
-        ):
-            await inject_resolved_url_content(context, request)
-
-        [part] = [
-            t
-            for t in text_parts(request.contents[0])
-            if t.startswith("[RESOLVED PAGE]")
-        ]
-        assert "https://good.com/article" in part
-        assert "body text" in part
-        assert (
-            context.state["temp:cofacts_resolved_meta"]["https://good.com/article"][
-                "status"
-            ]
-            == "resolved"
-        )
-
     async def test_no_signal_without_archive_injects_nothing(self):
         """Whatever the reason url-resolver gave no text, the verifier's next
         step is the same -- url_context -- so no per-cause note is added."""
@@ -765,29 +741,6 @@ class TestArtifactIoIsConcurrent:
 
 
 class TestWhichUrlsAreFetched:
-    async def test_urls_inside_a_citation_block_are_not_fetched(self):
-        """A cited result is context to read. A cited search dump alone can
-        carry dozens of other articles' links; fetching them would fill the
-        cap, spend the text budget and list them in `sources` as read."""
-        dump = _render_block(
-            "search_cofacts_database-srch1",
-            '{"links": ["https://dump.example/1", "https://dump.example/2"]}',
-        )
-        request = make_request(
-            user_text(
-                f"{dump}\n\n---\n\n參考 [^search_cofacts_database-srch1]，"
-                "請查核 https://target.example"
-            )
-        )
-        context = make_context()
-        resolve_mock = AsyncMock(return_value=[resolved("https://target.example")])
-
-        with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
-            await inject_resolved_url_content(context, request)
-
-        resolve_mock.assert_awaited_once_with(["https://target.example"])
-        assert set(context.state[RESOLVED_META_STATE_KEY]) == {"https://target.example"}
-
     async def test_urls_past_the_cap_are_not_sent_and_fall_back_to_archive(self):
         urls = ["https://a.example", "https://b.example", "https://c.example"]
         request = make_request(user_text(" ".join(urls)))

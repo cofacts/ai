@@ -447,15 +447,18 @@ it does not lose the fetched sources too.
   no page already in hand; the channel accepts replies past gRPC's 4 MB default; `sources` lists
   the requested URL, not a homepage canonical;
   the second model call of a turn re-injects the page but is served from the artifact cache, not
-  the network; a dead URL never appears in `sources` while a `url_context`-grounded PDF still
-  does; URLs inside a hoisted citation block are not fetched; the cap counts only uncached URLs
+  the network; the cap counts only uncached URLs
   and sends a URL past it to the archived-copy fallback; the client sends every URL it is given;
   the timeout scales with the number of URLs sent unless `URL_RESOLVER_TIMEOUT` is set; and
   every non-`DEAD` failure injects an archived copy when Cofacts has one and nothing otherwise.
-- The archived-copy hand-off is tested end to end through a real `AgentTool`, with a scripted
-  model on both sides, in `test_verifier_model_input.py`. A hyperlink in an earlier turn's
+- One writer → verifier call is tested end to end through a real `AgentTool`, with a scripted
+  model on both sides, in `test_verifier_round_trip.py`. It asserts both what the verifier's
+  model is sent and what the writer's model gets back. A hyperlink in an earlier turn's
   Cofacts response reaches the verifier as `[ARCHIVED PAGE]`, and the staged block never reaches
-  the verifier's model. Swapping in the old `temp:` hand-off makes that test fail.
+  the verifier's model. Swapping in the old `temp:` hand-off makes that test fail. URLs inside a
+  hoisted citation block are not fetched. In the writer's `sources`, a resolved page is listed
+  under the requested URL and a `url_context`-grounded PDF still appears, while a dead URL and
+  an archived page never do.
 - `ruff check`, `ruff format --check` and `ty check` clean; protoc-generated stubs are excluded
   from both via `pyproject.toml`.
 - The end-to-end check against a live resolver is done, against #123's real preview deployment
