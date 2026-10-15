@@ -4,7 +4,7 @@ Verifier page pre-fetch: real page text, injected before the model runs.
 The verifier used to read linked pages only through Gemini's black-box
 ``url_context`` tool, with no deterministic proof a page was ever fetched —
 the root cause of the source hallucination this module exists to stop. Here
-every plain web URL in the request is resolved through ``url-resolver``
+every http(s) URL in the request is resolved through ``url-resolver``
 (see :mod:`cofacts_ai.url_resolver.client`) and the text it returns is
 injected as ``[RESOLVED PAGE]`` parts the model cannot skip reading. That text
 is the page's own description when its metadata is complete, and the
@@ -33,7 +33,6 @@ from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
 from .archived_pages import ARCHIVED_LINKS_STATE_KEY
-from .media_filedata import _COFACTS_MEDIA_URL_RE, _YOUTUBE_URL_RE
 from .url_resolver.client import (
     ResolvedUrl,
     ResolveStatus,
@@ -280,7 +279,7 @@ def _water_fill(lengths: dict[str, int], budget: int) -> dict[str, int]:
 def _extract_web_urls(
     llm_request: LlmRequest,
 ) -> tuple[list[str], Optional[genai_types.Content]]:
-    """Plain http(s) URLs to pre-fetch via url-resolver, and the latest user
+    """The http(s) URLs to pre-fetch via url-resolver, and the latest user
     content that mentioned any of them (mirrors inject_youtube_filedata's
     "latest content wins" — today each verifier AgentTool call is a fresh
     single-message session, so there is normally just one candidate).
@@ -292,9 +291,10 @@ def _extract_web_urls(
     fill the URL cap, spend the shared text budget and be listed in `sources`
     as read. The writer asks for a page by writing its URL in the request.
 
-    Excludes YouTube URLs (watched via FileData + url_context; url-resolver
-    can only scrape HTML text, not video content) and Cofacts media URLs
-    (same reason, handled by inject_cofacts_media_filedata).
+    YouTube URLs are pre-fetched too: the page's title and description are
+    metadata the verifier needs, and inject_youtube_filedata still hands
+    Gemini the video itself. Cofacts media needs no rule: the writer forwards
+    it as `gs://`, which `_HTTP_URL_RE` does not match.
     """
     urls: list[str] = []
     seen = set()
@@ -307,12 +307,7 @@ def _extract_web_urls(
             if not part.text:
                 continue
             for match in _HTTP_URL_RE.findall(strip_hoisted_blocks(part.text)):
-                url = _trim_url_punctuation(match)
-                if _YOUTUBE_URL_RE.fullmatch(url) or _COFACTS_MEDIA_URL_RE.fullmatch(
-                    url
-                ):
-                    continue
-                found_here.append(url)
+                found_here.append(_trim_url_punctuation(match))
         if not found_here:
             continue
         target_content = content
@@ -328,7 +323,7 @@ async def inject_resolved_url_content(
 ) -> None:
     """Before-model callback for ai_verifier.
 
-    Pre-fetches every plain web URL through url-resolver and injects the
+    Pre-fetches every http(s) URL through url-resolver and injects the
     text it returned as [RESOLVED PAGE] parts (the page's description, or
     its Readability-extracted body -- see the module docstring), so the
     verifier bases support/refute decisions on text it actually read instead
