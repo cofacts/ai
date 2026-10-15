@@ -111,6 +111,7 @@ async def test_what_the_verifier_model_receives():
             script=[genai_types.ModelContent(parts=[genai_types.Part(text="done")])],
             seen=[],
         ),
+        # Under test: the verifier's production before_model_callback chain.
         before_model_callback=ai_verifier.before_model_callback,
     )
     # Calls the verifier once, with a request naming every kind of URL.
@@ -145,6 +146,7 @@ async def test_what_the_verifier_model_receives():
             seen=[],
         ),
         tools=[AgentTool(verifier)],
+        # Under test: the writer's production before_tool_callback chain.
         before_tool_callback=ai_writer.before_tool_callback,
     )
     # One outcome per URL url-resolver is sent.
