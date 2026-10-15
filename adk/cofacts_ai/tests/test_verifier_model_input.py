@@ -138,6 +138,8 @@ async def test_what_the_verifier_model_receives():
                         )
                     ]
                 ),
+                # Ends the writer's turn once the tool returns; its text is
+                # never checked.
                 genai_types.ModelContent(parts=[genai_types.Part(text="ok")]),
             ],
             seen=[],
