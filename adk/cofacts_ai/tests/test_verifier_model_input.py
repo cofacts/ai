@@ -52,16 +52,6 @@ MEDIA = (
 )
 MEDIA_GS = "gs://cofacts-media-collection/production/video/vid1/original"
 
-CITE_ID = "get_single_cofacts_article-art1"
-
-REQUEST = f"""Check the claim in [^{CITE_ID}]: vaccines contain microchips.
-{RESOLVED}
-{DEAD}
-{ARCHIVED}
-{NOTHING}
-{YOUTUBE}
-{MEDIA}"""
-
 
 def outcome(
     url: str,
@@ -123,7 +113,7 @@ async def test_what_the_verifier_model_receives():
         ),
         before_model_callback=ai_verifier.before_model_callback,
     )
-    # Calls the verifier once with REQUEST.
+    # Calls the verifier once, with a request naming every kind of URL.
     writer = LlmAgent(
         name="writer",
         model=ScriptedLlm(
@@ -133,7 +123,17 @@ async def test_what_the_verifier_model_receives():
                     parts=[
                         genai_types.Part(
                             function_call=genai_types.FunctionCall(
-                                name=verifier.name, args={"request": REQUEST}
+                                name=verifier.name,
+                                args={
+                                    "request": dedent(f"""\
+                                        Check the claim in [^get_single_cofacts_article-art1]: vaccines contain microchips.
+                                        {RESOLVED}
+                                        {DEAD}
+                                        {ARCHIVED}
+                                        {NOTHING}
+                                        {YOUTUBE}
+                                        {MEDIA}""")
+                                },
                             )
                         )
                     ]
@@ -183,7 +183,7 @@ async def test_what_the_verifier_model_receives():
                             id="art1",
                             name="get_single_cofacts_article",
                             response={
-                                "cite_as": f"[^{CITE_ID}]",
+                                "cite_as": "[^get_single_cofacts_article-art1]",
                                 "article": {
                                     "text": "Vaccines contain microchips! "
                                     f"Forward this: {CITED}",
