@@ -52,7 +52,6 @@ MEDIA = (
 )
 MEDIA_GS = "gs://cofacts-media-collection/production/video/vid1/original"
 
-ARTICLE_TEXT = f"Vaccines contain microchips! Forward this: {CITED}"
 CITE_ID = "get_single_cofacts_article-art1"
 
 REQUEST = f"""Check the claim in [^{CITE_ID}]: vaccines contain microchips.
@@ -83,19 +82,6 @@ def outcome(
     )
 
 
-RESOLVER_RESULTS = [
-    outcome(
-        RESOLVED,
-        ResolveStatus.RESOLVED,
-        title="Today's news",
-        summary="Page text fetched today",
-    ),
-    outcome(DEAD, ResolveStatus.DEAD, error="domain name could not be resolved"),
-    outcome(ARCHIVED, ResolveStatus.RESOLVER_CANT_FETCH, error="blocked"),
-    outcome(NOTHING, ResolveStatus.RESOLVER_CANT_FETCH, error="unsupported type"),
-]
-
-
 def cofacts_link(url: str) -> dict:
     """A hyperlink as Cofacts stored it from its own earlier crawl."""
     return {
@@ -122,23 +108,22 @@ class ScriptedLlm(BaseLlm):
         yield LlmResponse(content=self.script.pop(0))
 
 
-async def verifier_model_input() -> tuple[list[genai_types.Content], AsyncMock]:
-    """Have a writer call the verifier once with REQUEST; return the contents
-    of the one request the verifier's model was sent, and the faked
-    url-resolver so a test can see which URLs were fetched."""
-    verifier_llm = ScriptedLlm(
-        model="fake",
-        script=[genai_types.ModelContent(parts=[genai_types.Part(text="done")])],
-        seen=[],
-    )
+async def test_what_the_verifier_model_receives():
+    # --- Setup ---
+
     # The production callback chains, on agents with scripted models. The
     # system instruction is left out: it is the prompt, not what the callbacks
     # add, and lives in llm_request.config rather than contents anyway.
     verifier = LlmAgent(
         name=ai_verifier.name,
-        model=verifier_llm,
+        model=ScriptedLlm(
+            model="fake",
+            script=[genai_types.ModelContent(parts=[genai_types.Part(text="done")])],
+            seen=[],
+        ),
         before_model_callback=ai_verifier.before_model_callback,
     )
+    # Calls the verifier once with REQUEST.
     writer = LlmAgent(
         name="writer",
         model=ScriptedLlm(
@@ -160,6 +145,25 @@ async def verifier_model_input() -> tuple[list[genai_types.Content], AsyncMock]:
         tools=[AgentTool(verifier)],
         before_tool_callback=ai_writer.before_tool_callback,
     )
+    # One outcome per URL url-resolver is sent.
+    resolver = AsyncMock(
+        return_value=[
+            outcome(
+                RESOLVED,
+                ResolveStatus.RESOLVED,
+                title="Today's news",
+                summary="Page text fetched today",
+            ),
+            outcome(
+                DEAD, ResolveStatus.DEAD, error="domain name could not be resolved"
+            ),
+            outcome(ARCHIVED, ResolveStatus.RESOLVER_CANT_FETCH, error="blocked"),
+            outcome(
+                NOTHING, ResolveStatus.RESOLVER_CANT_FETCH, error="unsupported type"
+            ),
+        ]
+    )
+
     runner = InMemoryRunner(agent=writer, app_name="verifier_model_input_test")
     session = await runner.session_service.create_session(
         app_name=runner.app_name, user_id="u"
@@ -181,7 +185,8 @@ async def verifier_model_input() -> tuple[list[genai_types.Content], AsyncMock]:
                             response={
                                 "cite_as": f"[^{CITE_ID}]",
                                 "article": {
-                                    "text": ARTICLE_TEXT,
+                                    "text": "Vaccines contain microchips! "
+                                    f"Forward this: {CITED}",
                                     "hyperlinks": [
                                         cofacts_link(DEAD),
                                         cofacts_link(ARCHIVED),
@@ -195,7 +200,8 @@ async def verifier_model_input() -> tuple[list[genai_types.Content], AsyncMock]:
         ),
     )
 
-    resolver = AsyncMock(return_value=RESOLVER_RESULTS)
+    # --- Run ---
+
     with patch("cofacts_ai.resolved_pages.resolve_urls", resolver):
         async for _ in runner.run_async(
             user_id="u",
@@ -204,16 +210,14 @@ async def verifier_model_input() -> tuple[list[genai_types.Content], AsyncMock]:
         ):
             pass
 
-    [request] = verifier_llm.seen
-    return request.contents, resolver
-
-
-async def test_what_the_verifier_model_receives():
-    contents, resolver = await verifier_model_input()
+    # --- Assert ---
 
     # Every web page URL the writer wrote: not CITED, and neither media URL.
     resolver.assert_awaited_once_with([RESOLVED, DEAD, ARCHIVED, NOTHING])
-    assert contents == [
+    # The one request the verifier's model was sent.
+    assert isinstance(verifier.model, ScriptedLlm)
+    [request] = verifier.model.seen
+    assert request.contents == [
         genai_types.Content(
             role="user",
             parts=[
