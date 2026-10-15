@@ -1,18 +1,21 @@
-"""What the ai_verifier model actually receives, end to end.
+"""One ai_writer -> ai_verifier call, end to end, read from both models' side.
 
 The other tests check one behavior each, mostly by part prefix. This one is
 for reading: it runs the production callback chains -- the writer's
-`before_tool_callback` and the verifier's `before_model_callback` -- through a
-real AgentTool, and asserts the verifier's final `LlmRequest.contents` against
-a literal. That list is what Langfuse shows as the verifier's `call_llm` input,
-so a change to any injected part's tag or wording shows up here as a diff.
+`before_tool_callback` and `after_tool_callback`, the verifier's
+`before_model_callback` and `after_model_callback` -- through a real
+AgentTool, with a scripted model on both sides, and asserts two literals: what
+the verifier's model is sent, and what the writer's model gets back. Those are
+what Langfuse shows as each agent's `call_llm` input, so a change to any
+injected part's tag or wording, or to the shape of the result, shows up here as
+a diff.
 
-One URL per url-resolver outcome: resolved, DEAD (whose archived copy is
-withheld), a fetch failure with an archived copy, and a fetch failure without
-one, which gets nothing so url_context has a clean shot at it. The request also
-cites the Cofacts message, whose URL arrives inside the hoisted citation and
-must not be fetched: cited text is context to read, and the writer asks for a
-page only by writing its URL in the request.
+The writer's request names one URL per url-resolver outcome: resolved, DEAD
+(whose archived copy is withheld), a fetch failure with an archived copy, and
+a fetch failure without one, which gets nothing so url_context has a clean shot
+at it. It also cites the Cofacts message, whose URL arrives inside the hoisted
+citation and must not be fetched: cited text is context to read, and the writer
+asks for a page only by writing its URL in the request.
 
 The request also carries a YouTube video and a Cofacts media file. Neither is
 a web page: url-resolver could only scrape a video page's HTML, so neither is
@@ -20,6 +23,15 @@ sent to it and neither gets a page part. Instead each becomes a FileData part
 Gemini perceives as media -- the YouTube URL as is, the Cofacts storage URL
 converted to its `gs://` form -- appended right after the request text, ahead
 of the page parts, because the media callbacks run before the pre-fetch.
+
+The verifier's model then answers with url_context grounding for the one page
+url-resolver could not read: the PDF. What the writer gets back is that report
+plus `sources`, the pages the verifier actually read this call -- the union of
+what url-resolver resolved and what url_context grounded. So the resolved page
+and the PDF are listed, and nothing else is: the dead link was read by neither,
+and the archived page was read only as Cofacts' old copy, which is background,
+never a source. `sources` is what the writer may cite, so a URL that sneaks in
+here is one a published reply can claim the verifier read.
 """
 
 from textwrap import dedent
@@ -86,7 +98,10 @@ def cofacts_link(url: str) -> dict:
 
 class ScriptedLlm(BaseLlm):
     """Replies from a script, one response per model call, and keeps every
-    request it was sent so a test can inspect what the model actually saw."""
+    request it was sent so a test can inspect what the model actually saw.
+
+    A script entry is either the reply's content or, when the reply needs more
+    than that (e.g. grounding metadata), the whole LlmResponse."""
 
     script: list
     seen: list = []
@@ -95,10 +110,11 @@ class ScriptedLlm(BaseLlm):
         self, llm_request: LlmRequest, stream: bool = False
     ) -> AsyncGenerator[LlmResponse, None]:
         self.seen.append(llm_request)
-        yield LlmResponse(content=self.script.pop(0))
+        reply = self.script.pop(0)
+        yield reply if isinstance(reply, LlmResponse) else LlmResponse(content=reply)
 
 
-async def test_what_the_verifier_model_receives():
+async def test_one_verifier_call():
     # --- Setup ---
 
     # The production callback chains, on agents with scripted models. The
@@ -108,11 +124,33 @@ async def test_what_the_verifier_model_receives():
         name=ai_verifier.name,
         model=ScriptedLlm(
             model="fake",
-            script=[genai_types.ModelContent(parts=[genai_types.Part(text="done")])],
+            script=[
+                # The verifier's report. url_context grounds only the PDF: the
+                # one page url-resolver could not read for it.
+                LlmResponse(
+                    content=genai_types.ModelContent(
+                        parts=[
+                            genai_types.Part(text="No page says vaccines hold chips.")
+                        ]
+                    ),
+                    grounding_metadata=genai_types.GroundingMetadata(
+                        grounding_chunks=[
+                            genai_types.GroundingChunk(
+                                web=genai_types.GroundingChunkWeb(
+                                    uri=NOTHING_URL, title="Annual report"
+                                )
+                            )
+                        ]
+                    ),
+                )
+            ],
             seen=[],
         ),
         # Under test: the verifier's production before_model_callback chain.
         before_model_callback=ai_verifier.before_model_callback,
+        # Under test: the verifier's production after_model_callback, which
+        # builds `sources`.
+        after_model_callback=ai_verifier.after_model_callback,
     )
     # Calls the verifier once, with a request naming every kind of URL.
     writer = LlmAgent(
@@ -124,6 +162,10 @@ async def test_what_the_verifier_model_receives():
                     parts=[
                         genai_types.Part(
                             function_call=genai_types.FunctionCall(
+                                # Gemini sends no id, so ADK mints a random
+                                # `adk-` one; fixed here so `cite_as` below is
+                                # a literal.
+                                id="adk-verify01",
                                 name=verifier.name,
                                 args={
                                     "request": dedent(f"""\
@@ -148,6 +190,10 @@ async def test_what_the_verifier_model_receives():
         tools=[AgentTool(verifier)],
         # Under test: the writer's production before_tool_callback chain.
         before_tool_callback=ai_writer.before_tool_callback,
+        # Under test: the writer's production after_tool_callback, which turns
+        # the verifier's JSON reply into the dict its model reads and stamps
+        # it with `cite_as`.
+        after_tool_callback=ai_writer.after_tool_callback,
     )
     # One outcome per URL url-resolver is sent.
     resolver = AsyncMock(
@@ -168,7 +214,7 @@ async def test_what_the_verifier_model_receives():
         ]
     )
 
-    runner = InMemoryRunner(agent=writer, app_name="verifier_model_input_test")
+    runner = InMemoryRunner(agent=writer, app_name="verifier_round_trip_test")
     session = await runner.session_service.create_session(
         app_name=runner.app_name, user_id="u"
     )
@@ -290,3 +336,33 @@ async def test_what_the_verifier_model_receives():
             ],
         )
     ]
+
+    # What the writer's model gets back: the last turn of its second request.
+    assert isinstance(writer.model, ScriptedLlm)
+    assert writer.model.seen[1].contents[-1] == genai_types.Content(
+        role="user",
+        parts=[
+            genai_types.Part(
+                function_response=genai_types.FunctionResponse(
+                    name=verifier.name,
+                    response={
+                        "content": "No page says vaccines hold chips.",
+                        "sources": [
+                            # Read by url-resolver, and listed under the URL the
+                            # writer asked about.
+                            {"title": "Today's news", "url": RESOLVED_URL},
+                            # url-resolver could not fetch it, but url_context
+                            # grounded it.
+                            {"title": "Annual report", "url": NOTHING_URL},
+                            # No DEAD_URL: a dead link is never a source.
+                            # No ARCHIVED_URL: the verifier read Cofacts' archived
+                            # copy, but archived text is never a source.
+                        ],
+                        "cite_as": "[^verifier-verify01]",
+                        "cite_hint": "To let a sub-agent read this result in "
+                        "full, write [^verifier-verify01] in its `request`.",
+                    },
+                )
+            )
+        ],
+    )

@@ -12,10 +12,11 @@ sees the text); `TestArchivedFallback` is how `inject_resolved_url_content`
 uses them.
 
 The whole path through a real AgentTool -- the boundary that dropped the
-earlier `temp:` state -- is in `test_verifier_model_input.py`, which also
+earlier `temp:` state -- is in `test_verifier_round_trip.py`, which also
 pins the basic outcomes: an unfetchable URL gets its archived copy with the
-crawl date, a DEAD one gets none, one without a copy gets nothing, and the
-staged block never reaches the model. The tests here cover what that one
+crawl date, a DEAD one gets none, one without a copy gets nothing, the
+staged block never reaches the model, and the archived page is never listed
+in the `sources` the writer gets back. The tests here cover what that one
 request does not.
 """
 
