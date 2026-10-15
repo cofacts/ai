@@ -11,6 +11,7 @@ This module implements a hierarchical agent system with:
 import asyncio
 import json
 import logging
+import re
 import time
 from datetime import datetime
 from typing import Any, Optional
@@ -42,7 +43,6 @@ from .agent_names import (
 )
 from .archived_pages import stage_archived_links, unpack_archived_links
 from .media_filedata import (
-    _YOUTUBE_URL_RE,
     inject_article_attachment,
     inject_cofacts_media_filedata,
 )
@@ -229,6 +229,11 @@ async def append_verifier_sources(
         ensure_ascii=False,
     )
     return _set_text_content(llm_response, serialized)
+
+
+_YOUTUBE_URL_RE = re.compile(
+    r"https?://(?:www\.)?(?:youtube\.com/(?:watch\?[^\s\"'<>]*v=|shorts/|live/|embed/|v/)|youtu\.be/)[^\s\"'<>]+"
+)
 
 
 def inject_youtube_filedata(
