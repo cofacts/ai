@@ -1,0 +1,294 @@
+"""Async gRPC client for the Cofacts url-resolver service.
+
+url-resolver (https://github.com/cofacts/url-resolver) returns a URL's text
+as `summary`, or an explicit error when the page could not be fetched. It
+tries a plain HTTP fetch of the page's metadata first, and when canonical,
+title, description and image are all present, `summary` is the page's own
+description (`twitter:description || og:description || description`), often
+one or two sentences. Only when metadata is incomplete does it drive a
+headless browser and return the main body text extracted by Readability.js.
+That default suits the Cofacts site's link previews, which share the service,
+so it is not changed for the verifier. This module wraps its `ResolveUrl` RPC with the semantics the
+verifier callback needs: `html` (the full raw page, 100KB+) is dropped before
+it ever leaves this module, resolver errors are bucketed into "the URL is
+actually dead" vs. "the resolver merely couldn't fetch it" (see
+`ResolveStatus`), and a resolver-wide outage never gets confused with either
+— see the module-level docstring on `ResolveStatus` for why that distinction
+matters.
+"""
+
+import logging
+import os
+from dataclasses import dataclass
+from enum import Enum
+from typing import Callable, Optional, TypeVar
+
+import grpc
+
+from ._generated import resolve_error_pb2, url_resolver_pb2, url_resolver_pb2_grpc
+
+logger = logging.getLogger(__name__)
+
+_N = TypeVar("_N", int, float)
+
+DEFAULT_ADDRESS = "url-resolver:4000"
+DEFAULT_TIMEOUT = 30.0
+
+# Per-URL time budget used to scale the deadline for a batch, when
+# URL_RESOLVER_TIMEOUT is not explicitly set. url-resolver tries a plain HTTP
+# fetch first (fast) and only falls back to driving a real browser
+# (Cloudflare Browser Rendering in production — see PR #123) for URLs whose
+# page lacks enough <meta> tags to answer with; that fallback pays a full
+# navigation (network round-trip to Cloudflare + page load) per URL. The
+# whole `ResolveUrl` streaming call shares ONE deadline across every URL in
+# the batch, so a flat 30s default silently starves anything past the first
+# few browser-backed URLs — see `resolve_urls`.
+#
+# This has no upper cap: at the verifier's `URL_RESOLVER_MAX_URLS` (default 20)
+# the deadline reaches 200s, which is deliberately allowed to run that long rather than
+# reintroduce the premature-cutoff bug this exists to fix — Cloud Run's own
+# request timeout (900s, `service.template.yaml`) is the real ceiling. That
+# does mean a slow/stuck resolver can now hold a verifier turn open for
+# minutes rather than 30s; `URL_RESOLVER_TIMEOUT` is the escape hatch if that
+# trade-off ever needs revisiting for a particular deployment.
+DEFAULT_PER_URL_TIMEOUT = 10.0
+
+# url-resolver sends each page's full raw `html` over the wire (after a
+# browser scrape it is `page.content()`), and gRPC's default 4MB receive limit
+# turns one heavy page into RESOURCE_EXHAUSTED for the whole stream: every URL
+# not yet answered degrades to TIMEOUT, or all of them to RESOLVER_UNAVAILABLE.
+# Dropping `html` client-side cannot help -- it has already arrived, and
+# url-resolver's response is left unchanged (ADR 0722 section 3) -- so make
+# room for it.
+MAX_RECEIVE_MESSAGE_BYTES = 64 * 1024 * 1024
+
+
+class UrlResolverConfigError(ValueError):
+    """A `URL_RESOLVER_*` setting that cannot be parsed.
+
+    Its own type so that callers which degrade gracefully on a resolver outage
+    can tell this apart and let it through: a typo in the deployment config is
+    not an outage, and swallowing it would switch pre-fetch off for every turn
+    with nothing but a log line to show for it.
+    """
+
+
+def env_number(name: str, parse: Callable[[str], _N]) -> Optional[_N]:
+    """`parse(os.environ[name])`, or None when unset."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    try:
+        return parse(raw)
+    except ValueError:
+        raise UrlResolverConfigError(f"{name}={raw!r} is not a valid number") from None
+
+
+class ResolveStatus(str, Enum):
+    """Outcome of resolving one URL.
+
+    A url-resolver error is NOT proof a URL is fake — it may just be a
+    resolver limitation (a PDF, a JS-heavy page, a page that blocks
+    puppeteer) that Gemini's `url_context` tool can still read. So only
+    `DEAD` (DNS failure / malformed URL / HTTP 404 or 410) is a real "this
+    link is bad" signal, and callers should still treat even that as advisory rather than
+    an absolute ban (`url_context` may succeed where the resolver's simpler
+    fetch failed). `RESOLVER_CANT_FETCH` / `TIMEOUT` / `RESOLVER_UNAVAILABLE`
+    all mean "no signal from the resolver" — never flag those URLs as dead.
+    """
+
+    RESOLVED = "resolved"
+    DEAD = "dead"
+    RESOLVER_CANT_FETCH = "resolver_cant_fetch"
+    TIMEOUT = "timeout"
+    RESOLVER_UNAVAILABLE = "resolver_unavailable"
+
+
+# ResolveError enum values that mean the URL itself is unusable (DNS doesn't
+# resolve, or the URL is malformed) — the only errors treated as `DEAD`.
+_DEAD_URL_ERRORS = frozenset(
+    {
+        resolve_error_pb2.NAME_NOT_RESOLVED,
+        resolve_error_pb2.INVALID_URL,
+    }
+)
+
+# HTTP codes that mean the page is gone. The browser scrape still "resolves" the
+# error page it was served, so a reply's HTTP status is checked even on success;
+# any other code >= 400 is the resolver being refused, not the page missing.
+_DEAD_HTTP_STATUSES = frozenset({404, 410})
+
+# Human-readable text for each ResolveError enum value, used in the `error`
+# field so callers (and the text injected into the verifier's context) don't
+# need to know the proto enum.
+_ERROR_MESSAGES = {
+    resolve_error_pb2.UNKNOWN_ERROR: "unknown error",
+    resolve_error_pb2.NAME_NOT_RESOLVED: (
+        "domain name could not be resolved (dead/nonexistent site)"
+    ),
+    resolve_error_pb2.INVALID_URL: "malformed URL",
+    resolve_error_pb2.NOT_REACHABLE: "server not reachable",
+    resolve_error_pb2.UNSUPPORTED: (
+        "unsupported content type (not an HTML page, e.g. a PDF or download)"
+    ),
+    resolve_error_pb2.HTTPS_ERROR: "TLS/HTTPS error",
+    resolve_error_pb2.UNKNOWN_SCRAP_ERROR: "page could not be scraped",
+    resolve_error_pb2.UNKNOWN_UNFURL_ERROR: "page could not be unfurled",
+}
+
+
+@dataclass
+class ResolvedUrl:
+    """The outcome of resolving one URL. Never carries raw HTML."""
+
+    url: str
+    canonical: Optional[str]
+    title: Optional[str]
+    summary: Optional[str]
+    http_status: Optional[int]
+    status: ResolveStatus
+    error: Optional[str]
+
+    @classmethod
+    def unavailable(cls, url: str, error: str) -> "ResolvedUrl":
+        """`url` with no answer from url-resolver at all: RESOLVER_UNAVAILABLE."""
+        return cls(
+            url=url,
+            canonical=None,
+            title=None,
+            summary=None,
+            http_status=None,
+            status=ResolveStatus.RESOLVER_UNAVAILABLE,
+            error=error,
+        )
+
+
+def _bucket_error(error_enum: int) -> tuple[ResolveStatus, str]:
+    status = (
+        ResolveStatus.DEAD
+        if error_enum in _DEAD_URL_ERRORS
+        else (ResolveStatus.RESOLVER_CANT_FETCH)
+    )
+    message = _ERROR_MESSAGES.get(error_enum, "unknown error")
+    return status, message
+
+
+def _reply_to_resolved_url(reply: url_resolver_pb2.UrlReply) -> ResolvedUrl:
+    which = reply.WhichOneof("result")
+    message: Optional[str]
+    if which == "successfully_resolved" and reply.successfully_resolved:
+        # status 0 is the meta fast path, which records no HTTP code.
+        if reply.status in _DEAD_HTTP_STATUSES:
+            status = ResolveStatus.DEAD
+            message = f"page not found (HTTP {reply.status})"
+        elif reply.status >= 400:
+            status = ResolveStatus.RESOLVER_CANT_FETCH
+            message = f"server returned an error page (HTTP {reply.status})"
+        else:
+            status, message = ResolveStatus.RESOLVED, None
+    else:
+        status, message = _bucket_error(reply.error if which == "error" else 0)
+    return ResolvedUrl(
+        url=reply.url,
+        canonical=reply.canonical or None,
+        title=reply.title or None,
+        summary=reply.summary or None,
+        http_status=reply.status or None,
+        status=status,
+        error=message,
+    )
+
+
+async def resolve_urls(urls: list[str]) -> list[ResolvedUrl]:
+    """Resolves each URL to its text via url-resolver: the page's description
+    or its extracted body (see the module docstring).
+
+    Sends every URL it is given, deduped in order: which URLs are worth
+    fetching, and how many, is the caller's decision (see
+    `inject_resolved_url_content`), not a transport concern. They stream
+    through one `ResolveUrl` call and are joined back to the request by
+    `reply.url` (the server stream is not guaranteed to preserve request
+    order). Any requested URL not answered by the time the stream ends is
+    `TIMEOUT`. If the whole call fails before any reply arrives (resolver
+    down/unreachable), every URL comes back `RESOLVER_UNAVAILABLE` — never
+    treated as `DEAD`, since that would let a resolver outage falsely brand
+    good URLs as dead links.
+
+    The deadline for that one call is `URL_RESOLVER_TIMEOUT` if set, else
+    `DEFAULT_PER_URL_TIMEOUT` seconds per URL sent (floor `DEFAULT_TIMEOUT`):
+    the call covers every URL in the batch under a single shared deadline,
+    and a URL whose page lacks enough <meta> tags for url-resolver's fast
+    path pays a full browser navigation, not a cheap HTTP fetch. Scaling
+    keeps a batch of several such URLs from starving everything past the
+    first few, without having to guess one fixed number for every batch size.
+
+    `html` is never read off the reply — it must never reach an LLM.
+    """
+    address = os.environ.get("URL_RESOLVER_ADDRESS", DEFAULT_ADDRESS)
+    explicit_timeout = env_number("URL_RESOLVER_TIMEOUT", float)
+
+    to_send = list(dict.fromkeys(urls))
+    if not to_send:
+        return []
+
+    timeout = (
+        explicit_timeout
+        if explicit_timeout is not None
+        else max(DEFAULT_TIMEOUT, DEFAULT_PER_URL_TIMEOUT * len(to_send))
+    )
+
+    results: dict[str, ResolvedUrl] = {}
+    channel = grpc.aio.insecure_channel(
+        address,
+        options=[("grpc.max_receive_message_length", MAX_RECEIVE_MESSAGE_BYTES)],
+    )
+    try:
+        stub = url_resolver_pb2_grpc.UrlResolverStub(channel)
+        call = stub.ResolveUrl(
+            url_resolver_pb2.UrlsRequest(urls=to_send), timeout=timeout
+        )
+        try:
+            async for reply in call:
+                resolved = _reply_to_resolved_url(reply)
+                results[resolved.url] = resolved
+        except grpc.aio.AioRpcError as e:
+            if not results:
+                # The whole call failed before any reply arrived (resolver
+                # down/unreachable/timed out entirely) — treat every
+                # requested URL as "no signal", never as dead.
+                logger.warning(
+                    "url-resolver call failed before any reply (%s); "
+                    "treating %d URL(s) as resolver_unavailable",
+                    e,
+                    len(to_send),
+                )
+                return [
+                    ResolvedUrl.unavailable(url, str(e.details() or e))
+                    for url in to_send
+                ]
+            # Partial results already arrived; treat the rest as timed out
+            # below (they're simply absent from `results`).
+            logger.warning(
+                "url-resolver stream ended early (%s); %d/%d URL(s) resolved",
+                e,
+                len(results),
+                len(to_send),
+            )
+    finally:
+        await channel.close()
+
+    return [
+        results.get(
+            url,
+            ResolvedUrl(
+                url=url,
+                canonical=None,
+                title=None,
+                summary=None,
+                http_status=None,
+                status=ResolveStatus.TIMEOUT,
+                error="no reply received before timeout",
+            ),
+        )
+        for url in to_send
+    ]

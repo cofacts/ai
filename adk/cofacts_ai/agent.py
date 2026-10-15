@@ -41,9 +41,14 @@ from .agent_names import (
     AI_VERIFIER_NAME,
     AI_WRITER_NAME,
 )
+from .archived_pages import stage_archived_links, unpack_archived_links
 from .media_filedata import (
     inject_article_attachment,
     inject_cofacts_media_filedata,
+)
+from .resolved_pages import (
+    RESOLVED_META_STATE_KEY,
+    inject_resolved_url_content,
 )
 from .session_title import generate_session_title
 from .tools import (
@@ -53,6 +58,7 @@ from .tools import (
     search_cofacts_database,
     search_image_web,
 )
+from .url_resolver.client import ResolveStatus
 from .writer_citations import attach_citation, resolve_citations
 
 load_dotenv()
@@ -153,32 +159,70 @@ async def append_grounding_sources(
     return _set_text_content(llm_response, serialized)
 
 
-async def append_url_context_sources(
+async def append_verifier_sources(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
     """
     After-model callback for ai_verifier.
 
-    Captures clean URL-title pairs from url_context grounding_chunks and wraps
-    the response as {content, sources} JSON. url_context returns real URLs
-    directly — no redirect resolution or hallucination stripping needed.
+    Builds `sources` as the union of (a) pages url-resolver actually fetched
+    — recorded by inject_resolved_url_content in
+    callback_context.state[RESOLVED_META_STATE_KEY], since this callback only
+    sees the LlmResponse and cannot see the [RESOLVED PAGE] parts the
+    before-model callback injected into the request — and (b) url_context's
+    grounding_chunks (real URLs directly, no redirect resolution needed).
+
+    This union is self-correcting without a hard-coded ban list: a genuinely
+    dead URL is fetched by neither path (url-resolver marked it DEAD, and
+    url_context produces no grounding for a page it can't fetch either), so
+    it never appears in `sources`. A page url-resolver couldn't fetch (PDF,
+    blocked) but that url_context DID ground still shows up via (b).
+
+    Unlike the old url_context-only version, this wraps the response even
+    when url_context returned no grounding_metadata at all (e.g. the model
+    skipped calling it) — a lazy or misbehaving model should not also lose
+    the deterministically-fetched resolver sources. It only skips a response
+    with no text, so the writer's empty-response retry still fires.
     """
-    if not llm_response.grounding_metadata:
-        return None
-    metadata = llm_response.grounding_metadata
-    chunks = metadata.grounding_chunks
-    if not chunks or not llm_response.content or not llm_response.content.parts:
+    if not llm_response.content or not llm_response.content.parts:
         return None
 
-    sources_list = [
-        {
-            "title": (chunk.web and chunk.web.title) or "Unknown Source",
-            "url": chunk.web.uri if chunk.web else None,
-        }
-        for chunk in chunks
-    ]
+    resolved_meta = callback_context.state.get(RESOLVED_META_STATE_KEY) or {}
+    sources_list = []
+    seen_urls: set[str] = set()
+    for url, meta in resolved_meta.items():
+        if meta.get("status") != ResolveStatus.RESOLVED.value:
+            continue
+        # Listed under the URL the verifier was asked about, never the
+        # canonical. That is the URL its `content` names, the one the writer
+        # copies into `references` and `claim_sources`, and the one a reader
+        # will click. url-resolver's canonical is `twitter:url || og:url`,
+        # which many sites point at their homepage or a section page.
+        sources_list.append({"title": meta.get("title") or url, "url": url})
+        # The canonical still claims the page, so that url_context grounding it
+        # under that other name does not add it a second time.
+        seen_urls.add(url)
+        canonical = meta.get("canonical")
+        if canonical:
+            seen_urls.add(canonical)
+
+    metadata = llm_response.grounding_metadata
+    chunks = metadata.grounding_chunks if metadata else None
+    for chunk in chunks or []:
+        url = chunk.web.uri if chunk.web else None
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        sources_list.append(
+            {
+                "title": (chunk.web and chunk.web.title) or "Unknown Source",
+                "url": url,
+            }
+        )
 
     content = "".join(p.text or "" for p in llm_response.content.parts)
+    if not content.strip():
+        return None
 
     serialized = json.dumps(
         {"content": content, "sources": sources_list},
@@ -339,8 +383,15 @@ ai_verifier = LlmAgent(
         # Long YouTube videos can otherwise hang with no client-side deadline.
         http_options=genai_types.HttpOptions(timeout=240_000),
     ),
-    before_model_callback=[inject_youtube_filedata, inject_cofacts_media_filedata],
-    after_model_callback=append_url_context_sources,
+    before_model_callback=[
+        # First: it removes the archived-links block the writer staged, which
+        # carries URLs of its own that the URL-reading callbacks must not see.
+        unpack_archived_links,
+        inject_youtube_filedata,
+        inject_cofacts_media_filedata,
+        inject_resolved_url_content,
+    ],
+    after_model_callback=append_verifier_sources,
     instruction=f"""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
@@ -351,10 +402,33 @@ ai_verifier = LlmAgent(
     like `<get_single_cofacts_article-1a2b3c> ... </get_single_cofacts_article-1a2b3c>`; a matching
     `[^get_single_cofacts_article-1a2b3c]` marker in the prose points at that block.
 
+    ## Pre-fetched page text
+    For plain web URLs, the system has already fetched the page and injected its text,
+    verbatim, as a `[RESOLVED PAGE] <url>` part below — sometimes only the page's short
+    description. Quote from it, never from training knowledge or a URL's plausibility;
+    where it is too short to settle a claim, judge from url_context instead.
+    A `[LINK NOT FOUND] <url>` note means the system's fetcher could not resolve that URL
+    at all (likely nonexistent or malformed): treat this as advisory, not a ban — still try
+    url_context on it; only if url_context ALSO retrieves no content should you report the
+    claim as ✗ / cannot-verify for that link, and never present it as a supporting source.
+    An `[ARCHIVED PAGE] <url>` part is page text Cofacts crawled ON AN EARLIER DATE, shown
+    only because the fetcher could not reach the page just now. The part states when it was
+    crawled, which can be years ago. Use it as background to understand what the link was
+    about; do NOT treat it as evidence that the page says this today, and never cite it as
+    a source you read. If url_context can still read the page, that reading wins over the
+    archived text wherever the two disagree.
+    A URL with none of these parts means the system's fetcher could not get it this time
+    (e.g. a PDF, a blocked page, a timeout, or more URLs than it fetches per turn) and no
+    archived copy exists. That says nothing about the URL itself — fall back to url_context
+    exactly as for any other URL.
+
     ## Your Task
     1. Call url_context for ALL provided web/news/YouTube page URLs in one call (up to 20) —
-       this is MANDATORY. url_context fetches web PAGE metadata (title, publish date,
-       description) from the HTML.
+       this is MANDATORY, even for URLs that already have injected `[RESOLVED PAGE]` text:
+       url_context is still the only source for page METADATA (title, publish date,
+       description) and for anything the system's fetcher could not get.
+       Division of labour: **`[RESOLVED PAGE]` text first; url_context for its gaps and
+       page metadata / upload date / video content (+ FileData)**.
        For video URLs like YouTube, page metadata and video frames are complementary:
        - url_context → upload date, uploader name, page title/description
        - FileData → observable video content (speech, visuals, on-screen text)
@@ -780,7 +854,9 @@ ai_writer = LlmAgent(
         )
     ),
     before_model_callback=inject_article_attachment,
-    before_tool_callback=resolve_citations,
+    # resolve_citations first: it may cancel the call, and the URLs it hoists
+    # into the request count as mentioned for stage_archived_links.
+    before_tool_callback=[resolve_citations, stage_archived_links],
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,
     after_agent_callback=[update_last_event_time, generate_session_title],
@@ -844,6 +920,10 @@ ai_writer = LlmAgent(
     - Anything is citable this way — the Cofacts article, a verifier report, an investigator's
       findings, one of your own `draft_factcheck_response` proposals, even another proofreader's
       feedback. If the sub-agent needs to read it, cite it rather than summarizing it.
+    - **Citing does not ask `{AI_VERIFIER_NAME}` to read a page.** The system fetches page text
+      only for URLs written in your own `request`, not for URLs inside a cited block. To have a
+      page checked, write its URL in the request itself, even when it already appears in the
+      article you cite.
     - You do not have to place the citation anywhere in particular: the text is always hoisted to
       the top, so a citation in the middle of a sentence still reads cleanly.
     - Cite **exactly what you mean**. Citing the wrong id succeeds silently and sends the wrong
