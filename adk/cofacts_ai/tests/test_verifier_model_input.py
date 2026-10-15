@@ -38,19 +38,19 @@ from google.genai import types as genai_types
 from cofacts_ai.agent import ai_verifier, ai_writer
 from cofacts_ai.url_resolver.client import ResolvedUrl, ResolveStatus
 
-RESOLVED = "https://news.example.com/live"
-DEAD = "https://gone.example.com/a"
-ARCHIVED = "https://news.example.com/blocked"
-NOTHING = "https://news.example.com/report.pdf"
+RESOLVED_URL = "https://news.example.com/live"
+DEAD_URL = "https://gone.example.com/a"
+ARCHIVED_URL = "https://news.example.com/blocked"
+NOTHING_URL = "https://news.example.com/report.pdf"
 # Only inside the cited Cofacts message.
-CITED = "https://rumor.example.com/post"
+CITED_URL = "https://rumor.example.com/post"
 # Media, not pages: watched through FileData, never pre-fetched.
-YOUTUBE = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-MEDIA = (
+YOUTUBE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+MEDIA_URL = (
     "https://storage.googleapis.com/cofacts-media-collection/"
     "production/video/vid1/original"
 )
-MEDIA_GS = "gs://cofacts-media-collection/production/video/vid1/original"
+MEDIA_GS_URL = "gs://cofacts-media-collection/production/video/vid1/original"
 
 
 def outcome(
@@ -128,12 +128,12 @@ async def test_what_the_verifier_model_receives():
                                 args={
                                     "request": dedent(f"""\
                                         Check the claim in [^get_single_cofacts_article-art1]: vaccines contain microchips.
-                                        {RESOLVED}
-                                        {DEAD}
-                                        {ARCHIVED}
-                                        {NOTHING}
-                                        {YOUTUBE}
-                                        {MEDIA}""")
+                                        {RESOLVED_URL}
+                                        {DEAD_URL}
+                                        {ARCHIVED_URL}
+                                        {NOTHING_URL}
+                                        {YOUTUBE_URL}
+                                        {MEDIA_URL}""")
                                 },
                             )
                         )
@@ -153,17 +153,17 @@ async def test_what_the_verifier_model_receives():
     resolver = AsyncMock(
         return_value=[
             outcome(
-                RESOLVED,
+                RESOLVED_URL,
                 ResolveStatus.RESOLVED,
                 title="Today's news",
                 summary="Page text fetched today",
             ),
             outcome(
-                DEAD, ResolveStatus.DEAD, error="domain name could not be resolved"
+                DEAD_URL, ResolveStatus.DEAD, error="domain name could not be resolved"
             ),
-            outcome(ARCHIVED, ResolveStatus.RESOLVER_CANT_FETCH, error="blocked"),
+            outcome(ARCHIVED_URL, ResolveStatus.RESOLVER_CANT_FETCH, error="blocked"),
             outcome(
-                NOTHING, ResolveStatus.RESOLVER_CANT_FETCH, error="unsupported type"
+                NOTHING_URL, ResolveStatus.RESOLVER_CANT_FETCH, error="unsupported type"
             ),
         ]
     )
@@ -173,8 +173,8 @@ async def test_what_the_verifier_model_receives():
         app_name=runner.app_name, user_id="u"
     )
     # An earlier Cofacts lookup in the writer's history: the message the
-    # writer cites, and archived copies of the DEAD URL and of ARCHIVED -- but
-    # not of NOTHING.
+    # writer cites, and archived copies of DEAD_URL and of ARCHIVED_URL -- but
+    # not of NOTHING_URL.
     await runner.session_service.append_event(
         session,
         Event(
@@ -190,10 +190,10 @@ async def test_what_the_verifier_model_receives():
                                 "cite_as": "[^get_single_cofacts_article-art1]",
                                 "article": {
                                     "text": "Vaccines contain microchips! "
-                                    f"Forward this: {CITED}",
+                                    f"Forward this: {CITED_URL}",
                                     "hyperlinks": [
-                                        cofacts_link(DEAD),
-                                        cofacts_link(ARCHIVED),
+                                        cofacts_link(DEAD_URL),
+                                        cofacts_link(ARCHIVED_URL),
                                     ],
                                 },
                             },
@@ -216,8 +216,10 @@ async def test_what_the_verifier_model_receives():
 
     # --- Assert ---
 
-    # Every web page URL the writer wrote: not CITED, and neither media URL.
-    resolver.assert_awaited_once_with([RESOLVED, DEAD, ARCHIVED, NOTHING])
+    # Every web page URL the writer wrote: not CITED_URL, and neither media URL.
+    resolver.assert_awaited_once_with(
+        [RESOLVED_URL, DEAD_URL, ARCHIVED_URL, NOTHING_URL]
+    )
     # The one request the verifier's model was sent.
     assert isinstance(verifier.model, ScriptedLlm)
     [request] = verifier.model.seen
@@ -230,51 +232,51 @@ async def test_what_the_verifier_model_receives():
                 genai_types.Part(
                     text=dedent(f"""\
                         <get_single_cofacts_article-art1>
-                        Vaccines contain microchips! Forward this: {CITED}
+                        Vaccines contain microchips! Forward this: {CITED_URL}
                         </get_single_cofacts_article-art1>
 
                         ---
 
                         Check the claim in [^get_single_cofacts_article-art1]: vaccines contain microchips.
-                        {RESOLVED}
-                        {DEAD}
-                        {ARCHIVED}
-                        {NOTHING}
-                        {YOUTUBE}
-                        {MEDIA}""")
+                        {RESOLVED_URL}
+                        {DEAD_URL}
+                        {ARCHIVED_URL}
+                        {NOTHING_URL}
+                        {YOUTUBE_URL}
+                        {MEDIA_URL}""")
                 ),
                 # The media come first, one FileData part each. Vertex AI
                 # rejects a FileData without a mime type, and reads `gs://`
                 # objects directly with the runtime service account.
                 genai_types.Part(
                     file_data=genai_types.FileData(
-                        file_uri=YOUTUBE, mime_type="video/webm"
+                        file_uri=YOUTUBE_URL, mime_type="video/webm"
                     )
                 ),
                 genai_types.Part(
                     file_data=genai_types.FileData(
                         # Typed from the `/video/` segment of the path.
-                        file_uri=MEDIA_GS,
+                        file_uri=MEDIA_GS_URL,
                         mime_type="video/mp4",
                     )
                 ),
-                # Injected notes and pages follow, grouped by kind. NOTHING has
+                # Injected notes and pages follow, grouped by kind. NOTHING_URL has
                 # no part at all.
                 genai_types.Part(
-                    text=f"[LINK NOT FOUND] {DEAD}: domain name could not be "
+                    text=f"[LINK NOT FOUND] {DEAD_URL}: domain name could not be "
                     "resolved. url-resolver could not resolve this URL (likely "
                     "nonexistent/malformed). Verify with url_context; if it also "
                     "retrieves no content, do NOT claim this link supports any "
                     "claim."
                 ),
                 genai_types.Part(
-                    text=f"[RESOLVED PAGE] {RESOLVED}\n"
+                    text=f"[RESOLVED PAGE] {RESOLVED_URL}\n"
                     "TITLE: Today's news\n"
                     "---\n"
                     "Page text fetched today"
                 ),
                 genai_types.Part(
-                    text=f"[ARCHIVED PAGE] {ARCHIVED}\n"
+                    text=f"[ARCHIVED PAGE] {ARCHIVED_URL}\n"
                     "TITLE: Old title\n"
                     "url-resolver could not reach this page just now. The text "
                     "below is what Cofacts crawled on 2018-09-25, NOT what the "
