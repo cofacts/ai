@@ -91,6 +91,31 @@ callback.
 [multimodal perception on Vertex AI](decisions/20260606-multimodal-perception-vertex-ai.md),
 [auth token via ContextVar](decisions/20260603-auth-token-contextvar.md).
 
+## Frontend design system
+
+The UI follows the Penpot file **Cofacts-2026** and the designer's accessibility guide. The
+`cofacts-frontend` skill (`.agents/skills/cofacts-frontend/`) holds the working rules: token →
+class mapping, Penpot MCP recipes, accessibility, file layout, and the data layer. This section
+is only the overview.
+
+- **Tokens:** `design/tokens.json` (exported from Penpot) is the source. `pnpm tokens` generates
+  `src/styles/tokens.css` (CSS variables + Tailwind `@theme`), `src/styles/tokens.generated.ts`
+  (names for `cn()`'s tailwind-merge, lists for Storybook) and the skill's `references/tokens.md`.
+  CI runs `pnpm tokens:check`. Class = token name without its role prefix
+  (`surface-raised` → `bg-raised`, `type-body-m` → `text-body-m`); spacing is 1px per unit;
+  Tailwind's default palette and sizes are switched off.
+- **Themes:** semantic tokens flip between light and dark by `prefers-color-scheme`, overridable
+  with `<html data-theme>`. Components never use `dark:`.
+- **Global CSS:** `src/styles/global.css` holds only site-wide rules (tokens, body base, the
+  focus ring).
+- **Transition:** Storybook (Foundations/Tokens) already uses the new system; the app still
+  loads the old `src/styles.css` until its components are replaced.
+- **Data:** the browser never calls rumors-api; route files define server functions, and data
+  flows through the TanStack Query cache (see the skill's `references/data-layer.md`).
+
+Design record: the kb doc
+[Phase 3 網站遷移與前端架構](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Phase%203%20網站遷移與前端架構.md).
+
 ## Data & sessions
 
 ADK sessions are persisted with `DatabaseSessionService` — SQLite locally, PostgreSQL via the
