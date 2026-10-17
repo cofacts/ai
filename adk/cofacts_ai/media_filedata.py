@@ -26,16 +26,6 @@ _ARTICLE_TYPE_MIME = {
     "AUDIO": "audio/mpeg",
 }
 
-# Article media types injected directly into the writer's request. Only IMAGE:
-# a still image has no temporal narration for the orchestrator to get captured by
-# or parrot back, and the writer genuinely needs to see it (manipulated charts,
-# photos). VIDEO/AUDIO are deliberately excluded — handing the orchestrator
-# temporal media destabilizes it (it narrates/confabulates the playback instead
-# of orchestrating). For those the writer relies on the transcript Cofacts
-# already extracts into the article text, and delegates watching/listening to the
-# verifier, which returns an enumerated claim inventory (see inject_cofacts_media_filedata).
-_WRITER_INJECTED_TYPES = {"IMAGE"}
-
 # Matches a Cofacts media reference in free text — a gs:// URI or a GCS HTTPS
 # URL (signed or not) for the cofacts-media-collection bucket. Used to spot the
 # media URL the writer forwards to the verifier in a plain-text instruction.
@@ -97,72 +87,6 @@ def _mime_for_media_uri(uri: str) -> str:
     if "/audio/" in path:
         return _ARTICLE_TYPE_MIME["AUDIO"]
     return _ARTICLE_TYPE_MIME["VIDEO"]
-
-
-def inject_article_attachment(
-    callback_context: CallbackContext,
-    llm_request: LlmRequest,
-) -> None:
-    """Before-model callback for ai_writer.
-
-    Injects a Part(file_data=...) sibling carrying the article's media as a
-    ``gs://`` URI alongside the get_single_cofacts_article FunctionResponse so
-    Gemini can perceive the media directly. FunctionResponse.parts is a Python
-    SDK-only field not transmitted to the model; the file_data must live at the
-    content.parts level to be seen by the LLM.
-
-    Only IMAGE articles are injected (see _WRITER_INJECTED_TYPES); VIDEO/AUDIO are
-    left for the verifier to watch/listen to, while the writer works from the
-    transcript in the article text.
-
-    after_tool already rewrites the writer-visible attachmentUrl to gs://, so the
-    stored value is normally a gs:// URI; signed_url_to_gs(...) returns None for a
-    gs:// value and we fall back to it unchanged.
-    """
-    for content in llm_request.contents:
-        if content.role != "user" or not content.parts:
-            continue
-
-        # Media already attached to this content, keyed by URI, so re-running the
-        # callback on a later turn never injects a duplicate of the same object.
-        seen = {
-            p.file_data.file_uri
-            for p in content.parts
-            if p.file_data and p.file_data.file_uri
-        }
-
-        # Collect the parts to add and append them after the scan, rather than
-        # mutating content.parts mid-iteration. A single user turn can carry more
-        # than one get_single_cofacts_article response (the user may paste several
-        # article URLs at once), so handle every article response, not just the first.
-        new_parts = []
-        for part in content.parts:
-            fr = part.function_response
-            if not fr or fr.name != "get_single_cofacts_article":
-                continue
-            article = (fr.response or {}).get("article") or {}
-            article_type = article.get("articleType")
-            attachment_url = article.get("attachmentUrl")
-            if not attachment_url or article_type not in _WRITER_INJECTED_TYPES:
-                continue
-            gs_uri = signed_url_to_gs(attachment_url) or attachment_url
-            if gs_uri in seen:
-                continue
-            seen.add(gs_uri)
-            new_parts.append(
-                genai_types.Part(
-                    file_data=genai_types.FileData(
-                        file_uri=gs_uri,
-                        # Coarse MIME type derived from articleType enum; the actual
-                        # subtype (e.g. image/jpeg vs image/webp) may differ, but
-                        # Gemini is permissive enough to handle the mismatch.
-                        mime_type=_ARTICLE_TYPE_MIME[article_type],
-                    )
-                )
-            )
-
-        if new_parts:
-            content.parts = list(content.parts) + new_parts
 
 
 def inject_cofacts_media_filedata(

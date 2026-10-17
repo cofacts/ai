@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.apps import App
+from google.adk.models import AnthropicGenerateContentConfig, Claude
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.plugins.save_files_as_artifacts_plugin import (
@@ -41,10 +42,7 @@ from .agent_names import (
     AI_VERIFIER_NAME,
     AI_WRITER_NAME,
 )
-from .media_filedata import (
-    inject_article_attachment,
-    inject_cofacts_media_filedata,
-)
+from .media_filedata import inject_cofacts_media_filedata
 from .session_title import generate_session_title
 from .tools import (
     draft_factcheck_response,
@@ -54,6 +52,7 @@ from .tools import (
     search_image_web,
 )
 from .writer_citations import attach_citation, resolve_citations
+from .writer_request import prepare_writer_request
 
 load_dotenv()
 
@@ -772,14 +771,19 @@ def handle_writer_tool_error(
 # This architecture respects ADK constraints while maintaining full functionality.
 ai_writer = LlmAgent(
     name=AI_WRITER_NAME,
-    model="gemini-3-flash-preview",
+    # Claude on Vertex AI (same GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION as
+    # Gemini). The writer is text-only: it no longer perceives images itself and
+    # delegates looking at media to the verifier. Thinking counts toward
+    # max_tokens, so leave room for it on top of a long draft.
+    model=Claude(model="claude-haiku-5-5", max_tokens=32000),
     description="AI agent that orchestrates fact-checking process and composes final fact-check replies for Cofacts.",
-    generate_content_config=genai_types.GenerateContentConfig(
-        thinking_config=genai_types.ThinkingConfig(
-            include_thoughts=True, thinking_level=genai_types.ThinkingLevel.HIGH
-        )
+    generate_content_config=AnthropicGenerateContentConfig(
+        # -1 = adaptive thinking with summarized thoughts (Claude's default is
+        # to omit them); effort "high" matches the Gemini thinking_level it replaces.
+        thinking_config=genai_types.ThinkingConfig(thinking_budget=-1),
+        effort="high",
     ),
-    before_model_callback=inject_article_attachment,
+    before_model_callback=prepare_writer_request,
     before_tool_callback=resolve_citations,
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,
@@ -876,7 +880,7 @@ ai_writer = LlmAgent(
            - **Pass the article's `attachmentUrl` value to `{AI_VERIFIER_NAME}`** — `get_single_cofacts_article` returns it as a `gs://...` URI that `{AI_VERIFIER_NAME}` can load the media directly from, so forward it as-is.
          - **For a linked external URL or YouTube video** (claims NOT in the article text): your FIRST action is to call `{AI_VERIFIER_NAME}` with the URL and ask it to "watch the video / read the page and return an exhaustive, atomic, numbered claim inventory." Include only ONE YouTube link per `{AI_VERIFIER_NAME}`/`{AI_INVESTIGATOR_NAME}` call — it can only watch one video per request, so for multiple videos make a separate call for each.
          - You can follow up and ask `{AI_VERIFIER_NAME}` to re-watch one specific aspect (a timestamp, a face, a piece of on-screen text) without re-running the whole inventory.
-       - **If the message centers on an IMAGE**: you can see the image yourself (it is injected as a FileData part), but from looking at it alone you cannot tell whether it has been repurposed, taken out of context, or AI-generated. When the claim depends on the image being authentic or used in its original context, call `search_image_web` with the article's `attachmentUrl`. `get_single_cofacts_article` returns it as a `gs://...` URI, so forward it as-is. Use `bestGuessLabels` and `webEntities` to identify what the image actually shows, and feed `pagesWithMatchingImages` (favoring earlier-dated or differently-captioned pages) to `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` to confirm the original source and date. `search_image_web` results can be noisy or incomplete, so treat them as a weak lead, never as ground truth: do not cite a matching page directly, and always confirm any lead through `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` before relying on it. `search_image_web` is for IMAGE articles only; VIDEO/AUDIO go to `{AI_VERIFIER_NAME}`.
+       - **If the message centers on an IMAGE**: you cannot see the image yourself. The article text Cofacts returns is the OCR of the image — read it there for the *written* claims. Whenever the visual layer matters (a chart's numbers or axes, who or where a photo shows, logos, layout, small print the OCR may have garbled or dropped), call `{AI_VERIFIER_NAME}` with the article's `attachmentUrl` — `get_single_cofacts_article` returns it as a `gs://...` URI that `{AI_VERIFIER_NAME}` can load the image from, so forward it as-is — and ask it to describe the image and return an exhaustive, atomic, numbered claim inventory. Never describe what the image shows beyond what the OCR text or `{AI_VERIFIER_NAME}` reported. Neither you nor `{AI_VERIFIER_NAME}` can tell from looking alone whether an image has been repurposed, taken out of context, or AI-generated. When the claim depends on the image being authentic or used in its original context, call `search_image_web` with the article's `attachmentUrl`. `get_single_cofacts_article` returns it as a `gs://...` URI, so forward it as-is. Use `bestGuessLabels` and `webEntities` to identify what the image actually shows, and feed `pagesWithMatchingImages` (favoring earlier-dated or differently-captioned pages) to `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` to confirm the original source and date. `search_image_web` results can be noisy or incomplete, so treat them as a weak lead, never as ground truth: do not cite a matching page directly, and always confirm any lead through `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` before relying on it. `search_image_web` is for IMAGE articles only; VIDEO/AUDIO go to `{AI_VERIFIER_NAME}`.
        - Identify factual statements vs. opinions in the message
        - If message contains opinions based on factual statements: prioritize verifying factual claims first
        - Determine target audience: people who might forward this message or receive it
