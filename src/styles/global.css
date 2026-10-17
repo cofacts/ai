@@ -1,0 +1,41 @@
+/*
+ * Global stylesheet for the new design system (Penpot "Cofacts-2026").
+ *
+ * Keep this file small: only rules that truly apply site-wide belong here. Component styles
+ * go in the component (Tailwind classes, or a CSS Module when Tailwind can't express it).
+ *
+ * Transition: Storybook loads this file; the app still loads src/styles.css until the
+ * vibe-coded components are replaced.
+ */
+@import 'tailwindcss';
+@import './tokens.css';
+
+@layer base {
+  html {
+    @apply bg-base font-sans text-primary;
+  }
+
+  /*
+   * Focus ring (a11y guide 05): one global rule, not a per-component variant.
+   * From the element outwards: 2px gap → 2px dark inner ring → 4px brand-yellow outer ring.
+   * The ring follows the element's border-radius.
+   */
+  :focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 2px var(--surface-base),
+      0 0 0 8px var(--border-focus-outer);
+  }
+
+  /*
+   * Inside fixed-dark areas (Footer, intro header, ActionPanel, mobile menu) the inner ring
+   * uses border-on-dark-strong, and the gap is filled with the dark surface instead of white.
+   */
+  [data-surface='dark'] :focus-visible {
+    outline-color: var(--border-on-dark-strong);
+    box-shadow:
+      0 0 0 2px var(--surface-dark),
+      0 0 0 8px var(--border-focus-outer);
+  }
+}
