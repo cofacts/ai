@@ -118,6 +118,7 @@ function utilitiesFor(name: string): Array<Utility> {
       return [
         { namespace: `--text-color-${name}`, className: `text-${name}` },
         { namespace: `--background-color-${name}`, className: `bg-${name}` },
+        { namespace: `--border-color-${name}`, className: `border-${name}` },
       ]
     case 'border':
       // The focus ring colors are used only by the global :focus-visible rule.
@@ -289,6 +290,7 @@ ${fallbackLines(Dark, '    ')}
   --spacing: 0.0625rem;
 
   --font-sans: '${fontFamily}', system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
 ${themeLines.join('\n')}
 
