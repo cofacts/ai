@@ -60,7 +60,11 @@ export const twMergeColors = {
     "accent",
     "inverse",
     "on-dark",
-    "on-dark-strong"
+    "on-dark-strong",
+    "status-incorrect",
+    "status-correct",
+    "status-opinion",
+    "status-outofscope"
   ]
 }
 
@@ -494,7 +498,8 @@ export const designTokens = {
       "name": "status-incorrect",
       "classes": [
         "text-status-incorrect",
-        "bg-status-incorrect"
+        "bg-status-incorrect",
+        "border-status-incorrect"
       ],
       "light": "#df3324",
       "dark": "#ff8a81",
@@ -504,7 +509,8 @@ export const designTokens = {
       "name": "status-correct",
       "classes": [
         "text-status-correct",
-        "bg-status-correct"
+        "bg-status-correct",
+        "border-status-correct"
       ],
       "light": "#06865b",
       "dark": "#39dea6",
@@ -514,7 +520,8 @@ export const designTokens = {
       "name": "status-opinion",
       "classes": [
         "text-status-opinion",
-        "bg-status-opinion"
+        "bg-status-opinion",
+        "border-status-opinion"
       ],
       "light": "#1673d1",
       "dark": "#42a0ff",
@@ -524,7 +531,8 @@ export const designTokens = {
       "name": "status-outofscope",
       "classes": [
         "text-status-outofscope",
-        "bg-status-outofscope"
+        "bg-status-outofscope",
+        "border-status-outofscope"
       ],
       "light": "#7c45d6",
       "dark": "#aa80ee",
