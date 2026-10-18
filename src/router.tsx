@@ -27,6 +27,9 @@ export const getRouter = () => {
 
   const router = createRouter({
     routeTree,
+    // Loaders reach the per-request QueryClient through the router context, so they can
+    // fill the cache that components read with useSuspenseQuery.
+    context: { queryClient },
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
   })
