@@ -51,7 +51,7 @@ BUCKET=<暫存用 bucket>   # Cloud SQL 的 SA 要有寫入/讀取權限：
 # 1. 建立空的資料庫
 gcloud sql databases create adk_staging --instance=cofacts --project=$PROJECT
 
-# 2. 匯出 production adk（--offload：由臨時執行個體匯出，不吃 production 資源）
+# 2. 匯出 production adk（--offload：由臨時執行個體匯出，降低來源負載；有額外費用）
 gcloud sql export sql cofacts gs://$BUCKET/adk-preview-seed.sql.gz \
   --database=adk --offload --project=$PROJECT
 
@@ -77,11 +77,17 @@ SELECT count(*) FROM sessions;   -- 與 production 相近
 
 ```sql
 GRANT "cofacts-ai@industrious-eye-145611.iam" TO postgres;
-ALTER TABLE sessions, events, app_states, user_states, adk_internal_metadata
-  OWNER TO "cofacts-ai@industrious-eye-145611.iam";
+-- 只在 adk_staging 執行；逐表 ALTER，PostgreSQL 不接受逗號分隔多張表。
+GRANT USAGE, CREATE ON SCHEMA public TO "cofacts-ai@industrious-eye-145611.iam";
+ALTER TABLE public.sessions OWNER TO "cofacts-ai@industrious-eye-145611.iam";
+ALTER TABLE public.events OWNER TO "cofacts-ai@industrious-eye-145611.iam";
+ALTER TABLE public.app_states OWNER TO "cofacts-ai@industrious-eye-145611.iam";
+ALTER TABLE public.user_states OWNER TO "cofacts-ai@industrious-eye-145611.iam";
+ALTER TABLE public.adk_internal_metadata OWNER TO "cofacts-ai@industrious-eye-145611.iam";
+-- 若本次才臨時授予角色，完成後 REVOKE 該角色 FROM postgres；不要移除原有授權。
 ```
 
-> 這是匯出當下的快照，之後 production 的新對話不會同步過去。要更新就 `DROP DATABASE adk_staging` 後重做一次。
+> 這是匯出當下的快照，之後 production 的新對話不會同步過去。要更新時先停止所有連到 staging 的服務與背景工作，再由操作者確認備份及目標 DB，重建 staging；不要在服務仍連線時直接 DROP。
 
 ### 1.2 在 PR A 修改 `.github/workflows/deploy.yml`，讓 Cloud Run 用 `adk_staging`
 
@@ -90,7 +96,13 @@ Cloud Run 只服務 `dev.cofacts.ai` 與 PR preview，所以不分 event 一律�
 ```bash
 # Cloud Run serves dev.cofacts.ai and PR previews only; production (cofacts.ai)
 # runs on GCE with its own DATABASE_URL. Keep Cloud Run off the production DB.
-export DATABASE_URL="${DATABASE_URL%/adk}/adk_staging"
+case "$DATABASE_URL" in
+  */adk) export DATABASE_URL="${DATABASE_URL%/adk}/adk_staging" ;;
+  */adk_staging) ;; # 已切換的 secret
+  *) echo "Unexpected DATABASE_URL database suffix" >&2; exit 1 ;;
+esac
+echo "Cloud Run target database: adk_staging"
+# 不輸出完整 URL；移除後面的 cat service.yaml，避免暴露環境變數。
 ```
 
 更乾淨的做法是直接把 GitHub secret `DATABASE_URL` 改成 `.../adk_staging`，workflow 就不用改。但 secret 的值看不到，之後容易誤會它接的是 production，所以建議用上面明寫在 workflow 的方式。
@@ -98,7 +110,8 @@ export DATABASE_URL="${DATABASE_URL%/adk}/adk_staging"
 - 這個修改以 commit 加進 **#163**。push 後 #163 會重新部署 preview，此時就會用 `adk_staging`（workflow 用的是 PR branch 上的檔案）。
 - **#162 要先 rebase 到新的 #163 上**才能 push，否則 #162 branch 上的 `deploy.yml` 還是舊的，preview 會接 production DB。
 - 1.1 要比這個 push 先做，否則 preview 啟動時會連不到 `adk_staging`。
-- 已經部署的 `pr-163`、`pr-162` preview 會在這次 push / rebase 後重新部署，自動改接 `adk_staging`，不需要另外處理。
+- 已經部署的 `pr-163`、`pr-162` preview 會在這次 push / rebase 後重新部署，自動改接 `adk_staging`，但仍須讀取部署後 revision 的 DB 名稱確認。
+- **其他舊 tags 與原本 100% 流量 revision 不會跟著更新**：workflow 會保留 tags。先盤點所有可存取 revision，逐一重部署到 staging 或移除 tag，並確認 dev 的 100% revision 已切換。未完成前不能宣稱所有 Cloud Run 部署已隔離；移除 tag 也不等於終止進行中的請求。
 
 ### 1.3 PR A（#163）目前內容
 
@@ -118,30 +131,38 @@ SELECT count(*) FROM events WHERE event_data ? 'node_info';   -- 應為 0（尚�
 SELECT indexname FROM pg_indexes WHERE tablename = 'events';  -- 只有 events_pkey
 ```
 
-如果 `node_info` 不是 0，代表已經有 2.x 寫入，先跑 [Phase 4 的清理 SQL](#41-清除-node_info)。
+如果 `node_info` 不是 0，代表已經有 2.x 寫入；先找出並停止所有連 production 的 2.x writers，保存備份，再依 [Phase 4 的清理 SQL](#41-清除-node_info)。
 
 ### 1.5 確認 GCE production 的 image 來源
 
-devops 文件沒有寫 `cofacts-prod` 上 ADK image 的實際 tag 與更新方式（`rumors-deploy` 的 sample 是 `cofacts/adk:latest`，實際的 `docker-compose.yml` 被 gitignore）。上線前先確認：
+2026-10-18 已透過 IAP SSH 唯讀確認：
+
+- VM：`cofacts-prod`，zone `asia-east1-b`；Compose 目錄 `/srv/rumors-deploy`。
+- service `adk` / container `rumors-deploy-adk-1`：`cofacts/adk:latest`，無 Compose build 設定。
+- 執行中的 ADK：`1.26.0`；DB 名稱 `adk`。
+- 當時 image ID：`sha256:8fb153db7939ae604be5a8f0654131cdeacd1a9c624faf588b592d6eca3dbb6e`。
+- 當時 RepoDigest：`cofacts/adk@sha256:dfc441215f9199cb4f0c1c2413c9142818b62cb50f71ae1178aabcdad8c9090d`。
+
+上線前重新讀取執行中 container 的 image ID，再以該 ID 查 RepoDigests，保存可 pull 的 digest 作 rollback；`latest` 會變動，不能作為回滾依據。
 
 ```bash
 gcloud compute ssh cofacts-prod --tunnel-through-iap --project=industrious-eye-145611 --zone=asia-east1-b
 cd /srv/rumors-deploy
-docker inspect rumors-deploy-adk-1 --format '{{.Config.Image}}'
-docker compose config | grep -A3 -E '^  (adk|cofacts-ai):'
+sudo docker inspect rumors-deploy-adk-1 --format '{{.Config.Image}} {{.Image}}'
+# 將上一行的 image ID 代入：
+sudo docker image inspect <IMAGE_ID> --format '{{json .RepoDigests}}'
 ```
 
-記下：
-
-- 目前 image 與 tag：`______________`（rollback 要用）
-- 新版 image 從哪裡來（GitHub Actions 推到 Artifact Registry 的 `backend:<sha>`？還是另外 build？）：`______________`
+**映像發布來源已確認為 [.github/workflows/cd.yaml](../.github/workflows/cd.yaml)**：
+`release/*` tag push 或手動 workflow_dispatch 才 build/push Docker Hub 的 `cofacts/adk:latest`。
+master merge 的 **Deploy** 只推 Artifact Registry 的 `backend:<sha>`，不會更新 GCE 使用的 Docker Hub image。
 
 ---
 
 ## Phase 2：PR A preview 測試
 
 1. 1.2 的 commit push 到 #163 後，等 Deploy workflow 完成。
-2. 在 workflow log 的 `Generate Service YAML` 輸出中確認 `DATABASE_URL` 結尾是 **`/adk_staging`**。
+2. 確認 workflow 的非敏感 DB 名稱輸出，並讀取實際 preview revision 的 `DATABASE_URL`，只輸出解析後的 DB 名稱，確認為 **`adk_staging`**（不要貼完整環境或 URL）。
    **不是的話立刻停止，不要打開 preview。**
 3. 確認 production DB 沒有被碰到（Cloud SQL Studio，`adk`）：
    ```sql
@@ -172,7 +193,9 @@ docker compose config | grep -A3 -E '^  (adk|cofacts-ai):'
 
 ### 3.1 Merge PR A
 
-等 GitHub Actions 的 Deploy（master）完成。
+等 GitHub Actions 的 Deploy（master）完成，確認 dev revision 已接 staging。
+
+另對已合併且驗證過的 PR A commit 執行 **CD**（手動選定 ref，或由對應 commit 建立 `release/*` tag），等待 `Build & push cofacts/adk` 成功；記錄 run、commit SHA 與產出的 Docker Hub digest。CD 也會發布 site image，但本步只更新 ADK service。
 
 ### 3.2 更新 GCE production
 
@@ -181,7 +204,8 @@ docker compose config | grep -A3 -E '^  (adk|cofacts-ai):'
 ```bash
 gcloud compute ssh cofacts-prod --tunnel-through-iap --project=industrious-eye-145611 --zone=asia-east1-b
 cd /srv/rumors-deploy
-# 修改 docker-compose.yml 中 adk 的 image tag（若是 :latest 則直接 pull）
+# 將 docker-compose.yml 中 adk.image 設為本次 CD 的 cofacts/adk@sha256:<digest>
+# 先記錄舊 digest；不可只依賴可變動的 latest
 docker compose pull adk
 docker compose up -d adk
 docker compose ps adk            # 等到 healthy
@@ -213,7 +237,9 @@ SELECT count(*) FROM events WHERE event_data ? 'node_info';   -- 開始有新對
 
 ### 4.1 清除 `node_info`
 
-先把 GCE 與 Cloud Run 都換回舊版（GCE 用 1.5 記下的 image；Cloud Run revert PR A 的 merge commit 讓 Deploy 重跑），**然後**在 `adk` 執行：
+先停止所有連 `adk` 的 2.12 writers（包含舊 preview、背景工作和進行中的請求），暫停 production 流量並保存可還原備份。GCE 的 Compose image 改回 1.5 記下的舊 digest，暫勿恢復服務；**然後**在 `adk` 執行下列 SQL。清理後啟動舊版、確認舊 session 讀取與續聊正常，再恢復流量。
+
+Cloud Run 已隔離時不必為 production rollback 降版。若也要降版，**保留 1.2 的 staging 隔離修改**，不可直接 revert 整個 PR A 導致重新連 production；其 `adk_staging` 也須獨立清理 `node_info` 或重建後才能供 1.26 使用。
 
 ```sql
 SET ROLE "cofacts-ai@industrious-eye-145611.iam";
@@ -229,12 +255,12 @@ UPDATE events SET event_data = event_data - 'node_info' WHERE event_data ? 'node
 
 ## Phase 5：PR B（writer 換 Claude Haiku 5.5）
 
-PR A 穩定後再做。此時所有環境都是 2.12，preview 也已經用 `adk_staging`，不再有 DB 相容問題。
+PR A 穩定後再做。先確認所有仍可存取的 dev / preview revision 已隔離到 `adk_staging`，且使用相容的 ADK 版本；舊 tag 不會因 merge 自動升級。
 
 ### 5.1 上線前
 
-- [x] Vertex AI Model Garden 已在 `industrious-eye-145611` 啟用 Claude Haiku 5.5（測試期間已完成）
-- [ ] 確認 GCE 的 `env-files/adk` 與 Cloud Run 的 `GOOGLE_CLOUD_LOCATION` 為 `global`，`GOOGLE_CLOUD_PROJECT=industrious-eye-145611`
+- [ ] 重新確認 Vertex AI Model Garden 已在 `industrious-eye-145611` 啟用 Claude Haiku 5.5（先前測試紀錄稱已完成；本次未驗證有效 model access）
+- [ ] 確認 GCE 與 Cloud Run 的 `GOOGLE_CLOUD_LOCATION` 為 `global`，`GOOGLE_CLOUD_PROJECT=industrious-eye-145611`
 - [ ] 確認 GCE 上 ADK 使用的 SA 有 `roles/aiplatform.user`（Claude 也走 Vertex AI）
 - [ ] Langfuse：新增 `claude-haiku-5-5` 的 model 定價（`input`、`input_cached_tokens`、`output`、`output_reasoning`；100K tokens 以上另一組價格），否則成本會顯示 $0
 - [ ] 建議在 PR B 一起處理：writer instruction 加上「使用繁體中文（台灣）回覆」（實測曾出現簡體字）
@@ -257,7 +283,25 @@ PR A 穩定後再做。此時所有環境都是 2.12，preview 也已經用 `adk
 
 ---
 
-## 附錄：本 SOP 未能確認的事項
+## 附錄：GCP 查核紀錄與待驗證事項
 
-- GCE `cofacts-prod` 上 ADK 實際使用的 image 與更新流程（1.5，我這邊沒有 GCP 權限可以登入查看）
-- `gcloud sql import sql --user=<IAM 使用者>` 對 IAM 使用者是否可行（不行就照 1.1 的備案改 owner）；若 preview 啟動時出現 `permission denied for schema public`，在 `adk_staging` 補 `GRANT ALL ON SCHEMA public TO "cofacts-ai@industrious-eye-145611.iam";`
+2026-10-18 使用本機既有 gcloud 身分完成唯讀查核，未部署、建立 DB、匯入資料或修改 IAM：
+
+| 項目 | 結果 |
+| --- | --- |
+| GCE image、版本、Compose 目錄 | 已確認，見 1.5 |
+| GCE project / location | `industrious-eye-145611` / `global`（容器環境） |
+| Cloud SQL DB | `adk` 存在，`adk_staging` 尚不存在 |
+| App DB 使用者 | `cofacts-ai@industrious-eye-145611.iam` 存在，類型為 `CLOUD_IAM_SERVICE_ACCOUNT` |
+| Cloud Run template SA | `cofacts-ai@industrious-eye-145611.iam.gserviceaccount.com` |
+| Cloud Run 流量 | 100% 在 `cofacts-ai-00496-rzg`；另有多個舊 PR tags，包括 `pr-162`；當時無 `pr-163` tag |
+
+這些是查核當下的快照，上線前須重查。SA 存在不代表 import、DDL 或 Vertex 呼叫權限已驗證。
+
+仍待實作環境驗證：
+
+- `gcloud sql import sql --user=<IAM 使用者>`：官方支援指定 import user，但本次沒有執行匯入，因此不標記為成功。若失敗，先查 operation error；確認部分匯入狀態，勿直接重跑覆蓋，再依 1.1 逐表調整 owner。啟動前以 app 角色驗證 schema USAGE/CREATE 與 table ownership。
+- Production 的 `node_info` baseline、schema、實際 GCS artifact 寫入、GCE app 的有效 Vertex 權限與 Claude 請求，尚未驗證。VM metadata 沒有列出附掛 SA，不能據此推定容器的 ADC 身分；需確認容器使用的憑證來源，勿輸出私鑰或 token。
+- 匯出前確認操作者具 Cloud SQL export/import 權限，Cloud SQL instance SA 對指定暫存 bucket 有 export 的 object create 與 import 的 object get 權限；app SA 與 instance SA 是不同身分。清除 dump 後也要依 bucket 的 soft delete / versioning / retention 設定確認殘留版本與保存期限。
+
+官方參考：[Cloud SQL SQL 匯出／匯入與權限](https://docs.cloud.google.com/sql/docs/postgres/import-export/import-export-sql)、[import --user](https://docs.cloud.google.com/sdk/gcloud/reference/sql/import/sql)。本次沒有重跑原文件所述 production dump 測試，原有實測結果仍屬先前測試紀錄。
