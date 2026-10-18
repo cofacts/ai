@@ -24,7 +24,7 @@ next model call of a turn re-injects from the artifact cache without
 re-fetching; a misconfigured char
 budget raises instead of degrading silently; a resolver outage injects nothing; and
 the artifact cache round-trips page text plus title/canonical without the
-version API, including for artifacts written before that envelope existed.
+version API, and treats an entry it cannot decode as a miss.
 """
 
 import asyncio
@@ -367,31 +367,32 @@ class TestInjectResolvedUrlContent:
         assert "body text" in part
         assert "Cached Title" in part
 
-    async def test_legacy_raw_text_artifact_still_injects(self):
-        """Artifacts written before the metadata envelope are raw page text.
+    async def test_unreadable_cache_entry_is_refetched_and_rewritten(self):
+        """A body not written by `_encode_resolved_artifact` is a cache miss.
 
-        Preview deploys already wrote some. Treating an unparseable first line
-        as page content -- rather than raising -- is what keeps those usable.
+        Raising instead would abandon the whole injection; using the body as
+        page text would trust content we did not write in that shape.
         """
         store = FakeArtifactStore()
-        store.blobs[_resolved_artifact_filename("https://old.com")] = (
-            b"legacy page body with no envelope"
-        )
+        filename = _resolved_artifact_filename("https://old.com")
+        store.blobs[filename] = b"raw page body with no metadata line"
         request = make_request(user_text("https://old.com"))
-        resolve_mock = AsyncMock(return_value=[])
+        resolve_mock = AsyncMock(
+            return_value=[resolved("https://old.com", summary="fresh body")]
+        )
 
         with patch("cofacts_ai.resolved_pages.resolve_urls", resolve_mock):
             await inject_resolved_url_content(make_context(store), request)
 
-        resolve_mock.assert_not_awaited()
+        resolve_mock.assert_awaited_once()
         [part] = [
             t
             for t in text_parts(request.contents[0])
             if t.startswith("[RESOLVED PAGE]")
         ]
-        assert "legacy page body with no envelope" in part
-        # No stored title, so the URL stands in for it.
-        assert "TITLE: https://old.com" in part
+        assert "fresh body" in part
+        assert "raw page body" not in part
+        assert store.blobs[filename].startswith(b"{")
 
     async def test_untitled_page_does_not_round_trip_as_the_string_none(self):
         """`GcsArtifactService` stringifies custom_metadata, so an untitled page
@@ -497,6 +498,18 @@ class TestUrlExtraction:
         assert self.urls(
             "https://example.com/a[^get_single_cofacts_article-1a2b3c] 說"
         ) == ["https://example.com/a"]
+
+    def test_markdown_link_whose_text_is_the_url(self):
+        # `](` is not part of a URL; without stopping there the whole link
+        # matched as one string and the real URL was never fetched.
+        assert self.urls("見 [https://a.com/x](https://a.com/x)。") == [
+            "https://a.com/x"
+        ]
+        assert self.urls("[https://a.com/x](https://a.com/y)") == [
+            "https://a.com/x",
+            "https://a.com/y",
+        ]
+        assert self.urls("[新聞標題](https://a.com/x)") == ["https://a.com/x"]
 
     def test_markdown_emphasis_and_code_are_not_part_of_the_url(self):
         assert self.urls("**https://x.com/a** 和 `https://x.com/b`") == [

@@ -65,8 +65,12 @@ RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
 _CJK_URL_STOP = "，。、！？；：〜～…—「」『』〈〉《》【】"
 
 # A `[^` ends a URL too: it opens a citation marker (`writer_citations`), which
-# the writer may put flush against the URL it cites.
-_HTTP_URL_RE = re.compile(r"https?://(?:(?!\[\^)[^\s\"'<>" + _CJK_URL_STOP + r"])+")
+# the writer may put flush against the URL it cites. So does `](`, the middle of
+# a Markdown link whose text is itself the URL -- `[https://a.com](https://a.com)`
+# would otherwise match as one string, its `(` balancing the final `)`.
+_HTTP_URL_RE = re.compile(
+    r"https?://(?:(?!\[\^|\]\()[^\s\"'<>" + _CJK_URL_STOP + r"])+"
+)
 
 # Closing bracket -> its opener. A trailing closer is part of the URL when the
 # URL contains a matching opener (`.../Mercury_(planet)`) and prose punctuation
@@ -176,24 +180,11 @@ def _encode_resolved_artifact(
 
 
 def _decode_resolved_artifact(data: bytes) -> tuple[str, Optional[str], Optional[str]]:
-    """Unpack `_encode_resolved_artifact`, tolerating pre-envelope artifacts.
-
-    Artifacts written before the envelope existed are raw page text whose first
-    line is page content, not JSON. Those must still be usable: falling through
-    to an exception here would abandon the whole injection, which is the very
-    failure this envelope exists to prevent. Such a body is returned as text
-    with no metadata, and the caller's `or url` fallback supplies the title.
-    """
-    body = data.decode("utf-8")
-    header, sep, text = body.partition("\n")
-    if not sep:
-        return body, None, None
-    try:
-        meta = json.loads(header)
-    except (ValueError, TypeError):
-        return body, None, None
-    if not isinstance(meta, dict) or "title" not in meta:
-        return body, None, None
+    """Unpack `_encode_resolved_artifact`. Raises ValueError on any other body."""
+    header, sep, text = data.decode("utf-8").partition("\n")
+    meta = json.loads(header)
+    if not sep or not isinstance(meta, dict):
+        raise ValueError("not a resolved-page artifact")
     title = meta.get("title")
     canonical = meta.get("canonical")
     return (
@@ -208,8 +199,9 @@ async def _load_cached_page(
 ) -> Optional[tuple[str, Optional[str], Optional[str]]]:
     """(text, title, canonical) from the artifact cache, or None on a miss.
 
-    A failed read is also a miss: the page is fetched again rather than the
-    whole injection being abandoned over one storage error.
+    A failed read, or a body that is not `_encode_resolved_artifact`'s, is also
+    a miss: the page is fetched again (and the entry rewritten) rather than the
+    whole injection being abandoned over one bad entry.
     """
     try:
         cached = await callback_context.load_artifact(_resolved_artifact_filename(url))
@@ -218,7 +210,11 @@ async def _load_cached_page(
         return None
     if cached is None or not cached.inline_data or not cached.inline_data.data:
         return None
-    return _decode_resolved_artifact(cached.inline_data.data)
+    try:
+        return _decode_resolved_artifact(cached.inline_data.data)
+    except ValueError:
+        logger.warning("unreadable cached page for %s; refetching", url)
+        return None
 
 
 async def _save_cached_page(
