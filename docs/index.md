@@ -113,6 +113,9 @@ is only the overview.
   `ReplyTypeLabel` live in `src/components/`. Each has a story with `parameters.penpot`.
 - **Data:** the browser never calls rumors-api; route files define server functions, and data
   flows through the TanStack Query cache (see the skill's `references/data-layer.md`).
+  `src/routes/_site/articles.tsx` is the working example; `src/server/cofacts.server.ts`
+  (`cofactsExec`) is server-only and enforced by import protection.
+- **Layouts:** `_site` (public pages, `SiteNav`) and `_app` (Cofacts AI, `AiNav` + sidebar).
 
 Design record: the kb doc
 [Phase 3 網站遷移與前端架構](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Phase%203%20網站遷移與前端架構.md).
