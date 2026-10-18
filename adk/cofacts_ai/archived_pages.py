@@ -112,10 +112,13 @@ def stage_archived_links(
 ) -> Optional[dict]:
     """before_tool_callback for ai_writer: carry Cofacts' copies to the verifier.
 
-    Runs after `resolve_citations`, so URLs inside hoisted citation blocks count
-    as mentioned -- the verifier will try to fetch those too. Only URLs the
-    request mentions are carried: the rest could never be looked up, and would
-    only make the call's payload larger.
+    Runs after `resolve_citations` and matches against the whole request, so
+    URLs inside hoisted citation blocks are carried too. The verifier never
+    fetches those (`_extract_web_urls` skips hoisted blocks), so their copies
+    go unused; they are harmless, since `unpack_archived_links` strips the
+    block before the model sees it. URLs the request does not mention at all
+    are left out: they could never be looked up, and would only make the
+    call's payload larger.
 
     Always returns None: this never replaces the tool call.
     """
