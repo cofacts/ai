@@ -856,6 +856,8 @@ ai_writer = LlmAgent(
     before_model_callback=inject_article_attachment,
     # resolve_citations first: it may cancel the call, and it must not scan the
     # archived page text stage_archived_links appends for `[^id]` markers.
+    # stage_archived_links strips the blocks resolve_citations hoists, so it
+    # sees only what the writer wrote.
     before_tool_callback=[resolve_citations, stage_archived_links],
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,

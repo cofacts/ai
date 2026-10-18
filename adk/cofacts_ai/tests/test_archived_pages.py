@@ -192,6 +192,39 @@ class TestStage:
         )
         assert set(unpack(args["request"])[0]) == {URL}
 
+    def test_skips_urls_only_inside_hoisted_citation_blocks(self):
+        # The verifier never fetches URLs in a cited block, so their copies
+        # could never be used.
+        cite_id = "search_cofacts_database-1a2b3c"
+        request = (
+            f"<{cite_id}>\n相關文章 {URL}\n</{cite_id}>\n\n---\n\n請查核[^{cite_id}]"
+        )
+        args = stage(
+            [
+                fr_event(
+                    "get_single_cofacts_article", {"article": {"hyperlinks": [link()]}}
+                )
+            ],
+            request,
+        )
+        assert args["request"] == request
+
+    def test_carries_a_url_both_cited_and_written(self):
+        cite_id = "search_cofacts_database-1a2b3c"
+        request = (
+            f"<{cite_id}>\n相關文章 {URL}\n</{cite_id}>\n\n---\n\n"
+            f"請查核 {URL}[^{cite_id}]"
+        )
+        args = stage(
+            [
+                fr_event(
+                    "get_single_cofacts_article", {"article": {"hyperlinks": [link()]}}
+                )
+            ],
+            request,
+        )
+        assert set(unpack(args["request"])[0]) == {URL}
+
     def test_ignores_other_tools_responses(self):
         # Only the two Cofacts tools carry Cofacts' crawl; anything else that
         # happens to have a `hyperlinks` key is not that data.

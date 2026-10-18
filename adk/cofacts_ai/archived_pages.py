@@ -49,6 +49,7 @@ from google.adk.tools.base_tool import BaseTool
 
 from .agent_names import AI_VERIFIER_NAME
 from .tools import get_single_cofacts_article, search_cofacts_database
+from .writer_citations import strip_hoisted_blocks
 
 # What unpack_archived_links hands to inject_resolved_url_content, both inside
 # the verifier's own child session: {url: {"summary", "title", "fetchedAt"}}.
@@ -112,13 +113,11 @@ def stage_archived_links(
 ) -> Optional[dict]:
     """before_tool_callback for ai_writer: carry Cofacts' copies to the verifier.
 
-    Runs after `resolve_citations` and matches against the whole request, so
-    URLs inside hoisted citation blocks are carried too. The verifier never
-    fetches those (`_extract_web_urls` skips hoisted blocks), so their copies
-    go unused; they are harmless, since `unpack_archived_links` strips the
-    block before the model sees it. URLs the request does not mention at all
-    are left out: they could never be looked up, and would only make the
-    call's payload larger.
+    Only URLs the writer itself wrote are carried: the request minus the
+    citation blocks `resolve_citations` hoisted into it, the same text
+    `_extract_web_urls` reads on the verifier side. Any other copy could
+    never be looked up, and would only make the call's payload larger -- a
+    cited search result alone can hold dozens of hyperlinks.
 
     Always returns None: this never replaces the tool call.
     """
@@ -140,7 +139,8 @@ def stage_archived_links(
             if fr and fr.name in _HYPERLINK_TOOL_NAMES:
                 _collect_hyperlinks(fr.response, found)
 
-    wanted = {url: entry for url, entry in found.items() if url in request}
+    written = strip_hoisted_blocks(request)
+    wanted = {url: entry for url, entry in found.items() if url in written}
     if wanted:
         body = json.dumps(wanted, ensure_ascii=False)
         args["request"] = f"{request}\n\n<{_TAG}>\n{body}\n</{_TAG}>"
