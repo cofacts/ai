@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react'
 import type { CofactsUser } from '@/lib/auth'
+import { cn } from '@/lib/utils'
 
 const OpenPeepsAvatar = lazy(() => import('./OpenPeepsAvatar'))
 
@@ -10,6 +11,10 @@ interface UserAvatarProps {
   user: Pick<CofactsUser, 'name' | 'avatarUrl' | 'avatarType' | 'avatarData'>
   size?: number
   className?: string
+  /** Shows the "Lv N" badge (Penpot Base/Avatar Type = default / Certification-level). */
+  level?: number
+  /** Certified fact-checker: brand-yellow ring (Penpot Type = Certification). */
+  certified?: boolean
 }
 
 function FallbackImg({
@@ -30,27 +35,68 @@ function FallbackImg({
       title={displayName}
       width={size}
       height={size}
-      className={`rounded-full object-cover shrink-0 ${className ?? ''}`}
+      className={cn('shrink-0 rounded-full object-cover', className)}
       style={{ width: size, height: size }}
     />
   )
 }
 
-export function UserAvatar({ user, size = 36, className }: UserAvatarProps) {
+/** Penpot Base/Avatar: the picture, with an optional certification ring and level badge. */
+export function UserAvatar({
+  user,
+  size = 36,
+  className,
+  level,
+  certified = false,
+}: UserAvatarProps) {
+  const picture = <AvatarPicture user={user} size={size} />
+  if (level === undefined && !certified) {
+    return (
+      <span className={cn('inline-flex shrink-0', className)}>{picture}</span>
+    )
+  }
+  return (
+    <span
+      className={cn(
+        'relative inline-flex shrink-0 flex-col items-center',
+        className,
+      )}
+      style={{ paddingBottom: level === undefined ? 0 : 6 }}
+    >
+      <span
+        className={cn(
+          'flex rounded-full',
+          certified && 'border-2 border-accent',
+        )}
+      >
+        {picture}
+      </span>
+      {level !== undefined && (
+        // border-inverse has the same value as surface-base in both themes: it cuts the badge
+        // out of the picture.
+        <span className="absolute bottom-0 rounded-full border-2 border-inverse bg-inverse px-8 py-2 text-ui-xs-bold whitespace-nowrap text-inverse">
+          Lv{level}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function AvatarPicture({
+  user,
+  size,
+}: Pick<UserAvatarProps, 'user'> & { size: number }) {
   if (user.avatarType === 'OpenPeeps') {
     return (
-      <Suspense
-        fallback={<FallbackImg user={user} size={size} className={className} />}
-      >
+      <Suspense fallback={<FallbackImg user={user} size={size} />}>
         <OpenPeepsAvatar
           avatarData={user.avatarData}
           size={size}
           name={user.name ?? ''}
-          className={className}
         />
       </Suspense>
     )
   }
 
-  return <FallbackImg user={user} size={size} className={className} />
+  return <FallbackImg user={user} size={size} />
 }
