@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
+import './RightDrawer.module.css'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -17,7 +18,7 @@ export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
     <>
       {/* Desktop drawer */}
       {isOpen && (
-        <aside className="hidden md:flex flex-1 min-w-0 bg-white border-l border-border-subtle flex-col shadow-lg z-10 overflow-hidden [view-transition-name:right-drawer]">
+        <aside className="hidden md:flex flex-1 min-w-0 bg-base border-l border-subtle flex-col shadow-btn z-10 overflow-hidden [view-transition-name:right-drawer]">
           <DrawerHeader invocation={invocation} onClose={onClose} />
           <DrawerContent invocation={invocation} />
         </aside>
@@ -67,30 +68,32 @@ function DrawerHeader({
       : undefined
 
   return (
-    <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle bg-white shrink-0">
-      <h2 className="text-sm font-semibold text-gray-800 truncate flex-1 min-w-0">
+    <div className="flex items-center gap-8 px-16 py-12 border-b border-subtle bg-base shrink-0">
+      <h2 className="text-body-s font-bold text-primary truncate flex-1 min-w-0">
         {toolTitle(invocation)}
       </h2>
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-4 shrink-0">
         {cofactsArticleId && (
           <a
             href={`https://cofacts.tw/article/${cofactsArticleId}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-tertiary hover:text-secondary transition-colors"
             aria-label="在 Cofacts 查看"
           >
-            <span className="material-symbols-outlined text-xl">
+            <span className="material-symbols-outlined text-heading-s">
               open_in_new
             </span>
           </a>
         )}
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
+          className="text-tertiary hover:text-secondary transition-colors"
           aria-label="關閉"
         >
-          <span className="material-symbols-outlined text-xl">close</span>
+          <span className="material-symbols-outlined text-heading-s">
+            close
+          </span>
         </button>
       </div>
     </div>
@@ -143,7 +146,7 @@ function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+    <p className="text-[10px] font-bold text-tertiary uppercase mb-8">
       {children}
     </p>
   )
@@ -158,7 +161,7 @@ function ToolErrorSection({ message }: { message: string }) {
   return (
     <section>
       <SectionLabel>這次呼叫沒有成功</SectionLabel>
-      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 whitespace-pre-wrap">
+      <p className="text-body-s text-secondary bg-accent-subtle border border-accent rounded-10 p-12 whitespace-pre-wrap">
         {message}
       </p>
     </section>
@@ -167,7 +170,7 @@ function ToolErrorSection({ message }: { message: string }) {
 
 function MarkdownSection({ content }: { content: string }) {
   return (
-    <div className="prose prose-sm max-w-none prose-p:my-1.5 leading-relaxed text-sm text-gray-800">
+    <div className="prose prose-sm max-w-none prose-p:my-6 text-body-s text-primary">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
     </div>
   )
@@ -189,17 +192,17 @@ function SourceCard({ source, index }: { source: ToolSource; index: number }) {
       href={source.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors border border-gray-100"
+      className="block bg-raised rounded-10 p-12 hover:bg-raised transition-colors border border-subtle"
     >
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className="material-symbols-outlined text-[13px] text-gray-400">
+      <div className="flex items-center gap-6 mb-4">
+        <span className="material-symbols-outlined text-[13px] text-tertiary">
           language
         </span>
-        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide truncate">
+        <span className="text-[10px] text-tertiary font-bold uppercase truncate">
           {domain}
         </span>
       </div>
-      <p className="text-[11px] text-gray-600 leading-snug line-clamp-2 break-all">
+      <p className="text-[11px] text-secondary line-clamp-2 break-all">
         {source.url}
       </p>
     </a>
@@ -230,7 +233,7 @@ function InvestigatorContent({
       : []
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+    <div className="flex-1 overflow-y-auto p-16 space-y-20">
       {args.request && (
         <section>
           <SectionLabel>調查主題</SectionLabel>
@@ -252,7 +255,7 @@ function InvestigatorContent({
       {sources.length > 0 && (
         <section>
           <SectionLabel>出處 ({sources.length})</SectionLabel>
-          <div className="space-y-2">
+          <div className="space-y-8">
             {sources.map((s, i) => (
               <SourceCard key={i} source={s} index={i} />
             ))}
@@ -261,7 +264,9 @@ function InvestigatorContent({
       )}
 
       {!content && !response && (
-        <p className="text-sm text-gray-400 text-center pt-8">等待調查結果…</p>
+        <p className="text-body-s text-tertiary text-center pt-32">
+          等待調查結果…
+        </p>
       )}
     </div>
   )
@@ -289,7 +294,7 @@ function VerifierContent({
       : []
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+    <div className="flex-1 overflow-y-auto p-16 space-y-20">
       {args.request && (
         <section>
           <SectionLabel>待查核聲明</SectionLabel>
@@ -309,7 +314,7 @@ function VerifierContent({
       {sources.length > 0 && (
         <section>
           <SectionLabel>參考來源 ({sources.length})</SectionLabel>
-          <div className="space-y-2">
+          <div className="space-y-8">
             {sources.map((s, i) => (
               <SourceCard key={i} source={s} index={i} />
             ))}
@@ -318,7 +323,9 @@ function VerifierContent({
       )}
 
       {!content && !response && (
-        <p className="text-sm text-gray-400 text-center pt-8">等待查核結果…</p>
+        <p className="text-body-s text-tertiary text-center pt-32">
+          等待查核結果…
+        </p>
       )}
     </div>
   )
@@ -337,7 +344,7 @@ function ProofreaderContent({
   const result = response && !('error' in response) ? response.result : ''
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+    <div className="flex-1 overflow-y-auto p-16 space-y-20">
       {args.request && (
         <section>
           <SectionLabel>詢問事項</SectionLabel>
@@ -355,7 +362,7 @@ function ProofreaderContent({
       )}
 
       {!result && !response && (
-        <p className="text-sm text-gray-400 text-center pt-8">等待回應…</p>
+        <p className="text-body-s text-tertiary text-center pt-32">等待回應…</p>
       )}
     </div>
   )
@@ -374,10 +381,10 @@ function CopyButton({ value }: { value: string }) {
     <button
       onClick={handleCopy}
       disabled={!value}
-      className="ml-auto text-gray-400 hover:text-gray-600 disabled:opacity-0 transition-colors"
+      className="ml-auto text-tertiary hover:text-secondary disabled:opacity-0 transition-colors"
       aria-label="複製"
     >
-      <span className="material-symbols-outlined text-base">
+      <span className="material-symbols-outlined text-body-m">
         {copied ? 'check' : 'content_copy'}
       </span>
     </button>
@@ -400,28 +407,28 @@ const CATEGORIES: Array<{
     label: '不在查證範圍',
     icon: 'warning',
     colorClass: 'text-yellow-500',
-    activeClass: 'bg-yellow-50 border-yellow-300 text-yellow-700',
+    activeClass: 'bg-accent-subtle border-accent text-secondary',
   },
   {
     key: 'RUMOR',
     label: '含有不實訊息',
     icon: 'cancel',
-    colorClass: 'text-red-500',
-    activeClass: 'bg-red-50 border-red-300 text-red-700',
+    colorClass: 'text-status-incorrect',
+    activeClass: 'bg-raised border-control text-status-incorrect',
   },
   {
     key: 'NOT_RUMOR',
     label: '含有正確訊息',
     icon: 'check_circle',
     colorClass: 'text-green-500',
-    activeClass: 'bg-green-50 border-green-300 text-green-700',
+    activeClass: 'bg-raised border-subtle text-status-correct',
   },
   {
     key: 'OPINIONATED',
     label: '含有個人意見',
     icon: 'comment',
     colorClass: 'text-blue-500',
-    activeClass: 'bg-blue-50 border-blue-300 text-blue-700',
+    activeClass: 'bg-raised border-subtle text-link',
   },
 ]
 
@@ -435,21 +442,21 @@ function DraftFactcheckContent({
   const references = args.references ?? ''
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5 bg-background-light">
+    <div className="flex-1 overflow-y-auto p-16 space-y-20 bg-raised">
       {/* Classification */}
-      <div className="flex flex-row gap-1 p-1 bg-gray-100 rounded-lg w-full overflow-x-auto no-scrollbar">
+      <div className="flex flex-row gap-4 p-4 bg-raised rounded-10 w-full overflow-x-auto [scrollbar-width:none]">
         {CATEGORIES.map((cat) => {
           const isActive = classification === cat.key
           return (
             <div
               key={cat.key}
               className={`
-                flex-1 min-w-[80px] whitespace-nowrap py-2 text-[10px] font-bold text-center rounded
-                flex flex-col items-center justify-center gap-0.5
+                flex-1 min-w-[80px] whitespace-nowrap py-8 text-[10px] font-bold text-center rounded-5
+                flex flex-col items-center justify-center gap-2
                 ${
                   isActive
-                    ? `bg-white shadow-sm border border-gray-200 ${cat.activeClass}`
-                    : 'text-gray-400'
+                    ? `bg-base shadow-btn border border-subtle${cat.activeClass}`
+                    : 'text-tertiary'
                 }
               `}
             >
@@ -465,25 +472,25 @@ function DraftFactcheckContent({
       </div>
 
       {/* Response text */}
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center">
+      <div className="space-y-8">
+        <label className="text-caption font-bold text-tertiary uppercase flex items-center">
           回應內容
           <CopyButton value={text} />
         </label>
-        <div className="w-full min-h-[11rem] p-3 text-sm text-gray-800 bg-white border border-gray-200 rounded-lg leading-relaxed whitespace-pre-wrap">
-          {text || <span className="text-gray-300">（尚未產生）</span>}
+        <div className="w-full min-h-[11rem] p-12 text-body-s text-primary bg-base border border-subtle rounded-10 whitespace-pre-wrap">
+          {text || <span className="text-disabled">（尚未產生）</span>}
         </div>
       </div>
 
       {/* References */}
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-          <span className="material-symbols-outlined text-sm">link</span>
+      <div className="space-y-8">
+        <label className="text-caption font-bold text-tertiary uppercase flex items-center gap-4">
+          <span className="material-symbols-outlined text-body-s">link</span>
           佐證資料
           <CopyButton value={references} />
         </label>
-        <div className="w-full min-h-[8rem] p-3 text-sm font-mono text-gray-700 bg-white border border-gray-200 rounded-lg leading-relaxed whitespace-pre-wrap">
-          {references || <span className="text-gray-300">（尚未產生）</span>}
+        <div className="w-full min-h-[8rem] p-12 text-body-s font-mono text-secondary bg-base border border-subtle rounded-10 whitespace-pre-wrap">
+          {references || <span className="text-disabled">（尚未產生）</span>}
         </div>
       </div>
     </div>
@@ -501,19 +508,19 @@ type RelatedArticleNode =
 const REPLY_TYPE_INFO: Record<string, { label: string; className: string }> = {
   RUMOR: {
     label: '含有不實訊息',
-    className: 'bg-red-50 text-red-700 border border-red-200',
+    className: 'bg-raised text-status-incorrect border border-control',
   },
   NOT_RUMOR: {
     label: '不含不實訊息',
-    className: 'bg-green-50 text-green-700 border border-green-200',
+    className: 'bg-raised text-status-correct border border-subtle',
   },
   OPINIONATED: {
     label: '含有個人意見',
-    className: 'bg-blue-50 text-blue-700 border border-blue-200',
+    className: 'bg-raised text-link border border-subtle',
   },
   NOT_ARTICLE: {
     label: '不是可查核的內容',
-    className: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+    className: 'bg-accent-subtle text-secondary border border-accent',
   },
 }
 
@@ -523,18 +530,18 @@ function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
       href={`https://cofacts.tw/article/${article.id}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="shrink-0 w-[210px] rounded-lg border border-gray-200 bg-gray-50 p-3 hover:bg-gray-100 transition-colors flex flex-col gap-2"
+      className="shrink-0 w-[210px] rounded-10 border border-subtle bg-raised p-12 hover:bg-raised transition-colors flex flex-col gap-8"
     >
-      <p className="text-xs text-gray-700 line-clamp-4 leading-relaxed flex-1">
+      <p className="text-caption text-secondary line-clamp-4 flex-1">
         {article.text || `[${article.articleType}]`}
       </p>
       <div>
         {article.factCheckCount > 0 ? (
-          <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.5">
+          <span className="text-[10px] bg-raised text-status-correct border border-subtle rounded-5 px-6 py-2">
             {article.factCheckCount} 則查核
           </span>
         ) : (
-          <span className="text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
+          <span className="text-[10px] bg-raised text-tertiary rounded-5 px-6 py-2">
             待查核
           </span>
         )}
@@ -565,16 +572,16 @@ function ArticleMedia({
   })
 
   if (isPending) {
-    return <div className="w-full h-48 rounded-lg bg-gray-100 animate-pulse" />
+    return <div className="w-full h-192 rounded-10 bg-raised animate-pulse" />
   }
   if (isError || !url) {
-    return <p className="text-sm text-gray-400">附件載入失敗</p>
+    return <p className="text-body-s text-tertiary">附件載入失敗</p>
   }
   if (articleType === 'IMAGE') {
-    return <img src={url} alt="訊息附件" className="w-full rounded-lg" />
+    return <img src={url} alt="訊息附件" className="w-full rounded-10" />
   }
   if (articleType === 'VIDEO') {
-    return <video src={url} controls className="w-full rounded-lg" />
+    return <video src={url} controls className="w-full rounded-10" />
   }
   if (articleType === 'AUDIO') {
     return <audio src={url} controls className="w-full" />
@@ -589,7 +596,7 @@ function CofactsArticleContent({
 }) {
   if (!response) {
     return (
-      <p className="text-sm text-gray-400 text-center pt-8 p-4">
+      <p className="text-body-s text-tertiary text-center pt-32 p-16">
         等待資料載入…
       </p>
     )
@@ -597,7 +604,7 @@ function CofactsArticleContent({
 
   if (response.error) {
     return (
-      <p className="text-sm text-red-400 text-center pt-8 p-4">
+      <p className="text-body-s text-status-incorrect text-center pt-32 p-16">
         {response.error}
       </p>
     )
@@ -606,7 +613,9 @@ function CofactsArticleContent({
   const article = response.article
   if (!article) {
     return (
-      <p className="text-sm text-gray-400 text-center pt-8 p-4">找不到此訊息</p>
+      <p className="text-body-s text-tertiary text-center pt-32 p-16">
+        找不到此訊息
+      </p>
     )
   }
 
@@ -626,7 +635,7 @@ function CofactsArticleContent({
   const relatedEdges = article.relatedArticles.edges
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+    <div className="flex-1 overflow-y-auto p-16 space-y-20">
       {/* Media attachment — attachmentUrl from the tool is a gs:// URI the
           browser can't load, so ArticleMedia fetches a fresh signed URL. */}
       {isMedia && article.attachmentUrl && (
@@ -642,7 +651,7 @@ function CofactsArticleContent({
       {article.text && (
         <section>
           <SectionLabel>{isMedia ? '逐字稿' : '訊息內文'}</SectionLabel>
-          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+          <p className="text-body-s text-primary whitespace-pre-wrap">
             {article.text}
           </p>
         </section>
@@ -651,23 +660,23 @@ function CofactsArticleContent({
       {/* Metadata */}
       <section>
         <SectionLabel>統計</SectionLabel>
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-600">
-          <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-sm">
+        <div className="flex flex-wrap gap-x-16 gap-y-6 text-caption text-secondary">
+          <span className="flex items-center gap-4">
+            <span className="material-symbols-outlined text-body-s">
               calendar_today
             </span>
             初次回報：{formattedDate}
           </span>
           {totalVisits > 0 && (
-            <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">
+            <span className="flex items-center gap-4">
+              <span className="material-symbols-outlined text-body-s">
                 trending_up
               </span>
               近 90 天 {totalVisits.toLocaleString()} 次造訪
             </span>
           )}
-          <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-sm">group</span>
+          <span className="flex items-center gap-4">
+            <span className="material-symbols-outlined text-body-s">group</span>
             {article.communityDemandCount} 人回報
           </span>
         </div>
@@ -677,42 +686,42 @@ function CofactsArticleContent({
       <section>
         <SectionLabel>查核回應（{article.factCheckCount}）</SectionLabel>
         {article.factCheckResponses.length === 0 ? (
-          <p className="text-sm text-gray-400">尚無查核回應</p>
+          <p className="text-body-s text-tertiary">尚無查核回應</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-12">
             {article.factCheckResponses.map((ar, i) => {
               const typeInfo = REPLY_TYPE_INFO[ar.reply.type] ?? {
                 label: ar.reply.type,
-                className: 'bg-gray-50 text-gray-700 border border-gray-200',
+                className: 'bg-raised text-secondary border border-subtle',
               }
               return (
                 <div
                   key={i}
-                  className="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2"
+                  className="rounded-10 border border-subtle bg-raised p-12 space-y-8"
                 >
                   <span
-                    className={`inline-block text-[10px] font-bold rounded px-1.5 py-0.5 ${typeInfo.className}`}
+                    className={`inline-block text-[10px] font-bold rounded-5 px-6 py-2 ${typeInfo.className}`}
                   >
                     {typeInfo.label}
                   </span>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                  <p className="text-body-s text-primary whitespace-pre-wrap">
                     {ar.reply.text}
                   </p>
                   {ar.reply.reference && (
-                    <p className="text-xs text-gray-400 whitespace-pre-wrap">
+                    <p className="text-caption text-tertiary whitespace-pre-wrap">
                       {ar.reply.reference}
                     </p>
                   )}
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <div className="flex items-center gap-8 text-caption text-tertiary">
                     <span>{ar.reply.user.name}</span>
-                    <span className="flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-caption">
                         thumb_up
                       </span>
                       {ar.helpfulCount}
                     </span>
-                    <span className="flex items-center gap-0.5">
-                      <span className="material-symbols-outlined text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-caption">
                         thumb_down
                       </span>
                       {ar.unhelpfulCount}
@@ -731,7 +740,7 @@ function CofactsArticleContent({
           <SectionLabel>
             相似可疑訊息（{article.relatedArticles.totalCount}）
           </SectionLabel>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+          <div className="flex gap-12 overflow-x-auto pb-8 -mx-16 px-16">
             {relatedEdges.map(({ node }) => (
               <RelatedArticleCard key={node.id} article={node} />
             ))}
@@ -754,17 +763,17 @@ function GenericToolContent({
   response: Record<string, unknown> | null
 }) {
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="flex-1 overflow-y-auto p-16 space-y-16">
       <section>
         <SectionLabel>Tool: {name}</SectionLabel>
-        <pre className="text-xs bg-gray-50 rounded p-3 overflow-x-auto whitespace-pre-wrap break-all border border-gray-100">
+        <pre className="text-caption bg-raised rounded-5 p-12 overflow-x-auto whitespace-pre-wrap break-all border border-subtle">
           {JSON.stringify(args, null, 2)}
         </pre>
       </section>
       {response && (
         <section>
           <SectionLabel>Response</SectionLabel>
-          <pre className="text-xs bg-gray-50 rounded p-3 overflow-x-auto whitespace-pre-wrap break-all border border-gray-100">
+          <pre className="text-caption bg-raised rounded-5 p-12 overflow-x-auto whitespace-pre-wrap break-all border border-subtle">
             {JSON.stringify(response, null, 2)}
           </pre>
         </section>
@@ -834,20 +843,20 @@ function MobileBottomSheet({
   return (
     <div className="fixed inset-0 z-50 md:hidden">
       <div
-        className="absolute inset-0 bg-black/20 backdrop-blur-[1px]"
+        className="absolute inset-0 bg-scrim backdrop-blur-[1px]"
         onClick={onClose}
       />
       <div
-        className="absolute bottom-0 left-0 w-full flex flex-col bg-[#F5F5F5] rounded-t-2xl bottom-sheet-shadow transition-[height] duration-100 [view-transition-name:right-drawer-mobile]"
+        className="absolute bottom-0 left-0 w-full flex flex-col bg-raised rounded-t-10 shadow-btn transition-[height] duration-100 [view-transition-name:right-drawer-mobile]"
         style={{ height: `${sheetHeight}vh` }}
       >
         <div
-          className="w-full flex justify-center pt-3 pb-1 cursor-grab touch-none"
+          className="w-full flex justify-center pt-12 pb-4 cursor-grab touch-none"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
+          <div className="w-48 h-6 bg-selected rounded-full" />
         </div>
         {children}
       </div>
