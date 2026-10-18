@@ -4,6 +4,7 @@ import type { Meta, StoryObj } from '@storybook/tanstack-react'
 const meta = {
   title: 'components/UserAvatar',
   component: UserAvatar,
+  parameters: { penpot: { component: 'Base/Avatar' } },
 } satisfies Meta<typeof UserAvatar>
 
 export default meta
@@ -44,4 +45,13 @@ export const Large: Story = {
     ...Gravatar.args,
     size: 96,
   },
+}
+
+/** Penpot Type = default (with level) and Certification-level. */
+export const WithLevel: Story = {
+  args: { ...Gravatar.args, size: 68, level: 99 },
+}
+
+export const Certified: Story = {
+  args: { ...Gravatar.args, size: 68, level: 11, certified: true },
 }
