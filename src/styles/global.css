@@ -3,12 +3,14 @@
  *
  * Keep this file small: only rules that truly apply site-wide belong here. Component styles
  * go in the component (Tailwind classes, or a CSS Module when Tailwind can't express it).
- *
- * Transition: Storybook loads this file; the app still loads src/styles.css until the
- * vibe-coded components are replaced.
  */
 @import 'tailwindcss';
 @import './tokens.css';
+/* Animation utilities and data-open/data-closed variants used by the shadcn primitives. */
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+/* Markdown rendering (`prose`) for chat messages and tool results. */
+@plugin '@tailwindcss/typography';
 
 @layer base {
   html {
@@ -40,4 +42,23 @@
     --tw-ring-offset-shadow: 0 0 0 2px var(--surface-dark);
     outline-color: var(--border-on-dark-strong);
   }
+}
+
+/* `prose` (Markdown) colors follow the tokens instead of the plugin's own grays.
+   Unlayered so it wins over the plugin's own `.prose` rules. */
+.prose {
+  --tw-prose-body: var(--text-primary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-links: var(--text-link);
+  --tw-prose-counters: var(--text-secondary);
+  --tw-prose-bullets: var(--text-tertiary);
+  --tw-prose-hr: var(--border-subtle);
+  --tw-prose-quotes: var(--text-secondary);
+  --tw-prose-quote-borders: var(--border-subtle);
+  --tw-prose-code: var(--text-primary);
+  --tw-prose-pre-code: var(--text-primary);
+  --tw-prose-pre-bg: var(--surface-raised);
+  --tw-prose-th-borders: var(--border-subtle);
+  --tw-prose-td-borders: var(--border-subtle);
 }

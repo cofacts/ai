@@ -1,0 +1,39 @@
+/*
+ * Slide animations for the drawer's view transitions (view-transition-name right-drawer and
+ * right-drawer-mobile, set on the drawer elements). These pseudo-elements are document-level,
+ * so they aren't scoped by the module; only the keyframe names are.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  :global(::view-transition-old(right-drawer)) {
+    animation: slide-out-to-right 0.3s ease both;
+  }
+  :global(::view-transition-new(right-drawer)) {
+    animation: slide-in-from-right 0.3s ease both;
+  }
+  :global(::view-transition-old(right-drawer-mobile)) {
+    animation: slide-out-to-bottom 0.3s ease both;
+  }
+  :global(::view-transition-new(right-drawer-mobile)) {
+    animation: slide-in-from-bottom 0.3s ease both;
+  }
+}
+@keyframes slide-out-to-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes slide-in-from-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes slide-out-to-bottom {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes slide-in-from-bottom {
+  from {
+    transform: translateY(100%);
+  }
+}

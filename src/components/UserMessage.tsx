@@ -18,9 +18,9 @@ function FileChip({
   return (
     <span
       title={name}
-      className="inline-flex items-center gap-1.5 max-w-full rounded-lg bg-white/60 border border-gray-200 px-2 py-1 text-xs text-text-main"
+      className="inline-flex items-center gap-6 max-w-full rounded-10 bg-base border border-subtle px-8 py-4 text-caption text-primary"
     >
-      <span className="material-symbols-outlined text-base leading-none text-text-muted">
+      <span className="material-symbols-outlined text-body-m text-secondary">
         {mimeType?.startsWith('application/pdf')
           ? 'picture_as_pdf'
           : 'description'}
@@ -42,7 +42,7 @@ function AttachmentPart({ part }: { part: AdkPart }) {
         <img
           src={`data:${inline.mimeType};base64,${inline.data}`}
           alt={name}
-          className="max-w-full max-h-64 rounded-lg border border-gray-200"
+          className="max-w-full max-h-256 rounded-10 border border-subtle"
         />
       )
     }
@@ -70,7 +70,7 @@ function AttachmentPart({ part }: { part: AdkPart }) {
 export function UserMessage({ message }: UserMessageProps) {
   return (
     <div className="flex flex-col items-end">
-      <div className="bg-bubble-user p-4 rounded-2xl rounded-tr-none max-w-[85%] md:max-w-[70%] text-text-main border border-gray-100 shadow-sm flex flex-col gap-2">
+      <div className="bg-raised p-16 rounded-10 rounded-tr-none max-w-[85%] md:max-w-[70%] text-primary border border-subtle shadow-btn flex flex-col gap-8">
         {message.parts?.map((part, i) => {
           if (part.text) {
             return (
@@ -87,7 +87,7 @@ export function UserMessage({ message }: UserMessageProps) {
           return null
         })}
       </div>
-      <span className="text-xs text-text-muted mt-1 mr-1">使用者輸入</span>
+      <span className="text-caption text-secondary mt-4 mr-4">使用者輸入</span>
     </div>
   )
 }

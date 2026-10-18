@@ -144,22 +144,20 @@ export function ChatInput({
   }, [value, files, disabled, onSend, sessionId])
 
   return (
-    <div className="px-3 md:px-4 pb-3 md:pb-4 pt-2 bg-white shrink-0 z-10">
+    <div className="px-12 md:px-16 pb-12 md:pb-16 pt-8 bg-base shrink-0 z-10">
       <div
-        className={`relative rounded-xl shadow-sm border bg-white focus-within:ring-2 focus-within:ring-primary focus-within:border-primary transition-all ${isDragging && !disabled && !isStreaming ? 'border-primary ring-2 ring-primary' : 'border-gray-300'}`}
+        className={`relative rounded-10 shadow-btn border bg-base focus-within:border-accent transition-all ${isDragging && !disabled && !isStreaming ? 'border-accent' : 'border-subtle'}`}
         onDragOver={handleDragOver}
         onDragEnter={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {isDragging && !disabled && !isStreaming && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl bg-white/90 pointer-events-none">
-            <span className="material-symbols-outlined text-3xl text-primary">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 rounded-10 bg-base pointer-events-none">
+            <span className="material-symbols-outlined text-heading-l text-primary">
               upload_file
             </span>
-            <span className="text-sm text-primary font-medium">
-              放開以附加檔案
-            </span>
+            <span className="text-body-s text-primary">放開以附加檔案</span>
           </div>
         )}
         {/* Row 1: text input */}
@@ -179,12 +177,12 @@ export function ChatInput({
             }
           }}
           disabled={disabled || isStreaming}
-          className="w-full bg-transparent border-none focus:ring-0 p-3 min-h-[50px] max-h-32 resize-none text-sm rounded-xl"
+          className="w-full bg-transparent border-none p-12 min-h-[50px] max-h-128 resize-none text-body-s rounded-10"
           placeholder={placeholder}
         />
 
         {/* Row 2: upload button · attached-file pills · send button */}
-        <div className="flex items-center gap-2 px-2 pb-2">
+        <div className="flex items-center gap-8 px-8 pb-8">
           <input
             ref={fileInputRef}
             type="file"
@@ -198,28 +196,28 @@ export function ChatInput({
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isStreaming}
             title="附加檔案"
-            className="shrink-0 p-1.5 text-gray-500 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+            className="shrink-0 p-6 text-tertiary rounded-10 hover:bg-raised transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <span className="material-symbols-outlined text-xl">
+            <span className="material-symbols-outlined text-heading-s">
               attach_file
             </span>
           </button>
 
-          <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-0">
+          <div className="flex flex-1 flex-wrap items-center gap-6 min-w-0">
             {files.map((file, i) => (
               <span
                 key={`${file.name}-${i}`}
                 title={file.name}
-                className="inline-flex items-center gap-1 max-w-[12rem] rounded-full bg-gray-100 border border-gray-200 pl-2 pr-1 py-0.5 text-xs text-text-main"
+                className="inline-flex items-center gap-4 max-w-[12rem] rounded-full bg-raised border border-subtle pl-8 pr-4 py-2 text-caption text-primary"
               >
                 <span className="truncate">{file.name}</span>
                 <button
                   type="button"
                   onClick={() => removeFile(i)}
                   aria-label={`移除 ${file.name}`}
-                  className="shrink-0 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
+                  className="shrink-0 flex items-center justify-center rounded-full hover:bg-selected transition-colors"
                 >
-                  <span className="material-symbols-outlined text-sm leading-none">
+                  <span className="material-symbols-outlined text-body-s">
                     close
                   </span>
                 </button>
@@ -230,16 +228,16 @@ export function ChatInput({
           <button
             onClick={isStreaming ? onStop : handleSubmit}
             disabled={(!isStreaming && !canSend) || disabled}
-            className="shrink-0 p-1.5 bg-primary text-black rounded-lg hover:bg-primary-hover transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+            className="shrink-0 p-6 bg-accent text-primary rounded-10 hover:bg-accent-subtle transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <span className="material-symbols-outlined text-sm">
+            <span className="material-symbols-outlined text-body-s">
               {isStreaming ? 'stop' : 'send'}
             </span>
           </button>
         </div>
       </div>
-      <div className="text-center mt-2">
-        <span className="text-[10px] text-gray-400">
+      <div className="text-center mt-8">
+        <span className="text-[10px] text-tertiary">
           AI 可能會犯錯，請務必查核事實。
         </span>
       </div>

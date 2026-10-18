@@ -25,22 +25,19 @@ const PROVIDERS: ReadonlyArray<ProviderConfig> = [
     id: 'facebook',
     label: 'Facebook',
     icon: FacebookIcon,
-    className:
-      'bg-[#1976D2] text-white hover:bg-[#155fa3] focus-visible:ring-[#1976D2]/40',
+    className: 'bg-[#1976D2] text-on-accent hover:bg-[#155fa3]',
   },
   {
     id: 'github',
     label: 'GitHub',
     icon: GithubIcon,
-    className:
-      'bg-[#2B414D] text-white hover:bg-[#1e2f38] focus-visible:ring-[#2B414D]/40',
+    className: 'bg-[#2B414D] text-on-accent hover:bg-[#1e2f38]',
   },
   {
     id: 'google',
     label: 'Google',
     icon: GoogleIcon,
-    className:
-      'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus-visible:ring-gray-400',
+    className: 'bg-base text-secondary border border-subtle hover:bg-raised',
   },
 ]
 
@@ -68,7 +65,7 @@ export function LoginModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogTitle className="text-center">登入 / 註冊</DialogTitle>
-        <div className="flex flex-col gap-2 pt-2">
+        <div className="flex flex-col gap-8 pt-8">
           {PROVIDERS.map((p) => {
             const Icon = p.icon
             return (
@@ -83,21 +80,21 @@ export function LoginModal({
                     },
                   })
                 }
-                className={`relative flex items-center justify-center rounded-full px-12 py-3 text-sm font-medium uppercase tracking-wider transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${p.className}`}
+                className={`relative flex items-center justify-center rounded-full px-48 py-12 text-body-s uppercase transition-colors    ${p.className}`}
               >
-                <Icon className="absolute left-4 h-7 w-7" />
+                <Icon className="absolute left-16 h-28 w-28" />
                 <span>{p.label}</span>
               </button>
             )
           })}
         </div>
-        <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
+        <p className="text-secondary mt-16 text-caption">
           登入即代表您同意{' '}
           <a
             href={TERMS_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-foreground"
+            className="underline hover:text-primary"
           >
             使用者條款
           </a>
@@ -106,7 +103,7 @@ export function LoginModal({
             href={LICENSE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-foreground"
+            className="underline hover:text-primary"
           >
             創用 CC 姓名標示-相同方式分享 4.0
           </a>
@@ -115,7 +112,7 @@ export function LoginModal({
             href={EDITOR_FACEBOOK_GROUP}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-foreground"
+            className="underline hover:text-primary"
           >
             Cofacts 真的假的訊息回報機器人與查證協作社群
           </a>{' '}

@@ -6,7 +6,7 @@ import {
 } from '@tanstack/react-router'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
-import appCss from '../styles.css?url'
+import appCss from '../styles/global.css?url'
 import { AuthProvider } from '@/lib/auth'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 
@@ -46,7 +46,7 @@ export const Route = createRootRoute({
       },
       {
         rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap',
+        href: 'https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap',
       },
       {
         rel: 'stylesheet',
