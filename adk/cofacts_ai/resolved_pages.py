@@ -48,9 +48,9 @@ logger = logging.getLogger(__name__)
 # after-model callback: {url: {"status", "title", "canonical"}} for what
 # url-resolver fetched for this model call. `temp:` scopes it to one verifier
 # call: AgentTool's child session is seeded without `temp:` keys, and the deltas
-# it forwards back up are trimmed of them. Within that call it does carry over
-# from one model call to the next -- see the reset in
-# inject_resolved_url_content.
+# it forwards back up are trimmed of them. Within that call it would carry over
+# from one model call to the next, if there were more than one -- see the reset
+# in inject_resolved_url_content.
 RESOLVED_META_STATE_KEY = "temp:cofacts_resolved_meta"
 
 
@@ -337,13 +337,16 @@ async def inject_resolved_url_content(
     otherwise, so url_context gets a clean shot at it.
 
     Caches full page text as an ADK artifact keyed by a hash of the URL —
-    this doubles as the fetch cache (skips re-resolving on the verifier's
-    ~2 model calls per turn, and across turns in the same session) and as a
-    UI-visible record of exactly what the system was able to read. Only
-    successfully resolved text is cached; dead/unfetchable results are cheap
-    to re-attempt and are not persisted.
+    this doubles as the fetch cache (skips re-resolving when a later verifier
+    call in the same session asks for the same page) and as a UI-visible
+    record of exactly what the system was able to read. Only successfully
+    resolved text is cached; a dead/unfetchable result is not persisted, so
+    the next verifier call that asks for the URL tries it again.
 
-    Every model call of a turn re-injects, by design. ADK rebuilds
+    Today a verifier call is a single model call: its only tool, url_context,
+    runs inside Gemini, so ADK never loops back for a second one (confirmed in
+    Langfuse: every `agent_run [verifier]` span has exactly one generation).
+    Should that change, every model call re-injects, by design. ADK rebuilds
     `llm_request.contents` from session events with `copy.deepcopy`
     (flows/llm_flows/contents.py), so parts appended here mutate the request
     only and are gone by the next call — the page text has to be re-sent or
@@ -357,11 +360,12 @@ async def inject_resolved_url_content(
     # call.
     #
     # The key cannot leak between verifier calls (see its definition), but it
-    # does persist across the ~2 model calls of one: the child session is the
-    # same. Without the reset, a later call that exits early -- the resolver
-    # down, an artifact read failing -- would keep the earlier call's meta, and
-    # append_verifier_sources would list pages missing from the request the
-    # final answer was written from.
+    # would persist across model calls within one, if a verifier call ever
+    # makes more than one (today it does not -- see the docstring): the child
+    # session is the same. Without the reset, a later call that exits early --
+    # the resolver down, an artifact read failing -- would keep the earlier
+    # call's meta, and append_verifier_sources would list pages missing from
+    # the request the final answer was written from.
     #
     # This costs no extra fetches. The fetch cache is the artifact
     # (`resolved-<sha1>.txt`, loaded below); this key is only the handoff to
