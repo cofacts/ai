@@ -30,5 +30,5 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 # The Langfuse usage check lives with its skill, outside the package it watches.
-testpaths = ["cofacts_ai/tests", "../.agents/skills/langfuse-usage-check"]
+testpaths = ["cofacts_ai/tests", "cofacts_eval/tests", "../.agents/skills/langfuse-usage-check"]
 pythonpath = ["."]
