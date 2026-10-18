@@ -26,7 +26,9 @@ uv run python -m grpc_tools.protoc \
 # (cofacts_ai.url_resolver._generated.foo_pb2) rather than run as a top-level
 # script. Rewrite those to explicit relative imports.
 for f in "$OUT_DIR"/*_pb2.py "$OUT_DIR"/*_pb2_grpc.py "$OUT_DIR"/*_pb2.pyi; do
-  sed -i -E 's/^import ([a-zA-Z_]+_pb2) as /from . import \1 as /' "$f"
+  # `-i.bak` then rm, not `-i -E`: BSD/macOS sed would take `-E` as the
+  # backup suffix.
+  sed -i.bak -E 's/^import ([a-zA-Z_]+_pb2) as /from . import \1 as /' "$f" && rm "$f.bak"
 done
 
 echo "Generated stubs in $OUT_DIR"
