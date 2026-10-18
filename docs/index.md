@@ -123,8 +123,9 @@ is only the overview.
   `prefers-color-scheme` unless `<html data-theme>` forces one. Components never use `dark:`.
 - **Global CSS:** `src/styles/global.css` holds only site-wide rules (tokens, body base, the
   focus ring).
-- **Transition:** Storybook (Foundations/Tokens) already uses the new system; the app still
-  loads the old `src/styles.css` until its components are replaced.
+- **Components:** `src/components/ui/` holds the Penpot Base components (Button, Badge/Chip,
+  Toggle, Input, Checkbox, Switch, RadioGroup, Select, Icon); shared Cofacts components such as
+  `ReplyTypeLabel` live in `src/components/`. Each has a story with `parameters.penpot`.
 - **Data:** the browser never calls rumors-api; route files define server functions, and data
   flows through the TanStack Query cache (see the skill's `references/data-layer.md`).
 
