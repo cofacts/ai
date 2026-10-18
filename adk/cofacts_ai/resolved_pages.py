@@ -324,8 +324,8 @@ async def inject_resolved_url_content(
     its Readability-extracted body -- see the module docstring), so the
     verifier bases support/refute decisions on text it actually read instead
     of relying solely on Gemini's black-box url_context tool — which is what
-    let it hallucinate support for dead or irrelevant links. A URL
-    url-resolver could not resolve at all (DNS failure / malformed) gets an
+    let it hallucinate support for dead or irrelevant links. A URL with no
+    page behind it (DNS failure / malformed / HTTP 404 or 410) gets an
     advisory [LINK NOT FOUND] note rather than a hard ban, since url_context
     may still read a page the resolver's simpler fetch missed. Any other
     failure (PDF, blocked, timeout, resolver down, past the URL cap) gets
@@ -459,8 +459,9 @@ async def inject_resolved_url_content(
                     genai_types.Part(
                         text=(
                             f"{_LINK_NOT_FOUND_PREFIX}{r.url}: {r.error}. "
-                            "url-resolver could not resolve this URL (likely "
-                            "nonexistent/malformed). Verify with url_context; "
+                            "url-resolver found no page at this URL (it does "
+                            "not resolve, is malformed, or returned HTTP 404/"
+                            "410). Verify with url_context; "
                             "if it also retrieves no content, do NOT claim "
                             "this link supports any claim."
                         )

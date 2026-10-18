@@ -151,7 +151,7 @@ flowchart LR
     C -->|"miss · past URL cap"| A
     R --> S{"④ why did it fail?"}
     S -->|"RESOLVED"| SV["save artifact"]
-    S -->|"DEAD<br/>DNS · malformed"| O2["⑤ [LINK NOT FOUND] url<br/>advisory, not a ban"]
+    S -->|"DEAD<br/>DNS · malformed · 404/410"| O2["⑤ [LINK NOT FOUND] url<br/>advisory, not a ban"]
     S -->|"anything else<br/>PDF · blocked · timeout ·<br/>resolver down"| A{"⑥ Cofacts already<br/>crawled it?"}
     A -->|"no"| O4["nothing injected"]
     C -->|"hit"| B

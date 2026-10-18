@@ -407,9 +407,10 @@ ai_verifier = LlmAgent(
     verbatim, as a `[RESOLVED PAGE] <url>` part below — sometimes only the page's short
     description. Quote from it, never from training knowledge or a URL's plausibility;
     where it is too short to settle a claim, judge from url_context instead.
-    A `[LINK NOT FOUND] <url>` note means the system's fetcher could not resolve that URL
-    at all (likely nonexistent or malformed): treat this as advisory, not a ban — still try
-    url_context on it; only if url_context ALSO retrieves no content should you report the
+    A `[LINK NOT FOUND] <url>` note means the system's fetcher found no page at that URL
+    (it does not resolve, is malformed, or returned HTTP 404/410): treat this as advisory,
+    not a ban, since some sites answer bots with a 404. Still try url_context on it; only
+    if url_context ALSO retrieves no content should you report the
     claim as ✗ / cannot-verify for that link, and never present it as a supporting source.
     An `[ARCHIVED PAGE] <url>` part is page text Cofacts crawled ON AN EARLIER DATE, shown
     only because the fetcher could not reach the page just now. The part states when it was

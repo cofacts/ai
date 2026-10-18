@@ -105,7 +105,8 @@ class ResolveStatus(str, Enum):
 
 
 # ResolveError enum values that mean the URL itself is unusable (DNS doesn't
-# resolve, or the URL is malformed) — the only errors treated as `DEAD`.
+# resolve, or the URL is malformed) — the only errors treated as `DEAD`. The
+# other way to be `DEAD` is an HTTP 404/410 reply; see _DEAD_HTTP_STATUSES.
 _DEAD_URL_ERRORS = frozenset(
     {
         resolve_error_pb2.NAME_NOT_RESOLVED,

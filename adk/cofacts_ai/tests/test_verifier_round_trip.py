@@ -316,8 +316,9 @@ async def test_one_verifier_call():
                 # no part at all.
                 genai_types.Part(
                     text=f"[LINK NOT FOUND] {DEAD_URL}: domain name could not be "
-                    "resolved. url-resolver could not resolve this URL (likely "
-                    "nonexistent/malformed). Verify with url_context; if it also "
+                    "resolved. url-resolver found no page at this URL (it does not "
+                    "resolve, is malformed, or returned HTTP 404/410). Verify with "
+                    "url_context; if it also "
                     "retrieves no content, do NOT claim this link supports any "
                     "claim."
                 ),
