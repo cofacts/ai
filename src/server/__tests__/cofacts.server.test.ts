@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { getCookie } from '@tanstack/react-start/server'
-import { cofactsExec } from '../cofactsExec'
+import { cofactsExec } from '../cofacts.server'
 import { getApiBase } from '@/server/api-base'
 import { graphql } from '@/server/gql'
 

@@ -7,8 +7,8 @@
 // Callers that want a soft-fail wrap the call in try/catch and handle null /
 // partial data themselves.
 //
-// Server-only: depends on h3's getCookie via @tanstack/react-start/server. Do
-// not import from client code.
+// Server-only (the .server.ts suffix makes TanStack Start's import protection
+// enforce it): use it only inside createServerFn handlers.
 
 import { getCookie } from '@tanstack/react-start/server'
 import { print } from 'graphql'
