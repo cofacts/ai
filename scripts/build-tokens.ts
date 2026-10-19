@@ -7,7 +7,6 @@
  * Outputs:
  *   - src/styles/tokens.css            CSS variables (light / dark) + Tailwind @theme
  *   - src/styles/tokens.generated.ts   twMergeTheme for cn(), token lists for Storybook
- *   - .agents/skills/cofacts-frontend/references/tokens.md   Penpot token → class table
  *
  * Naming rule: drop the Penpot role prefix to get the class.
  *   surface-raised → bg-raised, text-secondary → text-secondary, border-control → border-control,
@@ -22,7 +21,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SOURCE = 'design/tokens.json'
 const OUT_CSS = 'src/styles/tokens.css'
 const OUT_TS = 'src/styles/tokens.generated.ts'
-const OUT_MD = '.agents/skills/cofacts-frontend/references/tokens.md'
 
 type Token = { $type: string; $value: unknown }
 type TokenSet = Record<string, Token>
@@ -193,15 +191,19 @@ const primitives = byType('color')
 
 const header = `/* ⚙️ Generated from ${SOURCE} by scripts/build-tokens.ts — do not edit. Run \`pnpm tokens\`. */`
 
-const semanticBlock = (set: TokenSet) =>
-  semanticNames
-    .map((n) => `  --${n}: ${semanticValue(String(get(set, n).$value))};`)
-    .join('\n')
+/** One line per semantic token: a plain value if it's fixed, otherwise light-dark(light, dark). */
+const semanticLine = (name: string) => {
+  const light = semanticValue(String(get(Light, name).$value))
+  const dark = semanticValue(String(get(Dark, name).$value))
+  return isFixed(name)
+    ? `  --${name}: ${light};`
+    : `  --${name}: light-dark(${light}, ${dark});`
+}
 
 const themeLines: Array<string> = []
 for (const name of semanticNames) {
   for (const u of utilitiesFor(name))
-    themeLines.push(`  ${u.namespace}: var(--${name});`)
+    themeLines.push(`  ${u.namespace}: var(--${name}); /* ${u.className} */`)
 }
 
 const css = `${header}
@@ -211,20 +213,22 @@ const css = `${header}
 ${primitives.map(([n, t]) => `  --${n}: ${String(t.$value)};`).join('\n')}
 }
 
-/* Semantic colors. Components never pick light or dark: the tokens flip. */
-:root,
+/*
+ * Semantic colors. Each token holds both its Light and Dark value; light-dark() picks one from
+ * color-scheme, which follows the OS setting (prefers-color-scheme) unless <html data-theme>
+ * forces it. Components never pick light or dark themselves.
+ */
+:root {
+  color-scheme: light dark;
+${semanticNames.map(semanticLine).join('\n')}
+}
+
 [data-theme='light'] {
-${semanticBlock(Light)}
+  color-scheme: light;
 }
 
 [data-theme='dark'] {
-${semanticBlock(Dark)}
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-${semanticBlock(Dark).replace(/^/gm, '  ')}
-  }
+  color-scheme: dark;
 }
 
 @theme {
@@ -245,7 +249,7 @@ ${themeLines.join('\n')}
 ${typography
   .map(
     (t) =>
-      `  --text-${t.className.slice(5)}: ${px(t.size)};\n` +
+      `  --text-${t.className.slice(5)}: ${px(t.size)}; /* ${t.className}: ${t.size}px / ${t.lineHeightLabel} / ${t.weight} */\n` +
       `  --text-${t.className.slice(5)}--line-height: ${t.lineHeight};\n` +
       `  --text-${t.className.slice(5)}--font-weight: ${t.weight};`,
   )
@@ -311,52 +315,11 @@ export const designTokens = ${JSON.stringify(
 )} as const
 `
 
-// ---- skill reference -----------------------------------------------------------------------
-
-const md = `<!-- ⚙️ Generated from ${SOURCE} by scripts/build-tokens.ts — do not edit. Run \`pnpm tokens\`. -->
-
-# Design tokens → Tailwind classes
-
-Source: Penpot file **Cofacts-2026**, exported to \`${SOURCE}\`. Rule: drop the role prefix.
-Fixed = same value in light and dark (use on fixed backgrounds such as \`bg-dark\`, see R4 in a11y.md).
-
-## Semantic colors (${semanticNames.length})
-
-| Penpot token | Class | Light | Dark | Fixed |
-| --- | --- | --- | --- | --- |
-${semanticColors
-  .map(
-    (c) =>
-      `| \`${c.name}\` | ${c.classes.length ? c.classes.map((x) => `\`${x}\``).join(' ') : `\`var(--${c.name})\` only`} | ${c.light} | ${c.dark} | ${c.fixed ? 'yes' : ''} |`,
-  )
-  .join('\n')}
-
-Primitive colors (\`neutral-900\`, \`brand-500-main\`…) have no utilities. Never use them in components.
-
-## Typography (${typography.length})
-
-| Penpot token | Class | Size | Line height | Weight |
-| --- | --- | --- | --- | --- |
-${typography.map((t) => `| \`${t.name}\` | \`${t.className}\` | ${t.size}px | ${t.lineHeightLabel} | ${t.weight} |`).join('\n')}
-
-There are no bare font-size classes (\`text-16\` does not exist). \`ui\` tokens are for single-line text only.
-
-## Spacing (1 unit = 1px)
-
-${spacing.map((s) => `\`${s.name}\` → \`p-${s.value}\` / \`gap-${s.value}\` / \`m-${s.value}\``).join('  \n')}
-
-## Radius, shadow
-
-${radius.map((r) => `\`${r.name}\` → \`${r.className}\``).join('  \n')}
-${shadows.map((s) => `\`${s.name}\` → \`${s.className}\``).join('  \n')}
-`
-
 // ---- write / check -------------------------------------------------------------------------
 
 const outputs: Array<[string, string]> = [
   [OUT_CSS, css],
   [OUT_TS, ts],
-  [OUT_MD, md],
 ]
 
 if (process.argv.includes('--check')) {

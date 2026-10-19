@@ -18,18 +18,19 @@ this skill is the current, executable form of it.
 
 ## References (read the one you need)
 
-| File                                                       | Read it when                                                                            |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| [references/tokens.md](references/tokens.md)               | Choosing a class for a color, font, spacing, radius. ⚙️ Generated — never edit by hand. |
-| [references/mapping-rules.md](references/mapping-rules.md) | Turning Penpot data (MCP) into Tailwind classes and component props.                    |
-| [references/penpot-mcp.md](references/penpot-mcp.md)       | Using the Penpot MCP: auditing a board, exporting tokens, known pitfalls.               |
-| [references/a11y.md](references/a11y.md)                   | Any UI work. Rules R1–R5, focus, interaction specs per component.                       |
-| [references/structure.md](references/structure.md)         | Deciding where a file goes; component layers; styling rules.                            |
-| [references/data-layer.md](references/data-layer.md)       | Loading or writing data: server functions, TanStack Query, loaders.                     |
+| File                                                       | Read it when                                                              |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [references/mapping-rules.md](references/mapping-rules.md) | Turning Penpot data (MCP) into Tailwind classes and component props.      |
+| [references/penpot-mcp.md](references/penpot-mcp.md)       | Using the Penpot MCP: auditing a board, exporting tokens, known pitfalls. |
+| [references/a11y.md](references/a11y.md)                   | Any UI work. Rules R1–R5, focus, interaction specs per component.         |
+| [references/structure.md](references/structure.md)         | Deciding where a file goes; component layers; styling rules.              |
+| [references/data-layer.md](references/data-layer.md)       | Loading or writing data: server functions, TanStack Query, loaders.       |
 
 ## Hard rules
 
-- **Tokens only.** Use the classes in `references/tokens.md`. No arbitrary colors (`[#…]`,
+- **Tokens only.** Class = Penpot token name without its role prefix (`surface-raised` →
+  `bg-raised`, `type-body-m` → `text-body-m`); the full list with each class is in the generated
+  `src/styles/tokens.css` (comments name the class), and Storybook's Foundations/Tokens shows them. No arbitrary colors (`[#…]`,
   `style={{ color }}`), no primitive colors (`neutral-900`), no `dark:` variants (tokens flip by
   themselves), no bare font sizes (`text-16`) or `leading-*` / `font-semibold` — use a typography
   class (`text-body-m`, `text-ui-s-bold`…). Spacing is 1px per unit: `p-16` is 16px.
