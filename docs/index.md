@@ -115,12 +115,12 @@ is only the overview.
 
 - **Tokens:** `design/tokens.json` (exported from Penpot) is the source. `pnpm tokens` generates
   `src/styles/tokens.css` (CSS variables + Tailwind `@theme`), `src/styles/tokens.generated.ts`
-  (names for `cn()`'s tailwind-merge, lists for Storybook) and the skill's `references/tokens.md`.
+  (names for `cn()`'s tailwind-merge, lists for Storybook).
   CI runs `pnpm tokens:check`. Class = token name without its role prefix
   (`surface-raised` → `bg-raised`, `type-body-m` → `text-body-m`); spacing is 1px per unit;
   Tailwind's default palette and sizes are switched off.
-- **Themes:** semantic tokens flip between light and dark by `prefers-color-scheme`, overridable
-  with `<html data-theme>`. Components never use `dark:`.
+- **Themes:** each semantic token is `light-dark(light, dark)`; `color-scheme` follows
+  `prefers-color-scheme` unless `<html data-theme>` forces one. Components never use `dark:`.
 - **Global CSS:** `src/styles/global.css` holds only site-wide rules (tokens, body base, the
   focus ring).
 - **Transition:** Storybook (Foundations/Tokens) already uses the new system; the app still
