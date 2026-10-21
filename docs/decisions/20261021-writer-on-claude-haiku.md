@@ -84,6 +84,16 @@ sees only the writer's `request` text)
   for the calling (writer) session, so the verifier lists that session's `user-upload-*`
   artifacts and attaches an exact-match `canonical_uri` with its stored MIME type. _Chosen._
 
+**Prompt caching for the writer** (ADK 2.12's Claude adapter supports it; nothing caches unless
+the request carries `cache_control`)
+
+- `App(context_cache_config=...)` — applies to every agent, and the Gemini sub-agents would create
+  server-side cache resources (with storage cost) for single-request AgentTool sessions that are
+  never reused; Gemini 3 already gets implicit caching on Vertex.
+- Set `llm_request.cache_config` in the writer's own before-model callback. _Chosen._
+- TTL: Claude's 1-hour cache (writes 2×) vs the default 5-minute one (writes 1.25×, renewed on every
+  hit). _5 minutes_: a fact-check turn's calls are seconds to a minute apart.
+
 **Keeping the ADK 2.12 migration off the production database**
 
 - Change the `DATABASE_URL` secret to the staging database — invisible in code and affects every
@@ -116,6 +126,11 @@ Concretely:
 - **Cost.** `ANTHROPIC_OPEN_TELEMETRY=false` stops the Anthropic SDK's own span, which Langfuse
   would otherwise price on top of `call_llm`. A Langfuse model definition for `claude-haiku-5-5`
   carries Vertex's global prices with a >100K-input tier.
+- **Prompt caching.** `prepare_writer_request` sets `ContextCacheConfig()` on the writer's requests
+  only (ADK's 1800 s maps to Claude's 5-minute cache); the adapter marks the system prompt, tools and
+  last message. The history rewrite above keeps each request a prefix of the next, which is what
+  caching needs. `instrumentation.py` maps Claude's cache writes to `input_cache_creation` so they
+  are priced at 1.25×, not as plain input.
 - **Database.** `adk_staging` on the same Cloud SQL instance, cloned from production and owned by
   the app's IAM user; Cloud Run gets it through `deploy.yml`, production on GCE keeps `adk`.
 
@@ -129,8 +144,12 @@ Concretely:
 - Good, because preview and dev traffic can no longer write ADK 2.12 events into production.
 - Bad, because the writer can no longer look at an image itself; it sees the verifier's description,
   one extra call and some latency away.
-- Bad, because the writer has no prompt caching yet: input grows every call, and a session that
-  crosses 100K input tokens pays 5× per token (one call reached 306K tokens / $0.17).
+- Good, because prompt caching turns the writer's growing history into cache reads at 10% of the
+  input price: on preview session `be879466` the writer cost $0.157 instead of ≈$0.486 for the same
+  tokens uncached (−68%).
+- Bad, because a session whose input crosses 100K tokens still pays 5× per token, cached or not.
+  The usual cause is one `search_cofacts_database` result (130K characters on `be879466`); the tool
+  appears in roughly a quarter to half of sessions, so trimming its output is a follow-up.
 - Bad, because Vertex offers no server-side refusal fallback for Claude.
 - Bad, because upload attachment relies on ADK's `ForwardingArtifactService` keeping the parent
   session's scope — an ADK change would silently stop attachment (it fails closed).
@@ -143,7 +162,9 @@ Concretely:
   same path in another bucket are not.
 - `test_media_filedata.py`, `test_writer_request.py` and `test_writer_citations.py` cover the
   remaining unit cases (MIME source, prefix and version matching, lookup failure, placeholder
-  format, citation-id tail).
+  format, citation-id tail, caching enabled for the writer without overriding an app-wide config).
+- `test_langfuse_usage_mapping.py` runs a Claude response with cache reads and writes through ADK's
+  adapter and checks they land on `input_cached_tokens` / `input_cache_creation` and sum to `total`.
 - After a production deploy, run the `langfuse-usage-check` skill over the first full day; expect
   0% unpriced tokens and a single generation per writer call.
 
@@ -157,5 +178,5 @@ Concretely:
   [`20260730-langfuse-usage-mapping`](20260730-langfuse-usage-mapping.md).
 - The ADK 2 upgrade procedure (clone production into `adk_staging`, preview checks, the
   `node_info` rollback) comes from nonumpa's SOP on the `docs/adk2-upgrade-sop` branch.
-- Follow-ups: prompt caching for the writer; a stricter verifier tick rule, studied separately
-  (verifier over-lenient ticks, 2026-10-21).
+- Follow-ups: trim `search_cofacts_database` output so sessions stay under the 100K-input tier; a
+  stricter verifier tick rule, studied separately (verifier over-lenient ticks, 2026-10-21).
