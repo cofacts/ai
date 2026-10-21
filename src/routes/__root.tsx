@@ -16,6 +16,12 @@ import { getCurrentUserServerFn } from '@/server/me.functions'
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   {
     loader: async () => ({ serverLoadedUser: await getCurrentUserServerFn() }),
+    // SSR renders the logged-in view (the user, and later per-user data, is in the HTML), so a
+    // shared cache must never store it.
+    headers: ({ loaderData }) =>
+      loaderData?.serverLoadedUser
+        ? { 'Cache-Control': 'private, no-store' }
+        : undefined,
     head: () => ({
       meta: [
         {
