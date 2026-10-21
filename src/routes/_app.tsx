@@ -7,6 +7,10 @@ import { LoggedOutLanding } from '@/components/LoggedOutLanding'
 import { useAuth } from '@/lib/auth'
 
 export const Route = createFileRoute('/_app')({
+  // The Cofacts AI screens draw their own header (AiNav) and have a side panel, so the
+  // global nav and footer are off. When AI moves to /ai with the shared header (kb doc),
+  // only the session screens keep hideGlobalFooter.
+  staticData: { hideGlobalNav: true, hideGlobalFooter: true },
   component: AppLayout,
 })
 
