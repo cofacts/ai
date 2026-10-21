@@ -2,3 +2,5 @@ adk/
 node_modules/
 .output/
 .git/
+storybook-static/
+public/storybook/

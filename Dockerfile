@@ -11,7 +11,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 # Storybook goes into public/ before the app build: Nitro bakes its static-asset
 # manifest at build time, so files added to .output/public afterwards 404.
-# Served at /storybook/ (trailing slash required).
+# Served at /storybook/; .storybook/main.ts sends /storybook there.
 RUN pnpm run build-storybook --output-dir public/storybook
 RUN pnpm run build
 
