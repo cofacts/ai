@@ -169,7 +169,7 @@ async def inject_cofacts_media_filedata(
             if p.file_data and p.file_data.file_uri
         }
         user_contents = [
-            (content, [part.text for part in content.parts if part.text])
+            (content.parts, [part.text for part in content.parts if part.text])
             for content in llm_request.contents
             if content.role == "user" and content.parts
         ]
@@ -183,8 +183,8 @@ async def inject_cofacts_media_filedata(
             # the verifier's "No media, no description" rule covers the rest.
             logger.exception("Chat upload lookup failed; not attaching uploads")
             uploads = []
-        for content, texts in user_contents:
-            parts = content.parts or []
+        # Appending to ``parts`` adds to the content itself.
+        for parts, texts in user_contents:
             urls = []
             for text in texts:
                 urls.extend(_COFACTS_MEDIA_URL_RE.findall(text))
