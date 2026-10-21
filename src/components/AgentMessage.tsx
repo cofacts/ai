@@ -23,7 +23,7 @@ export function AgentMessage({
       {showAvatar && (
         <div className="flex items-center gap-8 mb-8 md:mb-12">
           <div className="w-24 h-24 rounded-full bg-accent-subtle flex items-center justify-center">
-            <span className="material-symbols-outlined text-body-s text-secondary">
+            <span className="material-symbols-outlined text-body-s text-on-accent">
               smart_toy
             </span>
           </div>
@@ -63,7 +63,9 @@ export function AgentMessage({
                 <button
                   className={cn(
                     'inline-flex shrink-0 cursor-pointer items-center gap-6 rounded-full border border-subtle bg-raised px-10 py-2 my-4 font-mono text-caption text-secondary transition-all hover:bg-selected hover:text-primary',
-                    isFocused ? 'bg-accent-subtle' : 'hover:bg-selected',
+                    isFocused
+                      ? 'bg-accent-subtle text-on-accent hover:bg-accent-subtle hover:text-on-accent'
+                      : 'hover:bg-selected',
                   )}
                   onClick={() => onToolBadgeClick?.(id ?? '')}
                 >
