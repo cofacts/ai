@@ -291,8 +291,9 @@ def test_function_response_reaches_claude_whole_and_unescaped():
 def test_gemini_thought_with_function_call_keeps_only_the_call():
     """The adapter checks the thought fields before the call.
 
-    Left as they are, a binary signature raises `UnicodeDecodeError` and an
-    ASCII one turns the call into `redacted_thinking`, orphaning its response.
+    Left as they are, a Gemini part's binary signature raises
+    `UnicodeDecodeError`. Covers a non-ASCII and a missing signature; an ASCII
+    signature reads as Claude's own and is kept as a thought.
     """
     call = genai_types.FunctionCall(id="c1", name="verifier", args={"request": "x"})
     contents = run(
