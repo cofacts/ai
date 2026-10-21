@@ -11,6 +11,9 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"
+      // A native <button> is labelable, so a wrapping <label> names it.
+      nativeButton
+      render={<button type="button" />}
       className={cn(
         'relative flex size-16 shrink-0 items-center justify-center rounded-2 border border-control bg-base text-inverse',
         'after:absolute after:-inset-8 data-checked:border-inverse data-checked:bg-inverse',

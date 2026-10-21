@@ -7,6 +7,9 @@ function Switch({ className, ...props }: SwitchPrimitive.Root.Props) {
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
+      // A native <button> is labelable, so a wrapping <label> names it.
+      nativeButton
+      render={<button type="button" />}
       className={cn(
         'relative inline-flex h-16 w-30 shrink-0 items-center rounded-full border border-strong bg-selected',
         'after:absolute after:-inset-8 data-checked:bg-accent-subtle',
