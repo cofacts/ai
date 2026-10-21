@@ -2,6 +2,7 @@ import { Outlet, createFileRoute } from '@tanstack/react-router'
 import { useCallback, useState } from 'react'
 import { Sidebar } from '@/components/Sidebar'
 import { Header } from '@/components/Header'
+import { Button } from '@/components/ui/button'
 import { LoggedOutLanding } from '@/components/LoggedOutLanding'
 import { useAuth } from '@/lib/auth'
 
@@ -18,7 +19,21 @@ function AppLayout() {
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Header */}
-      <Header onToggleSidebar={toggleSidebar} />
+      <Header />
+
+      {/* Mobile: the session sidebar is opened from here; the site menu is in the nav. */}
+      {user && (
+        <div className="flex items-center border-b border-subtle bg-base px-20 py-8 md:hidden">
+          <Button
+            variant="outline"
+            size="icon-touch"
+            iconStart="side-navigation"
+            aria-label="開啟對話列表"
+            aria-expanded={sidebarOpen}
+            onClick={toggleSidebar}
+          />
+        </div>
+      )}
 
       {/* Main content */}
       <main className="flex-1 flex overflow-hidden bg-base">

@@ -1,6 +1,6 @@
 import { expect, fn, userEvent, within } from 'storybook/test'
 
-import { AiNav, SiteNav } from './SiteNav'
+import { SiteNav } from './SiteNav'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
 const user = {
@@ -52,10 +52,4 @@ export const Search: Story = {
       within(canvasElement).getByRole('button', { name: '搜尋' }),
     )
   },
-}
-
-/** Penpot Type = AI: the Cofacts AI header. */
-export const Ai: StoryObj<typeof AiNav> = {
-  render: (args) => <AiNav {...args} />,
-  args: { user, onLogin: fn(), onLogout: fn(), onToggleSidebar: fn() },
 }
