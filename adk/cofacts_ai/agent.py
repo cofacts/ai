@@ -458,6 +458,10 @@ ai_verifier = LlmAgent(
 
     ## Hard Rules — No Exceptions
 
+    **No media, no description**: If the request refers to an image, video, audio clip or file but
+    no such media is actually attached to this request, say plainly that you could not see it.
+    Do NOT describe, transcribe or guess its contents.
+
     **No training knowledge**: For video or media content, report ONLY what is directly visible or
     audible. Never use background knowledge to identify the event name, date, location, organizer,
     or a person's full identity. If the video does not explicitly state it, write

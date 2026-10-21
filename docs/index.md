@@ -80,6 +80,10 @@ verifier, and `adk/cofacts_ai/writer_request.py` turns any media part left in it
 (e.g. a user upload) into a text placeholder, since the Claude adapter cannot carry `FileData`;
 it also serializes each tool result whole, since the adapter would otherwise forward only a
 result's `content` and drop its `sources` / `cite_as`.
+The placeholder keeps an upload's `gs://` URI, which the writer forwards to the verifier like an
+`attachmentUrl`; the verifier attaches it only if it is in `GCS_ARTIFACT_BUCKET` (the Vertex AI
+service agent can read every bucket in the project, so no other bucket is accepted), and its
+instruction forbids describing media that was not actually attached.
 
 Each `AgentTool` call is a **fresh, stateless, single-message session** — a sub-agent sees only
 that call's `request` string. So every tool result is stamped with a footnote id (`cite_as`, e.g.

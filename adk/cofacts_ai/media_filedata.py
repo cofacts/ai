@@ -7,9 +7,16 @@ On Vertex AI ``file_data.file_uri`` accepts ``gs://`` URIs natively (and HTTP
 URLs are capped at ~15MB, which our media exceeds), so we hand Gemini the
 ``gs://`` form and let the runtime service account read the bucket — no signed
 URLs and no on-demand re-signing required.
+
+Chat uploads are injected the same way: the writer forwards the ``gs://`` URI
+ADK gave a pasted file in ``GCS_ARTIFACT_BUCKET``. Only that bucket is
+accepted — the Vertex AI service agent can read every bucket in the project,
+so any other ``gs://`` URI in the text must not become FileData.
 """
 
 import logging
+import mimetypes
+import os
 import re
 from typing import Optional
 from urllib.parse import unquote, urlparse
@@ -39,6 +46,33 @@ _COFACTS_MEDIA_URL_RE = re.compile(
 # parens/quotes) and is not part of the URL itself. Stripped from matches —
 # a gs:// path has no query string to absorb a stray char.
 _URL_TRAILING_PUNCT = ".,;:!?)]}>\"'"
+
+# MIME types Gemini can perceive as FileData; uploads of any other type are skipped.
+_UPLOAD_MIME_PREFIXES = ("image/", "video/", "audio/", "application/pdf")
+
+
+def _artifact_uri_re(bucket: str) -> re.Pattern[str]:
+    """Matches an ADK artifact URI ``gs://<bucket>/.../<filename>/<version>``.
+
+    Upload names contain spaces (``user-upload-Pasted image 1.png``), so the
+    match runs non-greedily up to the first ``/<digits>`` that ends the URI:
+    followed by whitespace, end of text or CJK punctuation, optionally after
+    ASCII punctuation (``/0;``, ``/0).``). ``/2024.png/0`` does not end at
+    ``/2024`` because ``.`` is not followed by one of those.
+    """
+    return re.compile(
+        rf"gs://{re.escape(bucket)}/(?:[^\s\"'<>`]| )+?/\d+"
+        r"(?=[.,;:!?)\]}>*`\"']*(?:\s|$|[\u3000-\u303f\uff00-\uffef]))"
+    )
+
+
+def _upload_mime_type(gs_uri: str) -> Optional[str]:
+    """Guess an upload's MIME type from its filename, the segment before
+    ``/<version>``; None if Gemini cannot perceive that type."""
+    mime_type, _ = mimetypes.guess_type(gs_uri.rsplit("/", 2)[-2])
+    if mime_type and mime_type.startswith(_UPLOAD_MIME_PREFIXES):
+        return mime_type
+    return None
 
 
 def _parse_gcs_https_url(url: str) -> Optional[tuple[str, str]]:
@@ -99,7 +133,8 @@ def inject_cofacts_media_filedata(
     so without this the verifier never actually sees the media. Here we detect the
     Cofacts media URL in the message text and append it as a ``gs://`` FileData
     Part so Gemini (on Vertex) can watch/inspect it directly — mirroring
-    inject_youtube_filedata for YouTube URLs.
+    inject_youtube_filedata for YouTube URLs. A chat upload's ``gs://`` URI in
+    ``GCS_ARTIFACT_BUCKET`` is attached the same way.
     """
     try:
         # Seed with media already attached anywhere in the request so we never
@@ -110,13 +145,18 @@ def inject_cofacts_media_filedata(
             for p in content.parts or []
             if p.file_data and p.file_data.file_uri
         }
+        bucket = os.environ.get("GCS_ARTIFACT_BUCKET")
+        upload_re = _artifact_uri_re(bucket) if bucket else None
         for content in llm_request.contents:
             if content.role != "user" or not content.parts:
                 continue
             urls = []
+            uploads = []
             for part in content.parts:
                 if part.text:
                     urls.extend(_COFACTS_MEDIA_URL_RE.findall(part.text))
+                    if upload_re:
+                        uploads.extend(upload_re.findall(part.text))
             for url in urls:
                 url = url.rstrip(_URL_TRAILING_PUNCT)
                 gs_uri = url if url.startswith("gs://") else signed_url_to_gs(url)
@@ -128,6 +168,22 @@ def inject_cofacts_media_filedata(
                         file_data=genai_types.FileData(
                             file_uri=gs_uri,
                             mime_type=_mime_for_media_uri(gs_uri),
+                        )
+                    )
+                )
+            for gs_uri in uploads:
+                mime_type = _upload_mime_type(gs_uri)
+                if (
+                    not mime_type
+                    or gs_uri in seen
+                    or ".." in unquote(gs_uri).split("/")
+                ):
+                    continue
+                seen.add(gs_uri)
+                content.parts.append(
+                    genai_types.Part(
+                        file_data=genai_types.FileData(
+                            file_uri=gs_uri, mime_type=mime_type
                         )
                     )
                 )
