@@ -1,8 +1,11 @@
 // ⚙️ Generated from design/tokens.json by scripts/build-tokens.ts — do not edit. Run `pnpm tokens`.
 
-/** Custom class names for tailwind-merge, so cn() merges Cofacts utilities correctly. */
-export const twMergeTheme = {
-  "color": [
+/**
+ * Custom class names for tailwind-merge, so cn() merges Cofacts utilities correctly.
+ * Colors are listed per prefix: `bg-base` is a color, `text-base` is not.
+ */
+export const twMergeColors = {
+  "text": [
     "primary",
     "secondary",
     "tertiary",
@@ -16,21 +19,6 @@ export const twMergeTheme = {
     "on-dark-muted",
     "on-info",
     "on-line",
-    "base",
-    "raised",
-    "selected",
-    "accent",
-    "accent-subtle",
-    "accent-fold",
-    "dark",
-    "dark-raised",
-    "info",
-    "info-strong",
-    "line",
-    "subtle",
-    "control",
-    "strong",
-    "on-dark-strong",
     "icon-default",
     "icon-muted",
     "icon-inverse",
@@ -42,9 +30,41 @@ export const twMergeTheme = {
     "status-incorrect",
     "status-correct",
     "status-opinion",
+    "status-outofscope"
+  ],
+  "bg": [
+    "base",
+    "raised",
+    "selected",
+    "inverse",
+    "secondary",
+    "accent",
+    "accent-subtle",
+    "accent-fold",
+    "dark",
+    "dark-raised",
+    "on-dark",
+    "info",
+    "info-strong",
+    "line",
+    "status-incorrect",
+    "status-correct",
+    "status-opinion",
     "status-outofscope",
     "scrim"
   ],
+  "border": [
+    "subtle",
+    "control",
+    "strong",
+    "accent",
+    "inverse",
+    "on-dark",
+    "on-dark-strong"
+  ]
+}
+
+export const twMergeTheme = {
   "text": [
     "ui-l",
     "ui-l-bold",

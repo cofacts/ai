@@ -108,6 +108,104 @@
   color-scheme: dark;
 }
 
+/*
+ * Fallback for browsers without light-dark() (Safari / iOS before 17.5, including LINE's in-app
+ * browser there): the same values, picked by media query and data-theme instead.
+ */
+@supports not (color: light-dark(#000, #fff)) {
+  :root {
+    --text-primary: var(--neutral-900);
+    --text-secondary: var(--neutral-700);
+    --text-tertiary: var(--neutral-500);
+    --text-disabled: var(--neutral-400);
+    --text-inverse: var(--white);
+    --text-link: var(--blue-600);
+    --text-on-secondary: var(--white);
+    --text-on-status: var(--white);
+    --surface-base: var(--white);
+    --surface-raised: var(--neutral-100);
+    --surface-selected: var(--neutral-200);
+    --surface-inverse: var(--neutral-800);
+    --surface-secondary: var(--neutral-800);
+    --surface-accent-subtle: var(--brand-200);
+    --border-subtle: var(--neutral-300);
+    --border-control: var(--neutral-500);
+    --border-strong: var(--neutral-900);
+    --border-inverse: var(--white);
+    --border-focus: var(--neutral-900);
+    --icon-default: var(--neutral-900);
+    --icon-muted: var(--neutral-500);
+    --icon-inverse: var(--white);
+    --icon-on-secondary: var(--white);
+    --status-incorrect: var(--red-700);
+    --status-correct: var(--green-700);
+    --status-opinion: var(--blue-600);
+    --status-outofscope: var(--purple-600);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --text-primary: var(--neutral-100);
+      --text-secondary: var(--neutral-300);
+      --text-tertiary: var(--neutral-400);
+      --text-disabled: var(--neutral-600);
+      --text-inverse: var(--neutral-900);
+      --text-link: var(--blue-300);
+      --text-on-secondary: var(--neutral-100);
+      --text-on-status: var(--neutral-900);
+      --surface-base: var(--neutral-900);
+      --surface-raised: var(--neutral-800);
+      --surface-selected: var(--neutral-700);
+      --surface-inverse: var(--neutral-100);
+      --surface-secondary: var(--neutral-700);
+      --surface-accent-subtle: var(--brand-600);
+      --border-subtle: var(--neutral-700);
+      --border-control: var(--neutral-400);
+      --border-strong: var(--neutral-100);
+      --border-inverse: var(--neutral-900);
+      --border-focus: var(--neutral-100);
+      --icon-default: var(--neutral-100);
+      --icon-muted: var(--neutral-400);
+      --icon-inverse: var(--neutral-900);
+      --icon-on-secondary: var(--neutral-100);
+      --status-incorrect: var(--red-300);
+      --status-correct: var(--green-300);
+      --status-opinion: var(--blue-300);
+      --status-outofscope: var(--purple-300);
+    }
+  }
+
+  [data-theme='dark'] {
+    --text-primary: var(--neutral-100);
+    --text-secondary: var(--neutral-300);
+    --text-tertiary: var(--neutral-400);
+    --text-disabled: var(--neutral-600);
+    --text-inverse: var(--neutral-900);
+    --text-link: var(--blue-300);
+    --text-on-secondary: var(--neutral-100);
+    --text-on-status: var(--neutral-900);
+    --surface-base: var(--neutral-900);
+    --surface-raised: var(--neutral-800);
+    --surface-selected: var(--neutral-700);
+    --surface-inverse: var(--neutral-100);
+    --surface-secondary: var(--neutral-700);
+    --surface-accent-subtle: var(--brand-600);
+    --border-subtle: var(--neutral-700);
+    --border-control: var(--neutral-400);
+    --border-strong: var(--neutral-100);
+    --border-inverse: var(--neutral-900);
+    --border-focus: var(--neutral-100);
+    --icon-default: var(--neutral-100);
+    --icon-muted: var(--neutral-400);
+    --icon-inverse: var(--neutral-900);
+    --icon-on-secondary: var(--neutral-100);
+    --status-incorrect: var(--red-300);
+    --status-correct: var(--green-300);
+    --status-opinion: var(--blue-300);
+    --status-outofscope: var(--purple-300);
+  }
+}
+
 @theme {
   /* Only Cofacts tokens exist as utilities. */
   --color-*: initial;

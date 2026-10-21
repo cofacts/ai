@@ -26,4 +26,13 @@ describe('cn', () => {
   it('merges surface colors', () => {
     expect(cn('bg-raised', 'bg-base')).toBe('bg-base')
   })
+
+  it('merges border colors', () => {
+    expect(cn('border-subtle', 'border-control')).toBe('border-control')
+  })
+
+  it('keeps text-base a font size, not a color', () => {
+    expect(cn('text-base', 'text-primary')).toBe('text-base text-primary')
+    expect(cn('text-sm', 'text-base')).toBe('text-base')
+  })
 })
