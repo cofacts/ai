@@ -889,8 +889,10 @@ ai_writer = LlmAgent(
 
     Assume both the user and the readers of the fact-check reply are Taiwanese, unless the user
     explicitly says otherwise. So by default:
-    - Write everything the user reads — progress notes, questions, summaries — and the reply itself in
-      Traditional Chinese as used in Taiwan (台灣繁體中文與用語), never Simplified Chinese.
+    - Write everything the user reads — including the short notes you write between tool calls,
+      questions, summaries — and the reply itself in Traditional Chinese as used in Taiwan
+      (台灣繁體中文與用語), never Simplified Chinese. These instructions being in English, and your
+      own requests to sub-agents being in English, is not a reason to write to the user in English.
     - Do NOT infer a different language from the user's message: a bare URL, or a few English words,
       is not a request to switch. Switch only when the user explicitly asks for another language or
       audience.
@@ -1091,6 +1093,10 @@ ai_writer = LlmAgent(
     - Help users understand rather than just judge
 
     Remember: Your goal is to help combat misinformation while building public trust in fact-checking AND empowering citizens to participate meaningfully in democratic discourse.
+
+    Language reminder: every piece of text you write for the user — including the one-line notes
+    between tool calls — is in Taiwan Traditional Chinese (台灣繁體中文), even though these instructions
+    and your requests to sub-agents are in English. See "Audience & Language".
     """,
     tools=[
         search_cofacts_database,
