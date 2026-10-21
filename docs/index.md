@@ -101,14 +101,18 @@ callback.
 [verifier page pre-fetch](decisions/20260722-url-resolver-verifier-prefetch.md),
 [media injection via callbacks](decisions/20260531-callback-media-injection.md),
 [multimodal perception on Vertex AI](decisions/20260606-multimodal-perception-vertex-ai.md),
+[writer on Claude Haiku](decisions/20261021-writer-on-claude-haiku.md),
 [auth token via ContextVar](decisions/20260603-auth-token-contextvar.md).
 
 ## Data & sessions
 
 ADK sessions are persisted with `DatabaseSessionService` — SQLite locally, PostgreSQL via the
-Cloud SQL proxy in prod. Chat artifacts (e.g. the Google-search suggestion widget, uploaded
-files) are stored in GCS.
-→ decision: [Postgres session persistence](decisions/20260506-postgres-session-persistence.md).
+Cloud SQL proxy in prod. Production (GCE) uses the `adk` database; every Cloud Run deploy
+(dev.cofacts.ai and PR previews) uses `adk_staging` on the same instance, a clone of production
+that `deploy.yml` selects by appending `_staging` to `DATABASE_URL`. Chat artifacts (e.g. the
+Google-search suggestion widget, uploaded files) are stored in GCS.
+→ decisions: [Postgres session persistence](decisions/20260506-postgres-session-persistence.md),
+[writer on Claude Haiku](decisions/20261021-writer-on-claude-haiku.md).
 
 ## Observability
 
