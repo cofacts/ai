@@ -11,7 +11,7 @@ through TanStack Start server functions and the TanStack Query cache.
 | Server-only utilities: `cofactsExec`, the secret, JWT handling | `*.server.ts`                                                       | Only inside server-function handlers |
 | GraphQL document                                               | Inline in the handler (`graphql()`), moves with its server function | Only inside handlers                 |
 | Server function (`createServerFn`)                             | Inline in the route file, at module top level                       | Anyone                               |
-| Types, zod schemas, constants                                  | plain `.ts`                                                         | Anyone                               |
+| Types, constants                                               | plain `.ts`                                                         | Anyone                               |
 
 ## Server functions
 
@@ -28,8 +28,9 @@ through TanStack Start server functions and the TanStack Query cache.
    warning as an error.
 5. The secret is read only in `src/server/cofacts.server.ts`. Import protection can't catch a
    hard-coded string or `process.env` read in a plain file.
-6. Validate every server-function input (zod). Return only fields the UI needs: the result is
-   serialized into the HTML.
+6. Type every server-function input with `.inputValidator`, and check there whatever a caller
+   could get wrong (an allowed value, a range), throwing on bad input. Return only fields the
+   UI needs: the result is serialized into the HTML.
 
 ## Reading data: TanStack Query
 
@@ -63,13 +64,12 @@ Route setup (once): `createRouter({ context: { queryClient } })` and
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { queryOptions, useSuspenseQuery } from '@tanstack/react-query'
-import { z } from 'zod'
 import { cofactsExec } from '@/server/cofacts.server'
 import { graphql } from '@/server/gql'
 import { ArticlePageView } from './-components/ArticlePageView'
 
 const getArticle = createServerFn({ method: 'GET' })
-  .inputValidator(z.string())
+  .inputValidator((id: string) => id)
   .handler(({ data: id }) =>
     cofactsExec(
       graphql(`
