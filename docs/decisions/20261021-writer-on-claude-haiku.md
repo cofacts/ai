@@ -117,8 +117,11 @@ Concretely:
   summaries, `effort="high"`, same `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION=global`.
 - **History rewrite** (`writer_request.py`, before-model): tool responses serialized whole
   (`ensure_ascii=False`) so `sources` / `cite_as` survive the adapter; media parts become text
-  placeholders that keep the `gs://` URI; Gemini thoughts from older sessions are dropped. The
-  rewrite is deterministic so Claude's edited-history check never fires.
+  placeholders that keep the `gs://` URI; Gemini thoughts from older sessions are dropped (one that
+  also carries a function call keeps the call). Claude's own thoughts are kept with their
+  signatures; Langfuse can show them unsigned only because ADK strips signatures from the response
+  copy it records on the `call_llm` span. The rewrite is deterministic so Claude's edited-history
+  check never fires.
 - **Media.** `inject_article_attachment` is removed; the writer forwards article media and upload
   URIs to the verifier. `inject_cofacts_media_filedata` attaches Cofacts media (unchanged) and the
   calling session's uploads. The verifier instruction gains "No media, no description".
