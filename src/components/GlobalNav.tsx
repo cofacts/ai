@@ -8,13 +8,15 @@ import { useAuth } from '@/lib/auth'
 export function GlobalNav() {
   const { user, isLoading, login, logout } = useAuth()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  // The item whose local href is a prefix of the current path is the current page.
-  const current = (
-    Object.keys(NAV_LINKS) as Array<keyof typeof NAV_LINKS>
-  ).find((key) => {
-    const { href } = NAV_LINKS[key]
-    return href.startsWith('/') && href !== '/' && pathname.startsWith(href)
-  }) as SiteNavProps['current']
+  // The item whose local href is a prefix of the current path is the current page. Cofacts AI
+  // still lives at / and /session/* until it moves to /ai.
+  const isAi = pathname === '/' || pathname.startsWith('/session/')
+  const current = isAi
+    ? 'ai'
+    : ((Object.keys(NAV_LINKS) as Array<keyof typeof NAV_LINKS>).find((key) => {
+        const { href } = NAV_LINKS[key]
+        return href.startsWith('/') && href !== '/' && pathname.startsWith(href)
+      }) as SiteNavProps['current'])
   return (
     <SiteNav
       current={current}

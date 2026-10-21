@@ -96,13 +96,25 @@ declare module '@tanstack/react-router' {
  * A route opts out with staticData; a flag set on a parent route also covers its children.
  */
 function RootComponent() {
-  const hideGlobalNav = useMatches({
-    select: (matches) => matches.some((m) => m.staticData.hideGlobalNav),
+  const { hideGlobalNav, hideGlobalFooter } = useMatches({
+    select: (matches) => ({
+      hideGlobalNav: matches.some((m) => m.staticData.hideGlobalNav),
+      hideGlobalFooter: matches.some((m) => m.staticData.hideGlobalFooter),
+    }),
+    structuralSharing: true,
   })
-  // The footer (Penpot Layout/Footer) is not built yet; when it is, render it after <Outlet />
-  // unless a match sets hideGlobalFooter, the same way as the nav.
+  // Pages scroll with a footer at the end. Screens without a footer (side panels) are pinned to
+  // the viewport height instead, and scroll inside their panels.
+  // The footer (Penpot Layout/Footer) is not built yet; it goes after <Outlet /> behind
+  // hideGlobalFooter.
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div
+      className={
+        hideGlobalFooter
+          ? 'flex h-dvh flex-col overflow-hidden'
+          : 'flex min-h-dvh flex-col'
+      }
+    >
       {!hideGlobalNav && <GlobalNav />}
       <Outlet />
     </div>
