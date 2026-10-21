@@ -100,7 +100,7 @@ media with the Gemini verifier avoids re-sending base64 images on every Claude c
 
 Concretely:
 
-- **Model.** `Claude(model="claude-haiku-5-5", max_tokens=32000)`, adaptive thinking with
+- **Model.** `Claude(model="claude-haiku-5-5", max_tokens=16000)`, adaptive thinking with
   summaries, `effort="high"`, same `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION=global`.
 - **History rewrite** (`writer_request.py`, before-model): tool responses serialized whole
   (`ensure_ascii=False`) so `sources` / `cite_as` survive the adapter; media parts become text

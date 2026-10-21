@@ -853,8 +853,11 @@ ai_writer = LlmAgent(
     # Claude on Vertex AI (same GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION as
     # Gemini). The writer is text-only: it no longer perceives images itself and
     # delegates looking at media to the verifier. Thinking counts toward
-    # max_tokens, so leave room for it on top of a long draft.
-    model=Claude(model="claude-haiku-5-5", max_tokens=32000),
+    # max_tokens, and ADK's default 8192 is close to the ~7.2K that a draft call
+    # with heavy thinking reached on the preview; a cut-off draft call loses the
+    # whole draft. Stay at or below 21,333: above it the Anthropic SDK refuses
+    # non-streaming requests, which breaks /run.
+    model=Claude(model="claude-haiku-5-5", max_tokens=16000),
     description="AI agent that orchestrates fact-checking process and composes final fact-check replies for Cofacts.",
     generate_content_config=AnthropicGenerateContentConfig(
         # -1 = adaptive thinking with summarized thoughts (Claude's default is
