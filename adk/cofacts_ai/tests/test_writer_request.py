@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from anthropic import types as anthropic_types
 from google.adk.agents.callback_context import CallbackContext
+from google.adk.agents.context_cache_config import ContextCacheConfig
 from google.adk.models.anthropic_llm import (
     _content_to_message_param,
     _ToolUseIdSanitizer,
@@ -189,3 +190,15 @@ def test_thought_with_function_call_is_kept():
     )
     [content] = run([genai_types.Content(role="model", parts=[part])])
     assert content.parts == [part]
+
+
+def test_turns_on_prompt_caching_for_the_writer_only():
+    llm_request = LlmRequest(contents=[])
+    prepare_writer_request(CALLBACK_CONTEXT, llm_request)
+    # ADK's default lifetime, which the adapter maps to Claude's 5-minute cache.
+    assert llm_request.cache_config == ContextCacheConfig()
+
+    app_wide = ContextCacheConfig(ttl_seconds=3600)
+    llm_request = LlmRequest(contents=[], cache_config=app_wide)
+    prepare_writer_request(CALLBACK_CONTEXT, llm_request)
+    assert llm_request.cache_config is app_wide

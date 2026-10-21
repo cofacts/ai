@@ -26,12 +26,21 @@ carry three kinds of part that a session can still hold as they are:
 The rewrite is deterministic and only depends on the stored history, so every
 request sends the same prefix — Claude invalidates its own thinking blocks when
 an earlier turn changes between requests.
+
+The same stable prefix is what makes prompt caching pay off, so this callback
+also turns it on for the writer alone. ``App(context_cache_config=...)`` would
+apply to every agent, and the Gemini sub-agents would then create server-side
+cache resources for single-request sessions that are never reused. The adapter
+reads ``llm_request.cache_config`` after this callback; ADK's default
+``ttl_seconds`` (1800) maps to Claude's 5-minute cache, which every hit renews,
+so a whole fact-check turn stays cached at the cheaper 1.25x write rate.
 """
 
 import json
 from typing import Optional
 
 from google.adk.agents.callback_context import CallbackContext
+from google.adk.agents.context_cache_config import ContextCacheConfig
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
 
@@ -90,6 +99,8 @@ def prepare_writer_request(
     llm_request: LlmRequest,
 ) -> None:
     """Before-model callback for ai_writer. See the module docstring."""
+    if llm_request.cache_config is None:
+        llm_request.cache_config = ContextCacheConfig()
     for content in llm_request.contents:
         if not content.parts:
             continue
