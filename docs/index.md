@@ -116,8 +116,9 @@ is only the overview.
   `src/routes/(lists)/articles.tsx` is the working example; `src/server/cofacts.server.ts`
   (`cofactsExec`) is server-only and enforced by import protection.
 - **Site shell:** `__root.tsx` renders the global nav (and later the footer) around every
-  page. A route opts out with `staticData: { hideGlobalNav, hideGlobalFooter }`; the Cofacts AI
-  layout `_app` does, since it draws `AiNav` and a side panel.
+  page. A route opts out with `staticData: { hideGlobalNav, hideGlobalFooter }`. The Cofacts AI
+  layout `_app` sets `hideGlobalFooter`: it has a side panel, so it is pinned to the viewport
+  height with no footer.
 
 Design record: the kb doc
 [Phase 3 網站遷移與前端架構](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Phase%203%20網站遷移與前端架構.md).
