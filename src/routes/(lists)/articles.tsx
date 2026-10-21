@@ -42,7 +42,7 @@ const articlesQuery = queryOptions({
   staleTime: 60_000,
 })
 
-export const Route = createFileRoute('/_site/articles')({
+export const Route = createFileRoute('/(lists)/articles')({
   // No loader: head() doesn't need data and the page always exists. useSuspenseQuery below
   // runs during SSR, so the data is still in the server-rendered HTML.
   head: () => ({ meta: [{ title: '可疑訊息 | Cofacts 真的假的' }] }),
@@ -52,7 +52,7 @@ export const Route = createFileRoute('/_site/articles')({
 function ArticlesPage() {
   const { data } = useSuspenseQuery(articlesQuery)
   return (
-    <div className="flex flex-col gap-16">
+    <main className="mx-auto flex w-full max-w-1040 flex-1 flex-col gap-16 px-20 py-32 md:px-0">
       <h1 className="text-heading-l text-primary">可疑訊息</h1>
       <p className="text-body-m text-secondary">
         共 {data.ListArticles?.totalCount ?? 0} 則。以下是 server function
@@ -61,6 +61,6 @@ function ArticlesPage() {
       <pre className="overflow-x-auto rounded-5 bg-raised p-16 font-mono text-caption text-primary">
         {JSON.stringify(data, null, 2)}
       </pre>
-    </div>
+    </main>
   )
 }

@@ -3,11 +3,13 @@ import {
   Outlet,
   Scripts,
   createRootRouteWithContext,
+  useMatches,
 } from '@tanstack/react-router'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
 import appCss from '../styles/global.css?url'
 import type { QueryClient } from '@tanstack/react-query'
+import { GlobalNav } from '@/components/GlobalNav'
 import { AuthProvider } from '@/lib/auth'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 
@@ -80,6 +82,29 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   )
 }
 
+declare module '@tanstack/react-router' {
+  interface StaticDataRouteOption {
+    /** Set when the route draws its own nav (or none). */
+    hideGlobalNav?: boolean
+    /** Set on screens with a side panel, or that draw their own footer. */
+    hideGlobalFooter?: boolean
+  }
+}
+
+/**
+ * The site shell: every page shares GlobalNav and the footer (Penpot Layout/Nav, Layout/Footer).
+ * A route opts out with staticData; a flag set on a parent route also covers its children.
+ */
 function RootComponent() {
-  return <Outlet />
+  const hideGlobalNav = useMatches({
+    select: (matches) => matches.some((m) => m.staticData.hideGlobalNav),
+  })
+  // The footer (Penpot Layout/Footer) is not built yet; when it is, render it after <Outlet />
+  // unless a match sets hideGlobalFooter, the same way as the nav.
+  return (
+    <div className="flex min-h-dvh flex-col">
+      {!hideGlobalNav && <GlobalNav />}
+      <Outlet />
+    </div>
+  )
 }
