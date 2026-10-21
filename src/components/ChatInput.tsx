@@ -228,7 +228,7 @@ export function ChatInput({
           <button
             onClick={isStreaming ? onStop : handleSubmit}
             disabled={(!isStreaming && !canSend) || disabled}
-            className="shrink-0 p-6 bg-accent text-primary rounded-10 hover:bg-accent-subtle transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+            className="shrink-0 p-6 bg-accent text-on-accent rounded-10 hover:bg-accent-subtle transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined text-body-s">
               {isStreaming ? 'stop' : 'send'}

@@ -23,6 +23,9 @@ Colocate per component: `Foo.tsx`, `Foo.stories.tsx`, `Foo.module.css` (only whe
 
 - Tailwind with Cofacts tokens. CSS Modules only where Tailwind can't express it: complex
   keyframes, `::before` decoration, scroll-driven animation, third-party DOM. **No CSS-in-JS.**
+- Document-level rules (`::view-transition-*`) go in a plain `Foo.css` imported for its side
+  effect (`import './Foo.css'`). A CSS Module imported that way is tree-shaken from the
+  production build because nothing reads its exports.
 - `src/styles/global.css` holds only truly global rules (Tailwind import, tokens, body base,
   focus ring). Component styles never go there.
 - Variants with `class-variance-authority` (cva). Penpot's named variant properties map 1:1 to

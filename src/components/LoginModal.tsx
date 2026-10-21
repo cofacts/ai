@@ -25,13 +25,13 @@ const PROVIDERS: ReadonlyArray<ProviderConfig> = [
     id: 'facebook',
     label: 'Facebook',
     icon: FacebookIcon,
-    className: 'bg-[#1976D2] text-on-accent hover:bg-[#155fa3]',
+    className: 'bg-[#1976D2] text-on-line hover:bg-[#155fa3]',
   },
   {
     id: 'github',
     label: 'GitHub',
     icon: GithubIcon,
-    className: 'bg-[#2B414D] text-on-accent hover:bg-[#1e2f38]',
+    className: 'bg-[#2B414D] text-on-line hover:bg-[#1e2f38]',
   },
   {
     id: 'google',

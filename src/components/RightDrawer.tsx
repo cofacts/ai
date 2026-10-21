@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
-import './RightDrawer.module.css'
+import './RightDrawer.css'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -161,7 +161,7 @@ function ToolErrorSection({ message }: { message: string }) {
   return (
     <section>
       <SectionLabel>這次呼叫沒有成功</SectionLabel>
-      <p className="text-body-s text-secondary bg-accent-subtle border border-accent rounded-10 p-12 whitespace-pre-wrap">
+      <p className="text-body-s text-on-accent bg-accent-subtle border border-accent rounded-10 p-12 whitespace-pre-wrap">
         {message}
       </p>
     </section>
@@ -192,7 +192,7 @@ function SourceCard({ source, index }: { source: ToolSource; index: number }) {
       href={source.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block bg-raised rounded-10 p-12 hover:bg-raised transition-colors border border-subtle"
+      className="block bg-raised rounded-10 p-12 hover:bg-selected transition-colors border border-subtle"
     >
       <div className="flex items-center gap-6 mb-4">
         <span className="material-symbols-outlined text-[13px] text-tertiary">
@@ -406,8 +406,8 @@ const CATEGORIES: Array<{
     key: 'NOT_ARTICLE',
     label: '不在查證範圍',
     icon: 'warning',
-    colorClass: 'text-yellow-500',
-    activeClass: 'bg-accent-subtle border-accent text-secondary',
+    colorClass: 'text-status-outofscope',
+    activeClass: 'bg-accent-subtle border-accent text-on-accent',
   },
   {
     key: 'RUMOR',
@@ -420,14 +420,14 @@ const CATEGORIES: Array<{
     key: 'NOT_RUMOR',
     label: '含有正確訊息',
     icon: 'check_circle',
-    colorClass: 'text-green-500',
+    colorClass: 'text-status-correct',
     activeClass: 'bg-raised border-subtle text-status-correct',
   },
   {
     key: 'OPINIONATED',
     label: '含有個人意見',
     icon: 'comment',
-    colorClass: 'text-blue-500',
+    colorClass: 'text-status-opinion',
     activeClass: 'bg-raised border-subtle text-link',
   },
 ]
@@ -455,7 +455,7 @@ function DraftFactcheckContent({
                 flex flex-col items-center justify-center gap-2
                 ${
                   isActive
-                    ? `bg-base shadow-btn border border-subtle${cat.activeClass}`
+                    ? `bg-base shadow-btn border border-subtle ${cat.activeClass}`
                     : 'text-tertiary'
                 }
               `}
@@ -520,7 +520,7 @@ const REPLY_TYPE_INFO: Record<string, { label: string; className: string }> = {
   },
   NOT_ARTICLE: {
     label: '不是可查核的內容',
-    className: 'bg-accent-subtle text-secondary border border-accent',
+    className: 'bg-accent-subtle text-on-accent border border-accent',
   },
 }
 
@@ -530,7 +530,7 @@ function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
       href={`https://cofacts.tw/article/${article.id}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="shrink-0 w-[210px] rounded-10 border border-subtle bg-raised p-12 hover:bg-raised transition-colors flex flex-col gap-8"
+      className="shrink-0 w-[210px] rounded-10 border border-subtle bg-raised p-12 hover:bg-selected transition-colors flex flex-col gap-8"
     >
       <p className="text-caption text-secondary line-clamp-4 flex-1">
         {article.text || `[${article.articleType}]`}

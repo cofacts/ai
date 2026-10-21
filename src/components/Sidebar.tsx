@@ -92,7 +92,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
     <div className="relative group">
       {isEditing ? (
         <div
-          className={`flex flex-col p-12 rounded-10 ${isActive ? 'bg-accent-subtle text-primary' : 'text-secondary'}`}
+          className={`flex flex-col p-12 rounded-10 ${isActive ? 'bg-accent-subtle text-on-accent' : 'text-secondary'}`}
         >
           <div className="flex-1 min-w-0 pr-24">
             <input
@@ -107,7 +107,9 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
               }}
               className="w-full text-body-s bg-base border border-accent rounded-5 px-4 outline-none"
             />
-            <div className="text-caption text-secondary truncate mt-2 text-left">
+            <div
+              className={`text-caption truncate mt-2 text-left ${isActive ? '' : 'text-secondary'}`}
+            >
               {lastActiveLabel}
             </div>
           </div>
@@ -119,7 +121,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
           onClick={onClose}
           className={`
             flex flex-col p-12 rounded-10 transition-colors w-full
-            ${isActive ? 'bg-accent-subtle text-primary' : 'hover:bg-raised text-secondary'}
+            ${isActive ? 'bg-accent-subtle text-on-accent' : 'hover:bg-raised text-secondary'}
           `}
         >
           <div className="flex-1 min-w-0 pr-24">
@@ -133,7 +135,9 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
                 {title}
               </div>
             </div>
-            <div className="text-caption text-secondary truncate mt-2 text-left">
+            <div
+              className={`text-caption truncate mt-2 text-left ${isActive ? '' : 'text-secondary'}`}
+            >
               {lastActiveLabel}
             </div>
           </div>
@@ -183,7 +187,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <Link
             to="/"
             onClick={onClose}
-            className="w-full flex items-center justify-center gap-8 bg-base hover:bg-accent-subtle text-primary py-10 px-16 rounded-10 transition-colors border border-accent"
+            className="w-full flex items-center justify-center gap-8 bg-base hover:bg-accent-subtle text-primary hover:text-on-accent py-10 px-16 rounded-10 transition-colors border border-accent"
           >
             <span className="material-symbols-outlined text-body-s">add</span>
             <span>新查核任務</span>

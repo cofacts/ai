@@ -111,7 +111,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           <button
             type="button"
             onClick={() => login()}
-            className="px-16 py-6 rounded-full bg-accent text-on-accent text-body-s hover:bg-accent cursor-pointer"
+            className="px-16 py-6 rounded-full bg-accent text-on-accent text-body-s hover:bg-accent-subtle cursor-pointer"
           >
             登入 / 註冊
           </button>
