@@ -167,11 +167,11 @@ The following scripts can also be run using pnpm:
 
 ### GraphQL Codegen
 
-Server-side GraphQL queries are typed via [`@graphql-codegen/client-preset`](https://the-guild.dev/graphql/codegen/docs/guides/react-vue#client-preset). Define queries inline with the `graphql` tag from `@/server/gql` and dispatch them through `cofactsExec` (see `src/lib/cofactsExec.ts`):
+Server-side GraphQL queries are typed via [`@graphql-codegen/client-preset`](https://the-guild.dev/graphql/codegen/docs/guides/react-vue#client-preset). Define queries inline with the `graphql` tag from `@/server/gql` and dispatch them through `cofactsExec` (see `src/server/cofacts.server.ts`). Both are server-only: use them inside a `createServerFn` handler.
 
 ```ts
 import { graphql } from '@/server/gql'
-import { cofactsExec } from '@/lib/cofactsExec'
+import { cofactsExec } from '@/server/cofacts.server'
 
 const GetSomethingDocument = graphql(`
   query GetSomething { ... }
