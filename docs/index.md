@@ -108,8 +108,8 @@ callback.
 
 ADK sessions are persisted with `DatabaseSessionService` — SQLite locally, PostgreSQL via the
 Cloud SQL proxy in prod. Production (GCE) uses the `adk` database; every Cloud Run deploy
-(dev.cofacts.ai and PR previews) uses `adk_staging` on the same instance, a clone of production
-that `deploy.yml` selects by appending `_staging` to `DATABASE_URL`. Chat artifacts (e.g. the
+(dev.cofacts.ai and PR previews) uses `adk_staging` on the same instance, a clone of production:
+the `DATABASE_URL` secret those deploys read points at it. Chat artifacts (e.g. the
 Google-search suggestion widget, uploaded files) are stored in GCS.
 → decisions: [Postgres session persistence](decisions/20260506-postgres-session-persistence.md),
 [writer on Claude Haiku](decisions/20261021-writer-on-claude-haiku.md).

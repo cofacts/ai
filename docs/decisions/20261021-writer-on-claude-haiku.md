@@ -21,8 +21,9 @@ Scope: the `ai_writer` model and everything that had to change for it to work �
 a model that can no longer see it, how session history is made sendable to Claude, citation ids,
 Langfuse cost — plus the session-database isolation the prerequisite ADK upgrade forced. All other
 agents stay on Gemini. Landed in [cofacts/ai#163](https://github.com/cofacts/ai/pull/163) (ADK
-1.26 → 2.12, Cloud Run on `adk_staging`) and [cofacts/ai#162](https://github.com/cofacts/ai/pull/162)
-(the model switch), both tested on the `pr-162` preview on 2026-10-21.
+1.26 → 2.12; Cloud Run moves to `adk_staging` by a change to the `DATABASE_URL` secret, not in
+code) and [cofacts/ai#162](https://github.com/cofacts/ai/pull/162) (the model switch), both tested
+on the `pr-162` preview on 2026-10-21.
 
 ### Langfuse evidence
 
@@ -96,10 +97,12 @@ the request carries `cache_control`)
 
 **Keeping the ADK 2.12 migration off the production database**
 
-- Change the `DATABASE_URL` secret to the staging database — invisible in code and affects every
-  branch at once.
+- Change the `DATABASE_URL` secret to the staging database — invisible in code, and every Cloud Run
+  deploy (dev.cofacts.ai and all PR previews) moves to the new database at once. _Chosen_: moving
+  them all together is acceptable.
 - Rewrite the URL in `deploy.yml` (`${DATABASE_URL}_staging`) so a branch opts in by containing the
-  change. _Chosen._
+  change. Dropped: appending to the URL breaks once it carries a query string, and turns an empty
+  secret into a bare `_staging`.
 
 ## Decision Outcome
 
@@ -132,7 +135,8 @@ Concretely:
   caching needs. `instrumentation.py` maps Claude's cache writes to `input_cache_creation` so they
   are priced at 1.25×, not as plain input.
 - **Database.** `adk_staging` on the same Cloud SQL instance, cloned from production and owned by
-  the app's IAM user; Cloud Run gets it through `deploy.yml`, production on GCE keeps `adk`.
+  the app's IAM user; the `DATABASE_URL` secret that Cloud Run deploys read points at it, and
+  production on GCE keeps `adk`.
 
 ### Consequences
 
