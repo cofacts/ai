@@ -19,13 +19,17 @@
    * Focus ring (a11y guide 05): one global rule, not a per-component variant.
    * From the element outwards: 2px gap → 2px dark inner ring → 4px brand-yellow outer ring.
    * The ring follows the element's border-radius.
+   *
+   * The gap and outer ring are box-shadows. They also go into Tailwind's ring variables:
+   * a shadow-* utility (utilities layer) replaces box-shadow but composes these variables,
+   * so the ring stacks with shadow-btn instead of disappearing.
    */
   :focus-visible {
+    --tw-ring-offset-shadow: 0 0 0 2px var(--surface-base);
+    --tw-ring-shadow: 0 0 0 8px var(--border-focus-outer);
     outline: 2px solid var(--border-focus);
     outline-offset: 2px;
-    box-shadow:
-      0 0 0 2px var(--surface-base),
-      0 0 0 8px var(--border-focus-outer);
+    box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow);
   }
 
   /*
@@ -33,9 +37,7 @@
    * uses border-on-dark-strong, and the gap is filled with the dark surface instead of white.
    */
   [data-surface='dark'] :focus-visible {
+    --tw-ring-offset-shadow: 0 0 0 2px var(--surface-dark);
     outline-color: var(--border-on-dark-strong);
-    box-shadow:
-      0 0 0 2px var(--surface-dark),
-      0 0 0 8px var(--border-focus-outer);
   }
 }

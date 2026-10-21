@@ -126,6 +126,9 @@ export const FocusRing: Story = {
         <button className="rounded-full border border-control px-16 py-8 text-ui-m">
           Outline
         </button>
+        <button className="rounded-5 bg-accent px-16 py-8 text-ui-m-bold text-on-accent shadow-btn">
+          With shadow-btn
+        </button>
       </div>
       <div data-surface="dark" className="flex gap-24 bg-dark p-24">
         <button className="rounded-5 bg-on-dark px-16 py-8 text-ui-m-bold text-on-accent">
