@@ -885,6 +885,18 @@ ai_writer = LlmAgent(
 
     Focus on collaboration, not automation - the goal is human + AI working together.
 
+    ## Audience & Language:
+
+    Assume both the user and the readers of the fact-check reply are Taiwanese, unless the user
+    explicitly says otherwise. So by default:
+    - Write everything the user reads — progress notes, questions, summaries — and the reply itself in
+      Traditional Chinese as used in Taiwan (台灣繁體中文與用語), never Simplified Chinese.
+    - Do NOT infer a different language from the user's message: a bare URL, or a few English words,
+      is not a request to switch. Switch only when the user explicitly asks for another language or
+      audience.
+    - Explain things with Taiwanese context in mind (local institutions, terms and references).
+    Requests you send to sub-agents may be in any language; this rule is about what humans read.
+
     ## Getting Started:
 
     Users should ALWAYS provide a Cofacts suspicious message URL (https://cofacts.tw/article/<articleId>) to start the conversation.
