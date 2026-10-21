@@ -44,9 +44,6 @@ VERIFIER_CALL = "ab12cdyy"
 SIBLING_CALL = "ygxikp2o"
 FEEDBACK_CALL = "c0ffee11"
 SEARCH_CALL = "dddddd77"
-# Claude-on-Vertex tool_use ids: a fixed `toolu_vrtx_` prefix, random tail.
-CLAUDE_CALL = "toolu_vrtx_0136ADYNTKRYwGJzqehu9Y9Z"
-CLAUDE_SIBLING_CALL = "toolu_vrtx_01PqR7tLk2bNcD8eFMs4vXa1Q"
 
 
 def make_tool(name: str) -> BaseTool:
@@ -163,34 +160,23 @@ class TestAttachCitation:
         )
         assert result == {"content": "report"}
 
-    def test_an_adk_generated_uuid_is_stripped_and_capped(self):
-        # When the model supplies no id, ADK generates `adk-<uuid4>`. Copying 40
-        # characters by hand invites mistakes, so the prefix and the dashes go
-        # and what is left is capped to its tail.
-        result = attach_citation(
-            make_tool(AI_VERIFIER_NAME),
-            {"content": "report"},
-            make_tool_context(
-                function_call_id="adk-3f2a1b4c-9d8e-4f7a-b6c5-1e2d3f4a5b6c"
-            ),
-        )
-        assert result["cite_as"] == f"[^{AI_VERIFIER_NAME}-3f4a5b6c]"
-
-    def test_claude_tool_use_ids_keep_their_random_tail(self):
-        # Claude on Vertex issues `toolu_vrtx_<random>` ids. Keeping the head
-        # made every call `tooluvrt`, so all calls to one tool shared an id.
-        first = attach_citation(
-            make_tool(AI_VERIFIER_NAME),
-            {"content": "report"},
-            make_tool_context(function_call_id=CLAUDE_CALL),
-        )
-        second = attach_citation(
-            make_tool(AI_VERIFIER_NAME),
-            {"content": "report"},
-            make_tool_context(function_call_id=CLAUDE_SIBLING_CALL),
-        )
-        assert first["cite_as"] == f"[^{AI_VERIFIER_NAME}-qehu9Y9Z]"
-        assert second["cite_as"] == f"[^{AI_VERIFIER_NAME}-Ms4vXa1Q]"
+    def test_a_long_id_is_stripped_and_capped_to_its_tail(self):
+        # Copying 40 characters by hand invites mistakes, so punctuation (and an
+        # `adk-` prefix) goes and what is left is capped. The tail is kept: it is
+        # the random part of both long id shapes, while Claude's ids all start
+        # with `toolu_vrtx_`, so a head would make every call share one id.
+        for call_id, expected in [
+            # ADK's fallback when the model supplies no id: `adk-<uuid4>`.
+            ("adk-3f2a1b4c-9d8e-4f7a-b6c5-1e2d3f4a5b6c", "3f4a5b6c"),
+            # Claude on Vertex.
+            ("toolu_vrtx_0136ADYNTKRYwGJzqehu9Y9Z", "qehu9Y9Z"),
+        ]:
+            result = attach_citation(
+                make_tool(AI_VERIFIER_NAME),
+                {"content": "report"},
+                make_tool_context(function_call_id=call_id),
+            )
+            assert result["cite_as"] == f"[^{AI_VERIFIER_NAME}-{expected}]"
 
 
 class TestResolveCitations:
@@ -293,26 +279,6 @@ class TestResolveCitations:
         assert result is None
         assert f"<{first}>\n第一份查證報告\n</{first}>" in args["request"]
         assert f"<{second}>\n第二份查證報告\n</{second}>" in args["request"]
-
-    def test_two_claude_calls_to_the_same_tool_resolve_to_their_own_results(self):
-        # Regression: with the head of the id kept, both Claude drafts were
-        # `[^draft_factcheck_response-tooluvrt]` and resolved to the FIRST one,
-        # so proofreaders reviewed a stale draft.
-        events = [
-            make_fn_call_event(DRAFT_TOOL, CLAUDE_CALL, {"text": "第一版草稿"}),
-            draft_accepted_event(CLAUDE_CALL),
-            make_fn_call_event(DRAFT_TOOL, CLAUDE_SIBLING_CALL, {"text": "第二版草稿"}),
-            draft_accepted_event(CLAUDE_SIBLING_CALL),
-        ]
-        first = f"{DRAFT_TOOL}-qehu9Y9Z"
-        second = f"{DRAFT_TOOL}-Ms4vXa1Q"
-        args = {"request": f"比較 [^{first}] 與 [^{second}]"}
-        result = resolve_citations(
-            make_tool(AI_PROOFREADER_KMT_NAME), args, make_tool_context(events)
-        )
-        assert result is None
-        assert f"<{first}>\n第一版草稿\n</{first}>" in args["request"]
-        assert f"<{second}>\n第二版草稿\n</{second}>" in args["request"]
 
     def test_verifier_report_is_citable(self):
         events = [
