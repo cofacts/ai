@@ -8,15 +8,12 @@ URLs are capped at ~15MB, which our media exceeds), so we hand Gemini the
 ``gs://`` form and let the runtime service account read the bucket — no signed
 URLs and no on-demand re-signing required.
 
-Chat uploads are injected the same way: the writer forwards the ``gs://`` URI
-ADK gave a pasted file in ``GCS_ARTIFACT_BUCKET``. Only that bucket is
-accepted — the Vertex AI service agent can read every bucket in the project,
-so any other ``gs://`` URI in the text must not become FileData.
+Chat uploads are injected too: the writer forwards the ``gs://`` URI ADK gave a
+pasted file, and the verifier attaches it only if it is the canonical URI of an
+upload in the calling chat session (looked up through the artifact service).
 """
 
 import logging
-import mimetypes
-import os
 import re
 from typing import Optional
 from urllib.parse import unquote, urlparse
@@ -47,32 +44,64 @@ _COFACTS_MEDIA_URL_RE = re.compile(
 # a gs:// path has no query string to absorb a stray char.
 _URL_TRAILING_PUNCT = ".,;:!?)]}>\"'"
 
+# Artifact-name prefix the frontend gives chat uploads (UPLOAD_FILENAME_PREFIX
+# in src/lib/adk.ts); no other artifact of the session is ever attached.
+_UPLOAD_ARTIFACT_PREFIX = "user-upload-"
+
 # MIME types Gemini can perceive as FileData; uploads of any other type are skipped.
 _UPLOAD_MIME_PREFIXES = ("image/", "video/", "audio/", "application/pdf")
 
 
-def _artifact_uri_re(bucket: str) -> re.Pattern[str]:
-    """Matches an ADK artifact URI ``gs://<bucket>/.../<filename>/<version>``.
+def _mentions(text: str, uri: str) -> bool:
+    """Whether ``text`` contains ``uri`` verbatim, not as the start of a longer
+    version number (``.../a.png/1`` must not match ``.../a.png/10``)."""
+    return re.search(re.escape(uri) + r"(?!\d)", text) is not None
 
-    Upload names contain spaces (``user-upload-Pasted image 1.png``), so the
-    match runs non-greedily up to the first ``/<digits>`` that ends the URI:
-    followed by whitespace, end of text or CJK punctuation, optionally after
-    ASCII punctuation (``/0;``, ``/0).``). ``/2024.png/0`` does not end at
-    ``/2024`` because ``.`` is not followed by one of those.
+
+async def _session_uploads(
+    callback_context: CallbackContext, texts: list[str]
+) -> list[tuple[str, str]]:
+    """``(canonical_uri, mime_type)`` of every version of the calling session's
+    media uploads whose name appears in ``texts``.
+
+    Under AgentTool the verifier runs with ADK's ForwardingArtifactService,
+    which answers these lookups for the calling (writer) session, so this is the
+    chat's own uploads. Attachment is scoped to them: a ``gs://`` string naming
+    another session's or bucket's object matches nothing here and is never
+    attached. Only artifacts are read; no state is written.
     """
-    return re.compile(
-        rf"gs://{re.escape(bucket)}/(?:[^\s\"'<>`]| )+?/\d+"
-        r"(?=[.,;:!?)\]}>*`\"']*(?:\s|$|[\u3000-\u303f\uff00-\uffef]))"
-    )
-
-
-def _upload_mime_type(gs_uri: str) -> Optional[str]:
-    """Guess an upload's MIME type from its filename, the segment before
-    ``/<version>``; None if Gemini cannot perceive that type."""
-    mime_type, _ = mimetypes.guess_type(gs_uri.rsplit("/", 2)[-2])
-    if mime_type and mime_type.startswith(_UPLOAD_MIME_PREFIXES):
-        return mime_type
-    return None
+    if not any("gs://" in text for text in texts):
+        return []
+    uploads = []
+    for key in await callback_context.list_artifacts():
+        # Cheap pre-filter: an upload's canonical URI contains its name, so an
+        # upload the text never names needs no version lookups.
+        if not key.startswith(_UPLOAD_ARTIFACT_PREFIX) or not any(
+            key in text for text in texts
+        ):
+            continue
+        latest = await callback_context.get_artifact_version(key)
+        if latest is None:
+            continue
+        # Every version, so an older ``/0`` URI still matches after a re-upload
+        # of the same name.
+        for version in range(latest.version + 1):
+            info = (
+                latest
+                if version == latest.version
+                else await callback_context.get_artifact_version(key, version)
+            )
+            if info is None:
+                continue
+            mime_type = info.mime_type
+            # Vertex reads gs:// only; a local in-memory store gives memory://.
+            if (
+                info.canonical_uri.startswith("gs://")
+                and mime_type
+                and mime_type.startswith(_UPLOAD_MIME_PREFIXES)
+            ):
+                uploads.append((info.canonical_uri, mime_type))
+    return uploads
 
 
 def _parse_gcs_https_url(url: str) -> Optional[tuple[str, str]]:
@@ -123,7 +152,7 @@ def _mime_for_media_uri(uri: str) -> str:
     return _ARTICLE_TYPE_MIME["VIDEO"]
 
 
-def inject_cofacts_media_filedata(
+async def inject_cofacts_media_filedata(
     callback_context: CallbackContext, llm_request: LlmRequest
 ) -> None:
     """Before-model callback for ai_verifier.
@@ -133,8 +162,9 @@ def inject_cofacts_media_filedata(
     so without this the verifier never actually sees the media. Here we detect the
     Cofacts media URL in the message text and append it as a ``gs://`` FileData
     Part so Gemini (on Vertex) can watch/inspect it directly — mirroring
-    inject_youtube_filedata for YouTube URLs. A chat upload's ``gs://`` URI in
-    ``GCS_ARTIFACT_BUCKET`` is attached the same way.
+    inject_youtube_filedata for YouTube URLs. A chat upload's ``gs://`` URI is
+    attached the same way when it is the canonical URI of one of the calling
+    session's uploads (see ``_session_uploads``).
     """
     try:
         # Seed with media already attached anywhere in the request so we never
@@ -145,25 +175,33 @@ def inject_cofacts_media_filedata(
             for p in content.parts or []
             if p.file_data and p.file_data.file_uri
         }
-        bucket = os.environ.get("GCS_ARTIFACT_BUCKET")
-        upload_re = _artifact_uri_re(bucket) if bucket else None
-        for content in llm_request.contents:
-            if content.role != "user" or not content.parts:
-                continue
-            urls = []
+        user_contents = [
+            (content, [part.text for part in content.parts if part.text])
+            for content in llm_request.contents
+            if content.role == "user" and content.parts
+        ]
+        try:
+            uploads = await _session_uploads(
+                callback_context,
+                [text for _, texts in user_contents for text in texts],
+            )
+        except Exception:
+            # E.g. no artifact service, or GCS unavailable: attach no uploads;
+            # the verifier's "No media, no description" rule covers the rest.
+            logger.exception("Chat upload lookup failed; not attaching uploads")
             uploads = []
-            for part in content.parts:
-                if part.text:
-                    urls.extend(_COFACTS_MEDIA_URL_RE.findall(part.text))
-                    if upload_re:
-                        uploads.extend(upload_re.findall(part.text))
+        for content, texts in user_contents:
+            parts = content.parts or []
+            urls = []
+            for text in texts:
+                urls.extend(_COFACTS_MEDIA_URL_RE.findall(text))
             for url in urls:
                 url = url.rstrip(_URL_TRAILING_PUNCT)
                 gs_uri = url if url.startswith("gs://") else signed_url_to_gs(url)
                 if not gs_uri or gs_uri in seen:
                     continue
                 seen.add(gs_uri)
-                content.parts.append(
+                parts.append(
                     genai_types.Part(
                         file_data=genai_types.FileData(
                             file_uri=gs_uri,
@@ -171,19 +209,14 @@ def inject_cofacts_media_filedata(
                         )
                     )
                 )
-            for gs_uri in uploads:
-                mime_type = _upload_mime_type(gs_uri)
-                if (
-                    not mime_type
-                    or gs_uri in seen
-                    or ".." in unquote(gs_uri).split("/")
-                ):
+            for uri, mime_type in uploads:
+                if uri in seen or not any(_mentions(text, uri) for text in texts):
                     continue
-                seen.add(gs_uri)
-                content.parts.append(
+                seen.add(uri)
+                parts.append(
                     genai_types.Part(
                         file_data=genai_types.FileData(
-                            file_uri=gs_uri, mime_type=mime_type
+                            file_uri=uri, mime_type=mime_type
                         )
                     )
                 )
