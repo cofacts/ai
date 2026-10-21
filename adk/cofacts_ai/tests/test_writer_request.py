@@ -183,13 +183,49 @@ def test_function_response_reaches_claude_whole_and_unescaped():
     assert "圖片顯示" in block["content"]
 
 
-def test_thought_with_function_call_is_kept():
-    part = genai_types.Part(
-        thought=True,
-        function_call=genai_types.FunctionCall(id="c1", name="verifier", args={}),
+def test_gemini_thought_with_function_call_keeps_only_the_call():
+    """The adapter checks the thought fields before the call.
+
+    Left as they are, a binary signature raises `UnicodeDecodeError` and an
+    ASCII one turns the call into `redacted_thinking`, orphaning its response.
+    """
+    call = genai_types.FunctionCall(id="c1", name="verifier", args={"request": "x"})
+    contents = run(
+        [
+            genai_types.Content(
+                role="model",
+                parts=[
+                    genai_types.Part(
+                        thought=True,
+                        thought_signature=b"\x8f\x00\xff\x10",
+                        function_call=call,
+                    ),
+                    genai_types.Part(thought=True, function_call=call),
+                ],
+            ),
+            genai_types.Content(
+                role="user",
+                parts=[
+                    genai_types.Part(
+                        function_response=genai_types.FunctionResponse(
+                            id="c1", name="verifier", response={"content": "ok"}
+                        )
+                    )
+                ],
+            ),
+        ]
     )
-    [content] = run([genai_types.Content(role="model", parts=[part])])
-    assert content.parts == [part]
+    assert contents[0].parts == [genai_types.Part(function_call=call)] * 2
+    sanitizer = _ToolUseIdSanitizer()
+    model, user = [
+        cast(list[dict[str, Any]], _content_to_message_param(c, sanitizer)["content"])
+        for c in contents
+    ]
+    assert [b["type"] for b in model] == ["tool_use", "tool_use"]
+    assert model[0]["name"] == "verifier"
+    assert model[0]["input"] == {"request": "x"}
+    assert [b["type"] for b in user] == ["tool_result"]
+    assert user[0]["tool_use_id"] == model[0]["id"]
 
 
 def test_turns_on_prompt_caching_for_the_writer_only():

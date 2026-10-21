@@ -13,7 +13,10 @@ carry three kinds of part that a session can still hold as they are:
   because an upload happened to stay inline.
 * Thought parts written by Gemini, from sessions that started before the writer
   moved to Claude. The adapter would replay them as Claude ``thinking`` blocks,
-  which Claude rejects without a valid Claude signature.
+  which Claude rejects without a valid Claude signature. A Gemini thought part
+  can also carry a function call; the adapter checks the thought fields first,
+  so it would never emit that call and its response would be orphaned. Such a
+  part keeps the call and loses only its thought fields.
 * Function responses. When a response dict has a string ``content``, the
   adapter sends Claude only that string and drops every other key — for
   investigator/verifier results that is ``sources``, ``cite_as`` and
@@ -107,10 +110,20 @@ def prepare_writer_request(
         new_parts = []
         changed = False
         for part in content.parts:
-            # A thought that also carries a call is kept: dropping it would orphan
-            # the call's response.
-            if part.thought and not part.function_call and not _is_claude_thought(part):
+            if part.thought and not _is_claude_thought(part):
                 changed = True
+                # Dropping a call would orphan its response, so the call stays
+                # and only the thought goes.
+                if part.function_call:
+                    new_parts.append(
+                        part.model_copy(
+                            update={
+                                "thought": None,
+                                "thought_signature": None,
+                                "text": None,
+                            }
+                        )
+                    )
                 continue
             placeholder = _media_placeholder(part)
             if placeholder:
