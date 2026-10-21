@@ -61,8 +61,8 @@ def _mentions(text: str, uri: str) -> bool:
 async def _session_uploads(
     callback_context: CallbackContext, texts: list[str]
 ) -> list[tuple[str, str]]:
-    """``(canonical_uri, mime_type)`` of every version of the calling session's
-    media uploads whose name appears in ``texts``.
+    """``(canonical_uri, mime_type)`` of the calling session's media uploads, for
+    each version that ``texts`` names as ``.../<upload name>/<version>``.
 
     Under AgentTool the verifier runs with ADK's ForwardingArtifactService,
     which answers these lookups for the calling (writer) session, so this is the
@@ -74,23 +74,16 @@ async def _session_uploads(
         return []
     uploads = []
     for key in await callback_context.list_artifacts():
-        # Cheap pre-filter: an upload's canonical URI contains its name, so an
-        # upload the text never names needs no version lookups.
-        if not key.startswith(_UPLOAD_ARTIFACT_PREFIX) or not any(
-            key in text for text in texts
-        ):
+        if not key.startswith(_UPLOAD_ARTIFACT_PREFIX):
             continue
-        latest = await callback_context.get_artifact_version(key)
-        if latest is None:
-            continue
-        # Every version, so an older ``/0`` URI still matches after a re-upload
-        # of the same name.
-        for version in range(latest.version + 1):
-            info = (
-                latest
-                if version == latest.version
-                else await callback_context.get_artifact_version(key, version)
-            )
+        # An upload's canonical URI ends in ``<name>/<version>``, so only the
+        # versions the text names need a lookup — including an older ``/0``
+        # after a re-upload of the same name. ``\d+`` takes every digit, so
+        # ``/10`` is read as version 10, never as 1.
+        version_re = re.compile(re.escape(key) + r"/(\d+)")
+        versions = sorted({int(m) for text in texts for m in version_re.findall(text)})
+        for version in versions:
+            info = await callback_context.get_artifact_version(key, version)
             if info is None:
                 continue
             mime_type = info.mime_type

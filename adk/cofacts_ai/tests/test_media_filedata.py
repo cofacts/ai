@@ -116,7 +116,7 @@ async def test_non_media_upload_is_skipped():
 async def test_artifact_without_upload_prefix_is_skipped():
     ctx = FakeArtifactContext(version("draft.png", 0, "image/png"))
     assert await run(f"{SESSION_PREFIX}/draft.png/0", ctx) == []
-    assert ("get_artifact_version", "draft.png", "None") not in ctx.calls
+    assert [c for c in ctx.calls if c[0] == "get_artifact_version"] == []
 
 
 async def test_no_lookups_for_uploads_the_text_does_not_name():
@@ -143,6 +143,11 @@ async def test_older_version_matches_and_version_prefix_does_not():
     assert [f.file_uri for f in files] == [
         f"{SESSION_PREFIX}/{UPLOAD_NAME}/0",
         f"{SESSION_PREFIX}/{UPLOAD_NAME}/10",
+    ]
+    # Only the versions the text names are looked up, not 1 through 9.
+    assert [c for c in ctx.calls if c[0] == "get_artifact_version"] == [
+        ("get_artifact_version", UPLOAD_NAME, "0"),
+        ("get_artifact_version", UPLOAD_NAME, "10"),
     ]
 
 
