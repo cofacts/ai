@@ -28,9 +28,9 @@ export const OpenPeeps: Story = {
       avatarType: 'OpenPeeps',
       avatarData: JSON.stringify({
         accessory: 'None',
-        body: 'Standing',
+        body: 'Shirt',
         face: 'Smile',
-        hair: 'ShortHairDreads01',
+        hair: 'ShortCurly',
         facialHair: 'None',
         backgroundColorIndex: 0.3,
         flip: false,

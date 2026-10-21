@@ -52,11 +52,11 @@
   "devDependencies": {
     "@graphql-codegen/cli": "^7.0.0",
     "@graphql-codegen/client-preset": "^6.0.0",
-    "@storybook/addon-docs": "10.6.2",
     "@storybook/tanstack-react": "10.6.2",
     "@tanstack/devtools-vite": "^0.3.11",
     "@tanstack/eslint-config": "^0.3.0",
     "@tanstack/react-query-devtools": "^5.99.2",
+    "@tanstack/start-client-core": "1.161.1",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^22.10.2",
