@@ -85,7 +85,15 @@ def _is_claude_thought(part: genai_types.Part) -> bool:
 
     The Anthropic adapter stores Claude's signature as the UTF-8 bytes of an
     ASCII string; Gemini's thought signatures are opaque binary, and Gemini
-    thought summaries often carry none at all.
+    thought summaries often carry none at all. Every thinking block Claude
+    returns is signed, including over streaming. (Langfuse can show Claude's
+    thoughts unsigned: ADK strips signatures from the response it records on
+    the ``call_llm`` span, and Langfuse displays that copy when the span still
+    has it.)
+
+    A signed thought with empty text goes to Claude as ``redacted_thinking``
+    whose data is the signature; Claude accepts that and reads the reasoning
+    back from it, so it is kept too.
     """
     signature = part.thought_signature
     if not signature:

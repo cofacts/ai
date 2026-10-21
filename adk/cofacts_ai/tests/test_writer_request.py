@@ -5,19 +5,23 @@ become text, Gemini thought parts are dropped, Claude's own thinking is kept so
 it round-trips back to Claude, and tool results reach Claude whole.
 """
 
+import asyncio
 import json
+from types import SimpleNamespace
 from typing import Any, cast
 
 from anthropic import types as anthropic_types
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.context_cache_config import ContextCacheConfig
 from google.adk.models.anthropic_llm import (
+    AnthropicLlm,
     _content_to_message_param,
     _ToolUseIdSanitizer,
     content_block_to_part,
 )
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types as genai_types
+from pydantic import TypeAdapter
 
 from cofacts_ai.writer_request import prepare_writer_request
 
@@ -109,6 +113,107 @@ def test_gemini_thoughts_are_dropped_and_claude_thoughts_kept():
     )
     assert gemini_turn.parts == [gemini_call]
     assert claude_turn.parts == [claude, genai_types.Part(text="Draft")]
+
+
+def test_streamed_claude_thought_keeps_its_signature():
+    """The writer streams (SSE), and Claude sends the signature as its own delta.
+
+    The thought must come out of the adapter signed and survive this callback,
+    or every later request of the turn loses Claude's reasoning.
+    """
+    events = [
+        TypeAdapter(anthropic_types.RawMessageStreamEvent).validate_python(e)
+        for e in [
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_1",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-haiku-5-5",
+                    "content": [],
+                    "stop_reason": None,
+                    "stop_sequence": None,
+                    "usage": {"input_tokens": 10, "output_tokens": 1},
+                },
+            },
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "thinking", "thinking": "", "signature": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "Plan the reply."},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "signature_delta", "signature": "RXVzaWduYXR1cmU="},
+            },
+            {"type": "content_block_stop", "index": 0},
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": "toolu_1",
+                    "name": "verifier",
+                    "input": {},
+                },
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": '{"request": "x"}',
+                },
+            },
+            {"type": "content_block_stop", "index": 1},
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "tool_use", "stop_sequence": None},
+                "usage": {"output_tokens": 5},
+            },
+            {"type": "message_stop"},
+        ]
+    ]
+
+    async def stream():
+        for event in events:
+            yield event
+
+    async def create(**_):
+        return stream()
+
+    async def final_content() -> genai_types.Content:
+        llm = AnthropicLlm(model="claude-haiku-5-5")
+        llm.__dict__["_anthropic_client"] = SimpleNamespace(
+            messages=SimpleNamespace(create=create)
+        )
+        request = LlmRequest(
+            contents=[
+                genai_types.Content(role="user", parts=[genai_types.Part(text="hi")])
+            ]
+        )
+        responses = [r async for r in llm.generate_content_async(request, stream=True)]
+        assert responses[-1].partial is False
+        assert responses[-1].content is not None
+        return responses[-1].content
+
+    [content] = run([asyncio.run(final_content())])
+    [thinking, tool_use] = cast(
+        list[dict[str, Any]],
+        _content_to_message_param(content, _ToolUseIdSanitizer())["content"],
+    )
+    assert thinking == {
+        "type": "thinking",
+        "thinking": "Plan the reply.",
+        "signature": "RXVzaWduYXR1cmU=",
+    }
+    assert tool_use["type"] == "tool_use"
 
 
 def test_untouched_contents_keep_their_parts():
@@ -226,6 +331,22 @@ def test_gemini_thought_with_function_call_keeps_only_the_call():
     assert model[0]["input"] == {"request": "x"}
     assert [b["type"] for b in user] == ["tool_result"]
     assert user[0]["tool_use_id"] == model[0]["id"]
+
+
+def test_empty_claude_thought_is_kept_as_redacted_thinking():
+    """Claude accepts the signature as `redacted_thinking` data (checked live)."""
+    part = content_block_to_part(
+        anthropic_types.ThinkingBlock(
+            type="thinking", thinking="", signature="RXVzaWduYXR1cmU="
+        )
+    )
+    [content] = run([genai_types.Content(role="model", parts=[part])])
+    assert content.parts == [part]
+    [block] = cast(
+        list[dict[str, Any]],
+        _content_to_message_param(content, _ToolUseIdSanitizer())["content"],
+    )
+    assert block == {"type": "redacted_thinking", "data": "RXVzaWduYXR1cmU="}
 
 
 def test_turns_on_prompt_caching_for_the_writer_only():
