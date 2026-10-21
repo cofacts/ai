@@ -1,5 +1,5 @@
 ---
-status: 'accepted'
+status: 'accepted (decision 2 superseded by 20261021-writer-on-claude-haiku)'
 date: 2026-06-06
 decision-makers: [MrOrz]
 consulted:
