@@ -43,16 +43,28 @@ const articlesQuery = queryOptions({
 })
 
 export const Route = createFileRoute('/(lists)/articles')({
-  // No loader: head() doesn't need data and the page always exists. useSuspenseQuery below
-  // runs during SSR, so the data is still in the server-rendered HTML.
-  head: () => ({ meta: [{ title: '可疑訊息 | Cofacts 真的假的' }] }),
+  // Awaited so a failed query reaches the router (500 + error component) instead of an empty
+  // 200. Nothing is returned: head() needs no data, and the page reads the cache.
+  loader: async ({ context }) => {
+    await context.queryClient.ensureQueryData(articlesQuery)
+  },
+  head: () => ({
+    meta: [
+      { title: '可疑訊息 | Cofacts 真的假的' },
+      {
+        name: 'description',
+        content:
+          'Cofacts 真的假的：網友回報的可疑訊息，以及志工編輯的查核回應。',
+      },
+    ],
+  }),
   component: ArticlesPage,
 })
 
 function ArticlesPage() {
   const { data } = useSuspenseQuery(articlesQuery)
   return (
-    <main className="mx-auto flex w-full max-w-1040 flex-1 flex-col gap-16 px-20 py-32 md:px-0">
+    <main className="mx-auto flex w-full max-w-1136 flex-1 flex-col gap-16 px-20 py-32 lg:px-48">
       <h1 className="text-heading-l text-primary">可疑訊息</h1>
       <p className="text-body-m text-secondary">
         共 {data.ListArticles?.totalCount ?? 0} 則。以下是 server function
