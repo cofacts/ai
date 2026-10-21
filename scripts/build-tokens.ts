@@ -76,6 +76,14 @@ const resolveHex = (value: string): string => {
   const name = ref(value)
   return name ? String(get(Global, name).$value) : value
 }
+/** A numeric token value, following `{name}` references into Global. Throws on anything else. */
+const num = (token: string, value: unknown): number => {
+  const name = typeof value === 'string' ? ref(value) : null
+  const n = name ? num(name, get(Global, name).$value) : Number(value)
+  if (value === '' || !Number.isFinite(n))
+    throw new Error(`${token}: expected a number, got ${JSON.stringify(value)}`)
+  return n
+}
 
 // ---- Semantic colors → Tailwind namespaces -------------------------------------------------
 
@@ -143,10 +151,13 @@ const isFixed = (name: string) =>
 const WEIGHTS: Record<string, number> = { regular: 400, bold: 700 }
 const typography = byType('typography').map(([name, t]) => {
   const v = t.$value as Typography
-  const size = Number(v.fontSize)
-  const ratio = Number(v.lineHeight)
-  const weight = WEIGHTS[v.fontWeight]
-  if (!weight) throw new Error(`${name}: unknown fontWeight ${v.fontWeight}`)
+  const size = num(name, v.fontSize)
+  const ratio = num(name, v.lineHeight)
+  const fontWeight = ref(v.fontWeight)
+    ? String(get(Global, ref(v.fontWeight)!).$value)
+    : v.fontWeight
+  const weight = WEIGHTS[fontWeight]
+  if (!weight) throw new Error(`${name}: unknown fontWeight ${fontWeight}`)
   // ui-* tokens use line-height 1 (single line); others are whole-px heights on a 4px grid.
   const lineHeightPx = ratio === 1 ? null : Math.round(size * ratio)
   return {
@@ -161,12 +172,12 @@ const typography = byType('typography').map(([name, t]) => {
 
 const spacing = byType('spacing').map(([name, t]) => ({
   name,
-  value: Number(t.$value),
+  value: num(name, t.$value),
 }))
 spacing.sort((a, b) => a.value - b.value)
 
 const radius = byType('borderRadius').map(([name, t]) => {
-  const value = Number(t.$value)
+  const value = num(name, t.$value)
   const key = value >= 100 ? 'full' : String(value)
   return { name, key, value, className: `rounded-${key}` }
 })
@@ -183,7 +194,12 @@ const shadows = byType('shadow').map(([name, t]) => {
   return { name, key, css, className: `shadow-${key}` }
 })
 
-const fontFamily = (byType('fontFamilies')[0]?.[1].$value as Array<string>)[0]
+const fontFamilies = byType('fontFamilies')[0]?.[1].$value
+const fontFamily = Array.isArray(fontFamilies) ? fontFamilies[0] : fontFamilies
+if (typeof fontFamily !== 'string' || !fontFamily)
+  throw new Error(
+    `fontFamilies: expected a font name, got ${JSON.stringify(fontFamilies)}`,
+  )
 
 const primitives = byType('color')
 
@@ -199,6 +215,16 @@ const semanticLine = (name: string) => {
     ? `  --${name}: ${light};`
     : `  --${name}: light-dark(${light}, ${dark});`
 }
+
+/** For browsers without light-dark(): the light or dark value of each token that flips. */
+const fallbackLines = (theme: TokenSet, indent: string) =>
+  semanticNames
+    .filter((name) => !isFixed(name))
+    .map(
+      (name) =>
+        `${indent}--${name}: ${semanticValue(String(get(theme, name).$value))};`,
+    )
+    .join('\n')
 
 const themeLines: Array<string> = []
 for (const name of semanticNames) {
@@ -229,6 +255,26 @@ ${semanticNames.map(semanticLine).join('\n')}
 
 [data-theme='dark'] {
   color-scheme: dark;
+}
+
+/*
+ * Fallback for browsers without light-dark() (Safari / iOS before 17.5, including LINE's in-app
+ * browser there): the same values, picked by media query and data-theme instead.
+ */
+@supports not (color: light-dark(#000, #fff)) {
+  :root {
+${fallbackLines(Light, '    ')}
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+${fallbackLines(Dark, '      ')}
+    }
+  }
+
+  [data-theme='dark'] {
+${fallbackLines(Dark, '    ')}
+  }
 }
 
 @theme {
@@ -263,13 +309,14 @@ ${shadows.map((s) => `  --shadow-${s.key}: ${s.css};`).join('\n')}
 
 // ---- tokens.generated.ts -------------------------------------------------------------------
 
-const colorClassSuffixes = [
-  ...new Set(
-    semanticNames.flatMap((n) =>
-      utilitiesFor(n).map((u) => u.className.replace(/^[a-z]+-/, '')),
-    ),
-  ),
-]
+/** Color class names per utility prefix: `{ text: ['primary', …], bg: [...], border: [...] }`. */
+const colorClasses: Record<string, Array<string>> = {}
+for (const name of semanticNames) {
+  for (const { className } of utilitiesFor(name)) {
+    const [, prefix = '', suffix = ''] = /^([a-z]+)-(.+)$/.exec(className) ?? []
+    ;(colorClasses[prefix] ??= []).push(suffix)
+  }
+}
 
 const semanticColors = semanticNames.map((name) => ({
   name,
@@ -281,10 +328,14 @@ const semanticColors = semanticNames.map((name) => ({
 
 const ts = `// ⚙️ Generated from ${SOURCE} by scripts/build-tokens.ts — do not edit. Run \`pnpm tokens\`.
 
-/** Custom class names for tailwind-merge, so cn() merges Cofacts utilities correctly. */
+/**
+ * Custom class names for tailwind-merge, so cn() merges Cofacts utilities correctly.
+ * Colors are listed per prefix: \`bg-base\` is a color, \`text-base\` is not.
+ */
+export const twMergeColors = ${JSON.stringify(colorClasses, null, 2)}
+
 export const twMergeTheme = ${JSON.stringify(
   {
-    color: colorClassSuffixes,
     text: typography.map((t) => t.className.slice(5)),
     radius: radius.map((r) => r.key),
     shadow: shadows.map((s) => s.key),
