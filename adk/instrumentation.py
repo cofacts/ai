@@ -71,6 +71,12 @@ def setup_instrumentation():
     """
     Sets up Langfuse instrumentation for Google ADK.
     """
+    # The Anthropic SDK emits its own `anthropic.messages.create` span into the
+    # global tracer provider, with usage keyed differently from ours (`output`
+    # includes reasoning). Langfuse would price it on top of the instrumentor's
+    # `call_llm` generation and charge every Claude call twice. ADK builds the
+    # AnthropicVertex client lazily, after this runs, so the env var reaches it.
+    os.environ.setdefault("ANTHROPIC_OPEN_TELEMETRY", "false")
     if not (os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")):
         logger.warning("Langfuse credentials not found. Skipping instrumentation.")
         return
