@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
  * each to its local path when its route lands (kb doc §2.2).
  */
 export const NAV_LINKS = {
-  articles: { label: '可疑訊息', href: '/articles' },
+  articles: { label: '可疑訊息', href: 'https://cofacts.tw/articles' },
   replies: { label: '最新查核', href: 'https://cofacts.tw/replies' },
   hoaxForYou: { label: '等你來答', href: 'https://cofacts.tw/hoax-for-you' },
   ai: { label: '問問 AI', href: '/' },
@@ -59,7 +59,8 @@ export interface SiteNavProps {
 /**
  * Penpot Layout/Nav (Type = Default / login / search) and Nav-Mobile / Nav-MobileExpanded.
  * Desktop: logo, main links, then LINE · 回報可疑訊息 · login (or the avatar menu) · search.
- * Mobile: logo, search, and a hamburger that opens the dark full menu.
+ * Mobile (below lg, 1024px; the desktop row needs about 940px): logo, search, and a hamburger
+ * that opens the dark full menu.
  */
 export function SiteNav({
   current,
@@ -72,6 +73,7 @@ export function SiteNav({
   const [searchOpen, setSearchOpen] = useState(false)
   const menuId = useId()
   const hamburgerRef = useRef<HTMLButtonElement>(null)
+  const searchButtonRef = useRef<HTMLButtonElement>(null)
   const firstItemRef = useRef<HTMLAnchorElement>(null)
 
   // Mobile menu: focus the first item on open; Esc closes and returns focus (a11y guide 06).
@@ -84,15 +86,29 @@ export function SiteNav({
       hamburgerRef.current?.focus()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // The menu exists only below lg; widening the window (or rotating a tablet) closes it,
+    // otherwise the bar would stay dark with dark links.
+    const desktop = window.matchMedia('(min-width: 64rem)')
+    const onWiden = () => desktop.matches && setMenuOpen(false)
+    desktop.addEventListener('change', onWiden)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      desktop.removeEventListener('change', onWiden)
+    }
   }, [menuOpen])
+
+  const closeSearch = () => {
+    setSearchOpen(false)
+    // The search button is back once the form unmounts; return focus to it (a11y guide 06).
+    requestAnimationFrame(() => searchButtonRef.current?.focus())
+  }
 
   return (
     <header className="relative z-30 shrink-0">
       <div
         data-surface={menuOpen ? 'dark' : undefined}
         className={cn(
-          'flex min-h-60 items-center gap-32 border-b px-20 py-12 md:min-h-64 md:px-48 md:py-16',
+          'flex min-h-60 items-center gap-32 border-b px-20 py-12 lg:min-h-64 lg:px-48 lg:py-16',
           menuOpen ? 'border-on-dark bg-dark' : 'border-subtle bg-base',
         )}
       >
@@ -105,10 +121,10 @@ export function SiteNav({
         </a>
 
         {searchOpen ? (
-          <SearchForm onClose={() => setSearchOpen(false)} />
+          <SearchForm onClose={closeSearch} />
         ) : (
           <>
-            <nav aria-label="主選單" className="hidden flex-1 md:block">
+            <nav aria-label="主選單" className="hidden flex-1 lg:block">
               <ul className="flex items-center gap-24">
                 {MAIN_ITEMS.map((key) => (
                   <li key={key}>
@@ -129,7 +145,7 @@ export function SiteNav({
                 rel="noopener noreferrer"
                 className={cn(
                   buttonVariants({ variant: 'outline', withIcon: true }),
-                  'hidden min-h-40 border-transparent bg-raised lg:inline-flex',
+                  'hidden min-h-40 border-transparent bg-raised xl:inline-flex',
                 )}
               >
                 <LineMark />
@@ -139,13 +155,13 @@ export function SiteNav({
                 href={NAV_LINKS.report.href}
                 className={cn(
                   buttonVariants({ variant: 'primary', withIcon: true }),
-                  'hidden min-h-40 md:inline-flex',
+                  'hidden min-h-40 lg:inline-flex',
                 )}
               >
                 <Icon name="flag" />
                 {NAV_LINKS.report.label}
               </a>
-              <div className="hidden md:block">
+              <div className="hidden lg:block">
                 <AccountControl
                   user={user}
                   onLogin={onLogin}
@@ -158,7 +174,11 @@ export function SiteNav({
                 iconStart="search"
                 aria-label="搜尋"
                 className="border-transparent"
-                onClick={() => setSearchOpen(true)}
+                ref={searchButtonRef}
+                onClick={() => {
+                  setMenuOpen(false)
+                  setSearchOpen(true)
+                }}
               />
               <Button
                 ref={hamburgerRef}
@@ -168,7 +188,7 @@ export function SiteNav({
                 aria-label={menuOpen ? '關閉選單' : '開啟選單'}
                 aria-expanded={menuOpen}
                 aria-controls={menuId}
-                className="md:hidden"
+                className="lg:hidden"
                 onClick={() => setMenuOpen((v) => !v)}
               />
             </div>
@@ -181,7 +201,7 @@ export function SiteNav({
           id={menuId}
           aria-label="主選單"
           data-surface="dark"
-          className="absolute inset-x-0 top-full flex flex-col items-center gap-24 bg-dark px-64 pt-24 pb-32 md:hidden"
+          className="absolute inset-x-0 top-full flex flex-col items-center gap-24 bg-dark px-64 pt-24 pb-32 lg:hidden"
         >
           <ul className="flex flex-col items-center gap-24">
             {(
@@ -351,6 +371,9 @@ function SearchForm({ onClose }: { onClose: () => void }) {
       action={NAV_LINKS.search.href}
       role="search"
       className="flex flex-1 items-center gap-8"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose()
+      }}
     >
       <label className="relative flex-1">
         <span className="sr-only">搜尋</span>
