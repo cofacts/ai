@@ -9,4 +9,4 @@ service.template.yaml
 src/styles/tokens.css
 src/styles/tokens.generated.ts
 src/components/ui/icon-paths.ts
-src/components/Logo.tsx
+src/components/logo-paths.ts
