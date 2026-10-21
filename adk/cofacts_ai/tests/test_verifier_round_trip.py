@@ -25,6 +25,16 @@ which returns the video page's title and description as a page part. The
 Cofacts media file is not: the writer forwards it in its `gs://` form, which is
 not an http(s) URL, so it is never extracted.
 
+The request also forwards a picture the user pasted into the chat, by the
+`gs://` URI its artifact was saved under -- a filename with spaces in it. The
+verifier runs in AgentTool's fresh child session, yet the upload is attached,
+with the mime type it was stored with: its artifact lookups are answered for
+the writer's session. Two look-alike URIs stay text: the same filename in
+another chat session of the same user, which really holds such an upload, and
+the same path in another bucket. Only the calling chat's own uploads are ever
+attached, because the Vertex AI service agent could read any bucket in the
+project.
+
 The verifier's model then answers with url_context grounding for the one page
 url-resolver could not read: the PDF. What the writer gets back is that report
 plus `sources`, the pages the verifier actually read this call -- the union of
@@ -40,11 +50,13 @@ from typing import AsyncGenerator
 from unittest.mock import AsyncMock, patch
 
 from google.adk.agents import LlmAgent
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
 from google.adk.events import Event
 from google.adk.models.base_llm import BaseLlm
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
-from google.adk.runners import InMemoryRunner
+from google.adk.runners import Runner
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types as genai_types
 
@@ -62,6 +74,16 @@ YOUTUBE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 # Watched through FileData only. `gs://`, as the writer forwards it: not an
 # http(s) URL, so never pre-fetched.
 MEDIA_URL = "gs://cofacts-media-collection/production/video/vid1/original"
+# A picture pasted into the chat, as GcsArtifactService names its artifact:
+# `gs://<bucket>/<app>/<user>/<session>/<filename>/<version>`.
+APP = "verifier_round_trip_test"
+ARTIFACT_BUCKET = "cofacts-ai-artifacts"
+UPLOAD_NAME = "user-upload-Pasted image 1.png"
+UPLOAD_URI = f"gs://{ARTIFACT_BUCKET}/{APP}/u/chat/{UPLOAD_NAME}/0"
+# The same upload name in another chat session of the same user, and the same
+# path in another bucket. Neither is the calling chat's upload.
+OTHER_CHAT_UPLOAD_URI = f"gs://{ARTIFACT_BUCKET}/{APP}/u/other-chat/{UPLOAD_NAME}/0"
+OTHER_BUCKET_URI = f"gs://cofacts-db-backup/{APP}/u/chat/{UPLOAD_NAME}/0"
 
 
 def outcome(
@@ -93,6 +115,29 @@ def cofacts_link(url: str) -> dict:
         "status": "0",
         "error": None,
     }
+
+
+class GcsLikeArtifactService(InMemoryArtifactService):
+    """Reports the `gs://` canonical URIs GcsArtifactService gives in
+    production, rather than the `memory://` ones the verifier never attaches.
+    The session in the URI is the one each lookup was answered for."""
+
+    async def get_artifact_version(
+        self, *, app_name, user_id, filename, session_id=None, version=None
+    ):
+        info = await super().get_artifact_version(
+            app_name=app_name,
+            user_id=user_id,
+            filename=filename,
+            session_id=session_id,
+            version=version,
+        )
+        if info:
+            info.canonical_uri = (
+                f"gs://{ARTIFACT_BUCKET}/{app_name}/{user_id}/{session_id}"
+                f"/{filename}/{info.version}"
+            )
+        return info
 
 
 class ScriptedLlm(BaseLlm):
@@ -174,7 +219,10 @@ async def test_one_verifier_call():
                                         {ARCHIVED_URL}
                                         {NOTHING_URL}
                                         {YOUTUBE_URL}
-                                        {MEDIA_URL}""")
+                                        {MEDIA_URL}
+                                        {UPLOAD_URI}
+                                        {OTHER_CHAT_UPLOAD_URI}
+                                        {OTHER_BUCKET_URI}""")
                                 },
                             )
                         )
@@ -219,10 +267,26 @@ async def test_one_verifier_call():
         ]
     )
 
-    runner = InMemoryRunner(agent=writer, app_name="verifier_round_trip_test")
-    session = await runner.session_service.create_session(
-        app_name=runner.app_name, user_id="u"
+    artifacts = GcsLikeArtifactService()
+    runner = Runner(
+        app_name=APP,
+        agent=writer,
+        session_service=InMemorySessionService(),
+        artifact_service=artifacts,
     )
+    session = await runner.session_service.create_session(
+        app_name=APP, user_id="u", session_id="chat"
+    )
+    # The picture the user pasted into this chat, and one of the same name
+    # pasted into another chat.
+    for session_id in ["chat", "other-chat"]:
+        await artifacts.save_artifact(
+            app_name=APP,
+            user_id="u",
+            session_id=session_id,
+            filename=UPLOAD_NAME,
+            artifact=genai_types.Part.from_bytes(data=b"PNG", mime_type="image/png"),
+        )
     # An earlier Cofacts lookup in the writer's history: the message the
     # writer cites, and archived copies of DEAD_URL and of ARCHIVED_URL -- but
     # not of NOTHING_URL.
@@ -267,8 +331,8 @@ async def test_one_verifier_call():
 
     # --- Assert ---
 
-    # Every http(s) URL the writer wrote: not CITED_URL, and not the `gs://`
-    # MEDIA_URL.
+    # Every http(s) URL the writer wrote: not CITED_URL, and none of the
+    # `gs://` ones.
     resolver.assert_awaited_once_with(
         [RESOLVED_URL, DEAD_URL, ARCHIVED_URL, NOTHING_URL, YOUTUBE_URL]
     )
@@ -295,7 +359,10 @@ async def test_one_verifier_call():
                         {ARCHIVED_URL}
                         {NOTHING_URL}
                         {YOUTUBE_URL}
-                        {MEDIA_URL}""")
+                        {MEDIA_URL}
+                        {UPLOAD_URI}
+                        {OTHER_CHAT_UPLOAD_URI}
+                        {OTHER_BUCKET_URI}""")
                 ),
                 # The media come first, one FileData part each. Vertex AI
                 # rejects a FileData without a mime type, and reads `gs://`
@@ -310,6 +377,13 @@ async def test_one_verifier_call():
                         # Typed from the `/video/` segment of the path.
                         file_uri=MEDIA_URL,
                         mime_type="video/mp4",
+                    )
+                ),
+                # This chat's upload, typed as it was stored. Not the other
+                # chat's upload, nor the other bucket's object.
+                genai_types.Part(
+                    file_data=genai_types.FileData(
+                        file_uri=UPLOAD_URI, mime_type="image/png"
                     )
                 ),
                 # Injected notes and pages follow, grouped by kind. NOTHING_URL has

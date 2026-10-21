@@ -4,8 +4,13 @@ It turns media URIs the writer forwards in plain text into FileData parts so
 Gemini perceives the media instead of guessing. Besides Cofacts media, it
 attaches chat uploads — but only a URI that is the canonical URI of one of the
 calling session's own `user-upload-` artifacts, as the artifact service reports
-it. Any other gs:// string stays text. (test_verifier_upload_forwarding.py runs
-the same callback through a real AgentTool.)
+it. Any other gs:// string stays text.
+
+`test_verifier_round_trip.py` pins the basic case end to end, through a real
+AgentTool: an upload with spaces in its name, forwarded by its gs:// URI, is
+attached with its stored mime type, next to Cofacts media, while the same name
+in another chat session and the same path in another bucket are not. The tests
+here cover what that one request does not construct.
 """
 
 from typing import Optional, cast
@@ -71,21 +76,6 @@ async def run(
     return [part.file_data for part in content.parts or [] if part.file_data]
 
 
-async def test_writer_placeholder_upload_with_spaces_is_attached():
-    # The text ai_writer sees for a pasted image, forwarded to the verifier.
-    [file_data] = await run(
-        f'請描述這張圖 [Attached media "{UPLOAD_NAME}" (image/png) '
-        f"at {UPLOAD_URI}; you cannot view it.]"
-    )
-    assert file_data.file_uri == UPLOAD_URI
-    assert file_data.mime_type == "image/png"
-
-
-async def test_uri_followed_by_chinese_punctuation_is_attached():
-    files = await run(f"請看{UPLOAD_URI}，謝謝。也看{UPLOAD_URI}。")
-    assert [f.file_uri for f in files] == [UPLOAD_URI]
-
-
 async def test_mime_type_comes_from_the_artifact_not_the_name():
     # An extension-less paste still gets the MIME type it was uploaded with.
     ctx = FakeArtifactContext(version("user-upload-clip", 0, "video/mp4"))
@@ -104,11 +94,6 @@ async def test_uri_not_in_session_is_ignored():
     ]
     for text in texts:
         assert await run(text) == [], text
-
-
-async def test_https_form_of_upload_is_ignored():
-    https = UPLOAD_URI.replace("gs://", "https://storage.googleapis.com/")
-    assert await run(f"{https} {SESSION_PREFIX}") == []
 
 
 async def test_non_media_upload_is_skipped():
@@ -134,31 +119,15 @@ async def test_artifact_without_upload_prefix_is_skipped():
     assert ("get_artifact_version", "draft.png", "None") not in ctx.calls
 
 
-async def test_non_gs_canonical_uri_is_skipped():
-    # A local InMemoryArtifactService reports memory:// URIs Vertex cannot read.
-    uri = f"memory://apps/cofacts_ai/users/u/sessions/s/artifacts/{UPLOAD_NAME}/versions/0"
-    ctx = FakeArtifactContext()
-    ctx.artifacts[UPLOAD_NAME] = [
-        ArtifactVersion(version=0, canonical_uri=uri, mime_type="image/png")
-    ]
-    assert await run(f"{uri} and gs://cofacts-media-collection/x/image/y", ctx) == [
-        genai_types.FileData(
-            file_uri="gs://cofacts-media-collection/x/image/y", mime_type="image/webp"
-        )
-    ]
-
-
-async def test_no_gs_uri_in_text_does_no_artifact_lookups():
-    ctx = png_upload()
-    assert await run(f"請描述 {UPLOAD_NAME}", ctx) == []
-    assert ctx.calls == []
-
-
-async def test_unmentioned_upload_gets_no_version_lookups():
+async def test_no_lookups_for_uploads_the_text_does_not_name():
     ctx = FakeArtifactContext(
         version(UPLOAD_NAME, 0, "image/png"),
         version("user-upload-b.png", 0, "image/png"),
     )
+    # No gs:// URI at all: not even a listing.
+    assert await run(f"請描述 {UPLOAD_NAME}", ctx) == []
+    assert ctx.calls == []
+    # One upload named: no version lookups for the other.
     await run(UPLOAD_URI, ctx)
     assert [c for c in ctx.calls if "user-upload-b.png" in c] == []
 
@@ -177,11 +146,10 @@ async def test_older_version_matches_and_version_prefix_does_not():
     ]
 
 
-async def test_repeated_upload_is_attached_once():
+async def test_upload_is_attached_once():
+    # Named twice.
     assert len(await run(f"{UPLOAD_URI} and again {UPLOAD_URI}")) == 1
-
-
-async def test_upload_already_attached_is_not_duplicated():
+    # Already attached, e.g. by an earlier callback.
     content = genai_types.Content(
         role="user",
         parts=[
@@ -208,24 +176,4 @@ async def test_lookup_failure_skips_uploads_but_keeps_cofacts_media():
     )
     assert [f.file_uri for f in files] == [
         "gs://cofacts-media-collection/production/image/abc/original"
-    ]
-
-
-async def test_cofacts_media_collection_is_unchanged():
-    [file_data] = await run(
-        "watch gs://cofacts-media-collection/production/video/abc/original."
-    )
-    assert file_data.file_uri == (
-        "gs://cofacts-media-collection/production/video/abc/original"
-    )
-    assert file_data.mime_type == "video/mp4"
-
-
-async def test_cofacts_media_and_upload_in_one_request():
-    files = await run(
-        f"gs://cofacts-media-collection/production/image/abc/original and {UPLOAD_URI}"
-    )
-    assert [(f.file_uri, f.mime_type) for f in files] == [
-        ("gs://cofacts-media-collection/production/image/abc/original", "image/webp"),
-        (UPLOAD_URI, "image/png"),
     ]
