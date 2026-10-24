@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { getCookie } from '@tanstack/react-start/server'
-import { cofactsExec } from '../cofactsExec'
+import { cofactsExec } from '../cofacts.server'
 import { getApiBase } from '@/server/api-base'
 import { graphql } from '@/server/gql'
 
@@ -118,6 +118,48 @@ describe('cofactsExec', () => {
     expect(init.headers).toMatchObject({
       Authorization: 'Bearer jwt-abc',
     })
+  })
+
+  test('retries without the token when rumors-api rejects it', async () => {
+    mockedGetCookie.mockReturnValue('expired-jwt')
+    const reply = (status: number, json: unknown) =>
+      ({
+        ok: status < 400,
+        status,
+        json: () => Promise.resolve(json),
+      }) as unknown as Response
+    const fn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        reply(500, {
+          errors: [
+            {
+              message:
+                'Context creation failed: Invalid or expired Bearer token',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(reply(200, { data: { GetUser: VALID_USER } }))
+    vi.stubGlobal('fetch', fn)
+
+    const result = await cofactsExec(TestQuery)
+
+    expect(result.GetUser).toEqual(VALID_USER)
+    expect(fn).toHaveBeenCalledTimes(2)
+    const [, retry] = fn.mock.calls[1] as [string, RequestInit]
+    expect(retry.headers).not.toHaveProperty('Authorization')
+  })
+
+  test('does not retry other server errors', async () => {
+    mockedGetCookie.mockReturnValue('jwt-abc')
+    const fn = mockFetchOnce({
+      ok: false,
+      status: 500,
+      jsonValue: { errors: [{ message: 'database down' }] },
+    })
+    await expect(cofactsExec(TestQuery)).rejects.toThrow(/500/)
+    expect(fn).toHaveBeenCalledTimes(1)
   })
 
   test('forwards variables in the POST body', async () => {
