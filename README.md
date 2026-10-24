@@ -4,7 +4,7 @@ This is the web application for [Cofacts.ai](https://cofacts.ai), a chat-based A
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22.18+ (`pnpm tokens` runs a `.ts` script with Node's built-in type stripping)
 - Python 3.12+
 - Google Cloud CLI (`gcloud`) with application default credentials
 - pnpm
