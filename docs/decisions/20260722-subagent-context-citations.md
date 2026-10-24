@@ -221,7 +221,7 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
 1. **`attach_citation`, called from `after_tool` for every tool.** It stamps the response with
    `cite_as` (the exact string to type, e.g. `[^verifier-ygxikp2o]`) and a one-line `cite_hint`.
    The id is the tool name plus the call id, with the `adk-` prefix and any punctuation dropped and
-   the remainder capped at 8 characters — **one formula, no per-tool branching**. Three properties
+   the remainder capped to its last 8 characters — **one formula, no per-tool branching**. Three properties
    fall out of deriving it from the call id: calls issued in parallel cannot collide (counting them
    would); the call and its response share the id, so a citation can resolve to content on either
    side; and the tool name in front keeps it legible, which matters because citing the wrong id
@@ -231,7 +231,9 @@ As shipped in PR #119, in `adk/cofacts_ai/writer_citations.py` (its own module, 
    Gemini issues its own 8-character call ids, which the cap therefore keeps whole. It exists for
    ADK's fallback: when the model supplies no id, `populate_client_function_call_id` generates
    `adk-<uuid4>`, and asking the writer to copy 40 characters invites exactly the mistakes the
-   `[SYSTEM: …]` path used to report.
+   `[SYSTEM: …]` path used to report. The cap keeps the _tail_ (amended in PR #162): once the
+   writer moved to Claude, its `toolu_vrtx_<random>` ids all started `tooluvrt`, so keeping the
+   head made every call to one tool share an id and resolve to the first result.
 
    The id has to travel **inside the payload**: ADK strips its own `adk-…` ids from the history it
    sends to the model (`flows/llm_flows/contents.py`), so this is the writer's only chance to

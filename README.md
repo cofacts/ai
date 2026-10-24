@@ -79,7 +79,11 @@ This project uses GitHub Actions for automated deployments to Google Cloud Run.
 
 The agent talks to Gemini through Vertex AI and feeds it Cofacts media as
 `gs://` URIs, which involves two separate identities and two separate
-permissions. Both must be granted on the project set via `GC_PROJECT_ID`:
+permissions. Both must be granted on the project set via `GC_PROJECT_ID`.
+The writer agent runs on **Claude Haiku 5.5** (`claude-haiku-5-5`) through the
+same Vertex AI project and `GOOGLE_CLOUD_LOCATION`, so that model must also be
+enabled for the project in Vertex AI Model Garden (Anthropic's terms are
+accepted once per project); `roles/aiplatform.user` below covers calling it.
 
 1. **Calling the model** — the Cloud Run runtime service account
    (`SERVICE_ACCOUNT_EMAIL`) needs **Vertex AI User** (`roles/aiplatform.user`,

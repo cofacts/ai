@@ -7,6 +7,7 @@ this format is itself a record — the 2026-07-23 entry below.
 
 | Date       | Decision                                                                                                 |
 | ---------- | -------------------------------------------------------------------------------------------------------- |
+| 2026-10-21 | [Run the writer on Claude Haiku 5.5 as a text-only orchestrator](20261021-writer-on-claude-haiku.md)     |
 | 2026-08-28 | [Run url-resolver as a Cloud Run sidecar](20260828-url-resolver-sidecar-browser-backend.md)              |
 | 2026-07-30 | [Map Gemini token usage ourselves in the ADK plugin](20260730-langfuse-usage-mapping.md)                 |
 | 2026-07-23 | [Use Markdown Any Decision Records (MADR)](20260723-use-markdown-any-decision-records.md)                |
