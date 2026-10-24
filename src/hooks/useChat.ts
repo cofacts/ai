@@ -10,9 +10,30 @@ import {
   startChatStream,
 } from '@/lib/chatCache'
 import { getSession } from '@/lib/chatSessions.functions'
+import { isSessionNotFoundError } from '@/lib/sessionNotFound'
 
 interface UseChatOptions {
   sessionId: string
+}
+
+/**
+ * Merges the chat-cache error with the session query's error, splitting out
+ * session-not-found so it isn't also rendered as a generic connection-error
+ * banner. Exported standalone (rather than inlined in the hook) so this
+ * branch is unit-testable without rendering — this repo's Vite/Vitest setup
+ * does not yet support rendering React components/hooks in tests.
+ */
+export function deriveChatError(
+  dataError: string | null | undefined,
+  queryError: unknown,
+): { error: string | null; sessionNotFound: boolean } {
+  const sessionNotFound = isSessionNotFoundError(queryError)
+  const error =
+    dataError ||
+    (!sessionNotFound && queryError instanceof Error
+      ? queryError.message
+      : null)
+  return { error, sessionNotFound }
 }
 
 /**
@@ -38,9 +59,7 @@ export function useChat({ sessionId }: UseChatOptions) {
       retry: false,
     })
 
-  // Combine query error with state error if needed
-  const error =
-    data.error || (queryError instanceof Error ? queryError.message : null)
+  const { error, sessionNotFound } = deriveChatError(data.error, queryError)
 
   /**
    * Send a new user message and start the SSE stream.
@@ -78,6 +97,7 @@ export function useChat({ sessionId }: UseChatOptions) {
     messages: data.messages,
     isStreaming: data.isStreaming,
     error,
+    sessionNotFound,
     toolInvocations: data.toolInvocations,
     lastReplyDraftId: data.lastReplyDraftId,
     sendMessage,

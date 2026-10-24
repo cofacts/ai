@@ -1,6 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
 import { ADK_APP_NAME, adkClient } from './adkClient'
 import { handleAdkError, handleAdkResponseError } from './adk-errors'
+import {
+  SESSION_NOT_FOUND_MESSAGE,
+  classifySessionFetchResult,
+} from './sessionNotFound'
 import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
 
 const SESSION_TITLE_KEY = 'title'
@@ -62,7 +66,7 @@ export const getSession = createServerFn({ method: 'GET' })
   .inputValidator((sessionId: string) => sessionId)
   .handler(async ({ data: sessionId }) => {
     const userId = await resolveAdkUserIdOrThrow()
-    const { data, error } = await adkClient.GET(
+    const { data, error, response } = await adkClient.GET(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
         params: {
@@ -74,7 +78,11 @@ export const getSession = createServerFn({ method: 'GET' })
         },
       },
     )
-    if (error) handleAdkError(error)
+    if (error) {
+      const outcome = classifySessionFetchResult(error, response.status)
+      if (outcome === 'not-found') throw new Error(SESSION_NOT_FOUND_MESSAGE)
+      handleAdkError(error)
+    }
     return data
   })
 
