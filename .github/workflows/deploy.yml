@@ -13,6 +13,15 @@ permissions:
   deployments: write
   pull-requests: write
 
+# Every run (master and each PR preview) rewrites the single `cofacts-ai`
+# Cloud Run service, and PR runs pin 100% traffic to whichever revision was
+# serving when they started. Two overlapping runs can therefore let a PR run
+# put traffic back on the old revision after master has promoted the new one.
+# Serialize them; never cancel one mid-deploy.
+concurrency:
+  group: cloud-run-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
