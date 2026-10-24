@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth'
 
 interface LoginPromptProps {
@@ -9,13 +10,7 @@ export function LoginPrompt({ message }: LoginPromptProps) {
   return (
     <div className="border-t border-subtle bg-base p-16 flex flex-col items-center gap-12">
       <p className="text-body-s text-secondary text-center">{message}</p>
-      <button
-        type="button"
-        onClick={() => login()}
-        className="px-16 py-6 rounded-full bg-accent text-on-accent text-body-s hover:bg-accent-subtle cursor-pointer"
-      >
-        登入 / 註冊
-      </button>
+      <Button onClick={() => login()}>登入 / 註冊</Button>
     </div>
   )
 }

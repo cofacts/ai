@@ -13,6 +13,10 @@ const EDITOR_FACEBOOK_GROUP =
   'https://www.facebook.com/groups/cofacts/permalink/1959641497601003/'
 const TERMS_URL = 'https://cofacts.tw/terms'
 
+/**
+ * Provider brand colors are the providers' own logos, so they are hard-coded like the LINE
+ * button (a11y guide 07: brand marks are exempt).
+ */
 interface ProviderConfig {
   id: 'facebook' | 'github' | 'google'
   label: string
@@ -37,7 +41,7 @@ const PROVIDERS: ReadonlyArray<ProviderConfig> = [
     id: 'google',
     label: 'Google',
     icon: GoogleIcon,
-    className: 'bg-base text-secondary border border-subtle hover:bg-raised',
+    className: 'border border-control bg-base text-primary hover:bg-raised',
   },
 ]
 
@@ -64,7 +68,9 @@ export function LoginModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle className="text-center">登入 / 註冊</DialogTitle>
+        <DialogTitle className="text-center text-heading-s">
+          登入 / 註冊
+        </DialogTitle>
         <div className="flex flex-col gap-8 pt-8">
           {PROVIDERS.map((p) => {
             const Icon = p.icon
@@ -80,21 +86,21 @@ export function LoginModal({
                     },
                   })
                 }
-                className={`relative flex items-center justify-center rounded-full px-48 py-12 text-body-s uppercase transition-colors    ${p.className}`}
+                className={`relative flex min-h-44 items-center justify-center rounded-5 px-48 py-12 text-ui-m-bold transition-colors ${p.className}`}
               >
-                <Icon className="absolute left-16 h-28 w-28" />
+                <Icon className="absolute left-12 size-24" />
                 <span>{p.label}</span>
               </button>
             )
           })}
         </div>
-        <p className="text-secondary mt-16 text-caption">
+        <p className="mt-8 text-caption text-secondary">
           登入即代表您同意{' '}
           <a
             href={TERMS_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-primary"
+            className="text-link underline"
           >
             使用者條款
           </a>
@@ -103,7 +109,7 @@ export function LoginModal({
             href={LICENSE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-primary"
+            className="text-link underline"
           >
             創用 CC 姓名標示-相同方式分享 4.0
           </a>
@@ -112,7 +118,7 @@ export function LoginModal({
             href={EDITOR_FACEBOOK_GROUP}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-primary"
+            className="text-link underline"
           >
             Cofacts 真的假的訊息回報機器人與查證協作社群
           </a>{' '}
