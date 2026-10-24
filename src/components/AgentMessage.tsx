@@ -21,13 +21,13 @@ export function AgentMessage({
     <div className="flex flex-col items-start w-full">
       {/* Agent header */}
       {showAvatar && (
-        <div className="flex items-center gap-2 mb-2 md:mb-3">
-          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-            <span className="material-symbols-outlined text-sm text-yellow-700">
+        <div className="flex items-center gap-8 mb-8 md:mb-12">
+          <div className="w-24 h-24 rounded-full bg-accent-subtle flex items-center justify-center">
+            <span className="material-symbols-outlined text-body-s text-on-accent">
               smart_toy
             </span>
           </div>
-          <span className="text-sm font-semibold text-gray-900">
+          <span className="text-body-s font-bold text-primary">
             {message.author === 'investigator'
               ? 'AI Investigator'
               : message.author === 'verifier'
@@ -38,11 +38,11 @@ export function AgentMessage({
       )}
 
       {/* Message content */}
-      <div className="w-full text-text-main leading-7 text-sm max-w-none space-y-2">
+      <div className="w-full text-primary text-body-s max-w-none space-y-8">
         {message.parts?.map((part, i) => {
           if (part.text) {
             return (
-              <div key={i} className="prose prose-sm max-w-none prose-p:my-2">
+              <div key={i} className="prose prose-sm max-w-none prose-p:my-8">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {part.text}
                 </ReactMarkdown>
@@ -56,20 +56,20 @@ export function AgentMessage({
             const isFocused = !!id && id === focusedToolCallId
             const isInvestigator = name === 'investigator'
             return (
-              <div key={i} className="flex items-center gap-2 pl-1">
-                <span className="material-symbols-outlined text-gray-300 text-xs">
+              <div key={i} className="flex items-center gap-8 pl-4">
+                <span className="material-symbols-outlined text-disabled text-caption">
                   subdirectory_arrow_right
                 </span>
                 <button
                   className={cn(
-                    'tool-badge transition-all shrink-0',
+                    'inline-flex shrink-0 cursor-pointer items-center gap-6 rounded-full border border-subtle bg-raised px-10 py-2 my-4 font-mono text-caption text-secondary transition-all hover:bg-selected hover:text-primary',
                     isFocused
-                      ? 'bg-primary/10 ring-1 ring-primary/40'
-                      : 'hover:bg-gray-200',
+                      ? 'bg-accent-subtle text-on-accent hover:bg-accent-subtle hover:text-on-accent'
+                      : 'hover:bg-selected',
                   )}
                   onClick={() => onToolBadgeClick?.(id ?? '')}
                 >
-                  <span className="material-symbols-outlined text-[14px] text-gray-500">
+                  <span className="material-symbols-outlined text-[14px] text-tertiary">
                     {lowerName.includes('search')
                       ? 'search'
                       : lowerName.includes('verify') ||

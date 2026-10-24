@@ -17,28 +17,28 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   const { user, isLoading, login, logout } = useAuth()
 
   return (
-    <header className="h-14 md:h-16 bg-white border-b border-border-subtle flex items-center justify-between px-4 shrink-0 z-30 relative shadow-sm">
-      <div className="flex items-center gap-4 md:gap-6">
+    <header className="h-56 md:h-64 bg-base border-b border-subtle flex items-center justify-between px-16 shrink-0 z-30 relative shadow-btn">
+      <div className="flex items-center gap-16 md:gap-24">
         {/* Mobile hamburger */}
         <button
           onClick={onToggleSidebar}
-          className="p-2 -ml-2 text-text-muted hover:text-text-main md:hidden"
+          className="p-8 -ml-8 text-secondary hover:text-primary md:hidden"
         >
           <span className="material-symbols-outlined">menu</span>
         </button>
 
         {/* Logo */}
-        <a className="flex items-center gap-2" href="/">
-          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-lg">
+        <a className="flex items-center gap-8" href="/">
+          <div className="w-32 h-32 bg-accent rounded-full flex items-center justify-center text-on-accent font-bold text-body-l">
             C
           </div>
-          <span className="font-bold text-lg md:text-xl tracking-tight text-text-main">
+          <span className="font-bold text-body-l md:text-heading-s text-primary">
             Cofacts
           </span>
         </a>
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-text-muted">
+        <nav className="hidden md:flex items-center gap-24 text-body-s text-secondary">
           <a
             className="hover:text-primary transition-colors"
             href="https://cofacts.tw"
@@ -54,13 +54,13 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       </div>
 
       {/* Desktop search bar */}
-      <div className="flex-1 max-w-xl mx-8 hidden lg:block">
+      <div className="flex-1 max-w-xl mx-32 hidden lg:block">
         <div className="relative group">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary">
+          <span className="material-symbols-outlined absolute left-12 top-1/2 -translate-y-1/2 text-tertiary group-focus-within:text-primary">
             search
           </span>
           <input
-            className="w-full bg-gray-100 border-none rounded-full py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary focus:bg-white transition-all"
+            className="w-full bg-raised border-none rounded-full py-8 pl-40 pr-16 text-body-s focus:bg-base transition-all"
             placeholder="搜尋可疑訊息或查核報告..."
             type="text"
           />
@@ -68,13 +68,13 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       </div>
 
       {/* Right actions */}
-      <div className="flex items-center gap-3 md:gap-4">
-        <button className="p-2 hover:bg-gray-100 rounded-full text-text-muted relative hidden md:block">
+      <div className="flex items-center gap-12 md:gap-16">
+        <button className="p-8 hover:bg-raised rounded-full text-secondary relative hidden md:block">
           <span className="material-symbols-outlined">notifications</span>
         </button>
         {isLoading ? (
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex items-center justify-center">
-            <span className="material-symbols-outlined text-gray-500">
+          <div className="w-32 h-32 md:w-36 md:h-36 rounded-full bg-selected overflow-hidden border border-subtle flex items-center justify-center">
+            <span className="material-symbols-outlined text-tertiary">
               person
             </span>
           </div>
@@ -85,17 +85,17 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                 <button
                   type="button"
                   aria-label={user.name ?? ''}
-                  className="rounded-full overflow-hidden cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="rounded-full overflow-hidden cursor-pointer"
                 />
               }
             >
               <UserAvatar user={user} size={36} />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="flex items-center gap-3 px-3 py-2.5">
+            <DropdownMenuContent align="end" className="w-224">
+              <div className="flex items-center gap-12 px-12 py-10">
                 <UserAvatar user={user} size={40} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-text-main truncate">
+                  <div className="text-body-s text-primary truncate">
                     {user.name}
                   </div>
                 </div>
@@ -111,7 +111,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           <button
             type="button"
             onClick={() => login()}
-            className="px-4 py-1.5 rounded-full bg-primary text-white text-sm font-medium hover:bg-primary/90 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            className="px-16 py-6 rounded-full bg-accent text-on-accent text-body-s hover:bg-accent-subtle cursor-pointer"
           >
             登入 / 註冊
           </button>

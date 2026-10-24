@@ -218,6 +218,7 @@
   --spacing: 0.0625rem;
 
   --font-sans: 'Noto Sans TC', system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --text-color-primary: var(--text-primary); /* text-primary */
   --text-color-secondary: var(--text-secondary); /* text-secondary */
@@ -263,12 +264,16 @@
   --text-color-icon-on-line: var(--icon-on-line); /* text-icon-on-line */
   --text-color-status-incorrect: var(--status-incorrect); /* text-status-incorrect */
   --background-color-status-incorrect: var(--status-incorrect); /* bg-status-incorrect */
+  --border-color-status-incorrect: var(--status-incorrect); /* border-status-incorrect */
   --text-color-status-correct: var(--status-correct); /* text-status-correct */
   --background-color-status-correct: var(--status-correct); /* bg-status-correct */
+  --border-color-status-correct: var(--status-correct); /* border-status-correct */
   --text-color-status-opinion: var(--status-opinion); /* text-status-opinion */
   --background-color-status-opinion: var(--status-opinion); /* bg-status-opinion */
+  --border-color-status-opinion: var(--status-opinion); /* border-status-opinion */
   --text-color-status-outofscope: var(--status-outofscope); /* text-status-outofscope */
   --background-color-status-outofscope: var(--status-outofscope); /* bg-status-outofscope */
+  --border-color-status-outofscope: var(--status-outofscope); /* border-status-outofscope */
   --background-color-scrim: var(--overlay-scrim); /* bg-scrim */
 
   --text-ui-l: 1.125rem; /* text-ui-l: 18px / 1 / 400 */

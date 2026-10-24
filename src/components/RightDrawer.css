@@ -1,0 +1,40 @@
+/*
+ * Slide animations for the drawer's view transitions (view-transition-name right-drawer and
+ * right-drawer-mobile, set on the drawer elements). The pseudo-elements are document-level, so
+ * this is plain CSS imported for its side effect: Vite tree-shakes a CSS Module whose exports
+ * nobody reads, which dropped these rules from the production build.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(right-drawer) {
+    animation: right-drawer-out-right 0.3s ease both;
+  }
+  ::view-transition-new(right-drawer) {
+    animation: right-drawer-in-right 0.3s ease both;
+  }
+  ::view-transition-old(right-drawer-mobile) {
+    animation: right-drawer-out-bottom 0.3s ease both;
+  }
+  ::view-transition-new(right-drawer-mobile) {
+    animation: right-drawer-in-bottom 0.3s ease both;
+  }
+}
+@keyframes right-drawer-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes right-drawer-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes right-drawer-out-bottom {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes right-drawer-in-bottom {
+  from {
+    transform: translateY(100%);
+  }
+}
