@@ -13,14 +13,14 @@ interface FeedbackButtonsProps {
 }
 
 export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
-  const { user } = useAuth()
+  const { authenticated, user } = useAuth()
   const [feedbackGiven, setFeedbackGiven] = useState<1 | -1 | null>(null)
   const [isPopoverOpen, setIsPopoverOpen] = useState(false)
 
   const { data: persistedFeedback } = useQuery({
     queryKey: ['feedback', traceId, user?.id ?? null],
     queryFn: () => getFeedbackForTrace({ data: traceId }),
-    enabled: !!user,
+    enabled: authenticated,
     staleTime: Infinity,
   })
 

@@ -8,10 +8,17 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
 import appCss from '../styles.css?url'
 import { AuthProvider } from '@/lib/auth'
+import { getAuthStatusServerFn } from '@/server/auth.status.functions'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 
 export const Route = createRootRoute({
-  loader: async () => ({ serverLoadedUser: await getCurrentUserServerFn() }),
+  loader: async () => {
+    const [serverLoadedAuth, serverLoadedUser] = await Promise.all([
+      getAuthStatusServerFn(),
+      getCurrentUserServerFn(),
+    ])
+    return { serverLoadedAuth, serverLoadedUser }
+  },
   head: () => ({
     meta: [
       {
@@ -60,14 +67,17 @@ export const Route = createRootRoute({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
-  const { serverLoadedUser } = Route.useLoaderData()
+  const { serverLoadedAuth, serverLoadedUser } = Route.useLoaderData()
   return (
     <html lang="zh-TW">
       <head>
         <HeadContent />
       </head>
       <body>
-        <AuthProvider serverLoadedUser={serverLoadedUser}>
+        <AuthProvider
+          serverLoadedAuth={serverLoadedAuth}
+          serverLoadedUser={serverLoadedUser}
+        >
           {children}
         </AuthProvider>
         <ReactQueryDevtools />
