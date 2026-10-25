@@ -378,7 +378,7 @@ class TestAfterToolDispatch:
             tool_context=make_tool_context(function_call_id=call_id),
             tool_response=json.dumps({"content": "c", "sources": []}),
         )
-        marker = f"[^{AI_VERIFIER_NAME}-3f2a1b4c]"
+        marker = f"[^{AI_VERIFIER_NAME}-3f4a5b6c]"
         assert result == {
             "content": "c",
             "sources": [],

@@ -3,8 +3,8 @@
 Cofacts.ai is a chat-based AI assistant for **collaborative fact-checking**. It helps human
 fact-checkers (it does not replace them) triage suspicious messages reported to Cofacts,
 research and verify claims, and draft fact-check replies. It builds on the existing Cofacts
-`rumors-api` (article data + OAuth login), Google Gemini via Vertex AI (the agents), and
-Langfuse (observability + feedback).
+`rumors-api` (article data + OAuth login), Google Gemini and Anthropic Claude via Vertex AI
+(the agents), and Langfuse (observability + feedback).
 
 This page is the **current-state overview**. The _why_ behind each choice lives in
 [`decisions/`](decisions/index.md) as MADRs — this page links out to them rather than
@@ -18,7 +18,7 @@ flowchart LR
     BFF -->|openapi-fetch + /run_sse proxy · Bearer token| ADK[ADK agent backend · Python · Google ADK]
     BFF -->|GraphQL · Bearer token| API[(rumors-api)]
     ADK -->|GraphQL tools · Bearer token| API
-    ADK --> GEM[Gemini · Vertex AI]
+    ADK --> GEM[Gemini + Claude · Vertex AI]
     ADK --> VIS[Google Vision]
     ADK -->|gRPC · internal only| UR[url-resolver]
     ADK --> LF[Langfuse]
@@ -57,23 +57,37 @@ The root agent is **`ai_writer`**, the orchestrator that composes fact-check rep
 invokes sub-agents wrapped as ADK `AgentTool`s (the writer cannot call built-in tools such as
 `google_search` / `url_context` alongside function tools in a single agent):
 
-| Agent                                        | Role                                                                                                                                                            |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ai_writer`                                  | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Perceives **images** only.                                       |
-| `ai_investigator`                            | **Discovers** candidate sources via `google_search`.                                                                                                            |
-| `ai_verifier`                                | **Confirms** which source backs which claim, from page text pre-fetched via `url-resolver` plus `url_context`; the only agent that perceives **video / audio**. |
-| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                                                         |
+| Agent                                        | Role                                                                                                                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ai_writer`                                  | Orchestrator. Triages, extracts claims, coordinates research + verification, drafts the reply. Runs on **Claude Haiku**; text-only.                                      |
+| `ai_investigator`                            | **Discovers** candidate sources via `google_search`.                                                                                                                     |
+| `ai_verifier`                                | **Confirms** which source backs which claim, from page text pre-fetched via `url-resolver` plus `url_context`; the only agent that perceives **images / video / audio**. |
+| `ai_proofreader_{kmt,dpp,tpp,minor_parties}` | Role-play Taiwan political perspectives to test the reply's neutrality.                                                                                                  |
 
 The `ai_` prefix is only the Python variable name in `adk/cofacts_ai/agent.py`; the ADK runtime
 names — the `name=` strings, mirrored in `src/lib/adk.ts` — drop it: `writer`, `investigator`,
 `verifier`, `proofreader_*`.
 
-Agents exchange data through callbacks in `adk/cofacts_ai/agent.py` (a structured
-`{content, sources}` JSON contract), and media is injected as Gemini `FileData` through
-before-model callbacks in `adk/cofacts_ai/media_filedata.py` and `agent.py`. The same callback
-chain pre-fetches web pages for the verifier (`adk/cofacts_ai/resolved_pages.py`) through the
-internal **url-resolver** gRPC service (`adk/cofacts_ai/url_resolver/`), so its verdicts rest on
-page text the system actually read.
+The writer runs on Claude Haiku (`claude-haiku-5-5`) through ADK's `Claude` adapter on Vertex
+AI; every other agent runs on Gemini. Agents exchange data through callbacks in
+`adk/cofacts_ai/agent.py` (a structured `{content, sources}` JSON contract), and media is
+injected as Gemini `FileData` into the verifier by before-model callbacks in
+`adk/cofacts_ai/media_filedata.py` and `agent.py`. The same callback chain pre-fetches web pages
+for the verifier (`adk/cofacts_ai/resolved_pages.py`) through the internal **url-resolver** gRPC
+service (`adk/cofacts_ai/url_resolver/`), so its verdicts rest on page text the system actually
+read. The writer never sees media: it forwards the article's `gs://` `attachmentUrl` to the
+verifier, and `adk/cofacts_ai/writer_request.py` turns any media part left in its own request
+(e.g. a user upload) into a text placeholder, since the Claude adapter cannot carry `FileData`;
+it also serializes each tool result whole, since the adapter would otherwise forward only a
+result's `content` and drop its `sources` / `cite_as`.
+The placeholder keeps an upload's `gs://` URI, which the writer forwards to the verifier like an
+`attachmentUrl`. The verifier attaches it only if the URI appears verbatim as the canonical URI
+of one of the chat session's own `user-upload-*` artifacts (any version), with that artifact's
+stored MIME type: its callback lists artifacts through its callback context, and `AgentTool`
+gives the sub-agent ADK's `ForwardingArtifactService`, which answers for the calling writer
+session. So a `gs://` string for another session or bucket is never attached (the Vertex AI
+service agent can read every bucket in the project), and nothing is passed through session
+state. The verifier's instruction forbids describing media that was not actually attached.
 
 Each `AgentTool` call is a **fresh, stateless, single-message session** — a sub-agent sees only
 that call's `request` string. So every tool result is stamped with a footnote id (`cite_as`, e.g.
@@ -87,14 +101,18 @@ callback.
 [verifier page pre-fetch](decisions/20260722-url-resolver-verifier-prefetch.md),
 [media injection via callbacks](decisions/20260531-callback-media-injection.md),
 [multimodal perception on Vertex AI](decisions/20260606-multimodal-perception-vertex-ai.md),
+[writer on Claude Haiku](decisions/20261021-writer-on-claude-haiku.md),
 [auth token via ContextVar](decisions/20260603-auth-token-contextvar.md).
 
 ## Data & sessions
 
 ADK sessions are persisted with `DatabaseSessionService` — SQLite locally, PostgreSQL via the
-Cloud SQL proxy in prod. Chat artifacts (e.g. the Google-search suggestion widget, uploaded
-files) are stored in GCS.
-→ decision: [Postgres session persistence](decisions/20260506-postgres-session-persistence.md).
+Cloud SQL proxy in prod. Production (GCE) uses the `adk` database; every Cloud Run deploy
+(dev.cofacts.ai and PR previews) uses `adk_staging` on the same instance, a clone of production:
+the `DATABASE_URL` secret those deploys read points at it. Chat artifacts (e.g. the
+Google-search suggestion widget, uploaded files) are stored in GCS.
+→ decisions: [Postgres session persistence](decisions/20260506-postgres-session-persistence.md),
+[writer on Claude Haiku](decisions/20261021-writer-on-claude-haiku.md).
 
 ## Observability
 

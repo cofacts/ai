@@ -657,8 +657,8 @@ async def search_image_web(image_url: str) -> Dict[str, Any]:
         - pagesWithMatchingImages: web pages where the image appears (the strongest
           out-of-context / miscaption signal, and a handoff for investigator/verifier).
         The raw match-image URL lists (full/partial/visually-similar) are omitted on
-        purpose: the writer already sees the original image, so they add cost and
-        noise without adding provenance. Returns {"error": ...} on any failure.
+        purpose: they only point at copies of the image, so they add cost and noise
+        without adding provenance. Returns {"error": ...} on any failure.
     """
     try:
         client = _get_vision_client()

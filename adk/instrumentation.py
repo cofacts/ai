@@ -71,6 +71,12 @@ def setup_instrumentation():
     """
     Sets up Langfuse instrumentation for Google ADK.
     """
+    # The Anthropic SDK emits its own `anthropic.messages.create` span into the
+    # global tracer provider, with usage keyed differently from ours (`output`
+    # includes reasoning). Langfuse would price it on top of the instrumentor's
+    # `call_llm` generation and charge every Claude call twice. ADK builds the
+    # AnthropicVertex client lazily, after this runs, so the env var reaches it.
+    os.environ.setdefault("ANTHROPIC_OPEN_TELEMETRY", "false")
     if not (os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY")):
         logger.warning("Langfuse credentials not found. Skipping instrumentation.")
         return
@@ -183,13 +189,23 @@ class LangfuseTracingPlugin(BasePlugin):
         # `prompt_token_count` *includes* `cached_content_token_count`, so the two
         # are split rather than added, or cached tokens get counted twice.
         cached = usage.cached_content_token_count or 0
+        # Claude only: ADK's Anthropic adapter folds cache-write tokens into the
+        # prompt count as well and attaches them as an extra attribute that the
+        # GenAI type does not declare. Writes cost 1.25x the input rate, so they
+        # get their own priced key instead of riding in `input`.
+        cache_creation = getattr(usage, "cache_creation_input_tokens", None) or 0
 
         usage_details = {
-            "input": prompt - cached + (usage.tool_use_prompt_token_count or 0),
+            "input": prompt
+            - cached
+            - cache_creation
+            + (usage.tool_use_prompt_token_count or 0),
             "input_cached_tokens": cached,
             "output": usage.candidates_token_count or 0,
             "output_reasoning": usage.thoughts_token_count or 0,
         }
+        if cache_creation:
+            usage_details["input_cache_creation"] = cache_creation
         if usage.total_token_count is not None:
             usage_details["total"] = usage.total_token_count
 

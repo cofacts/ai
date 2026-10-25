@@ -31,10 +31,12 @@ from typing import Any, AsyncGenerator, Optional, cast
 from unittest.mock import patch
 
 import pytest
+from anthropic import types as anthropic_types
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.apps.app import App
+from google.adk.models.anthropic_llm import message_to_generate_content_response
 from google.adk.models.base_llm import BaseLlm
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
@@ -172,6 +174,40 @@ async def test_cached_tokens_are_split_out_of_prompt():
         "total": 10_500,
     }
     assert sum(v for k, v in call["usage_details"].items() if k != "total") == 10_500
+
+
+async def test_claude_cache_writes_get_their_own_key():
+    """Through ADK's Anthropic adapter, as the writer's responses arrive: cache
+    reads and writes are both folded into `prompt_token_count`, and a write costs
+    1.25x the input rate, so leaving it in `input` would under-price it.
+    """
+    response = message_to_generate_content_response(
+        anthropic_types.Message(
+            id="msg_1",
+            type="message",
+            role="assistant",
+            model="claude-haiku-5-5",
+            content=[anthropic_types.TextBlock(type="text", text="ok")],
+            stop_reason="end_turn",
+            usage=anthropic_types.Usage(
+                input_tokens=300,
+                cache_read_input_tokens=9_000,
+                cache_creation_input_tokens=1_200,
+                output_tokens=80,
+            ),
+        )
+    )
+    (call,) = await run_plugin([response])
+
+    assert call["usage_details"] == {
+        "input": 300,
+        "input_cached_tokens": 9_000,
+        "input_cache_creation": 1_200,
+        "output": 80,
+        "output_reasoning": 0,
+        "total": 10_580,
+    }
+    assert sum(v for k, v in call["usage_details"].items() if k != "total") == 10_580
 
 
 async def test_model_comes_from_the_request_then_the_response():

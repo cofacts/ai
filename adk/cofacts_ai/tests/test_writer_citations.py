@@ -160,18 +160,23 @@ class TestAttachCitation:
         )
         assert result == {"content": "report"}
 
-    def test_an_adk_generated_uuid_is_stripped_and_capped(self):
-        # When the model supplies no id, ADK generates `adk-<uuid4>`. Copying 40
-        # characters by hand invites mistakes, so the prefix and the dashes go
-        # and what is left is capped.
-        result = attach_citation(
-            make_tool(AI_VERIFIER_NAME),
-            {"content": "report"},
-            make_tool_context(
-                function_call_id="adk-3f2a1b4c-9d8e-4f7a-b6c5-1e2d3f4a5b6c"
-            ),
-        )
-        assert result["cite_as"] == f"[^{AI_VERIFIER_NAME}-3f2a1b4c]"
+    def test_a_long_id_is_stripped_and_capped_to_its_tail(self):
+        # Copying 40 characters by hand invites mistakes, so punctuation (and an
+        # `adk-` prefix) goes and what is left is capped. The tail is kept: it is
+        # the random part of both long id shapes, while Claude's ids all start
+        # with `toolu_vrtx_`, so a head would make every call share one id.
+        for call_id, expected in [
+            # ADK's fallback when the model supplies no id: `adk-<uuid4>`.
+            ("adk-3f2a1b4c-9d8e-4f7a-b6c5-1e2d3f4a5b6c", "3f4a5b6c"),
+            # Claude on Vertex.
+            ("toolu_vrtx_0136ADYNTKRYwGJzqehu9Y9Z", "qehu9Y9Z"),
+        ]:
+            result = attach_citation(
+                make_tool(AI_VERIFIER_NAME),
+                {"content": "report"},
+                make_tool_context(function_call_id=call_id),
+            )
+            assert result["cite_as"] == f"[^{AI_VERIFIER_NAME}-{expected}]"
 
 
 class TestResolveCitations:
