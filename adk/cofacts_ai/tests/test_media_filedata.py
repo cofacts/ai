@@ -96,21 +96,25 @@ async def test_uri_not_in_session_is_ignored():
         assert await run(text) == [], text
 
 
-async def test_non_media_upload_is_skipped():
+async def test_unsupported_upload_is_skipped():
     ctx = FakeArtifactContext(
-        version("user-upload-notes.txt", 0, "text/plain"),
         version("user-upload-data.json", 0, "application/json"),
         version("user-upload-unknown", 0, None),
     )
     text = " ".join(
         f"{SESSION_PREFIX}/{name}/0"
-        for name in [
-            "user-upload-notes.txt",
-            "user-upload-data.json",
-            "user-upload-unknown",
-        ]
+        for name in ["user-upload-data.json", "user-upload-unknown"]
     )
     assert await run(text, ctx) == []
+
+
+async def test_plain_text_upload_is_attached():
+    """The chat accepts .txt uploads (ChatInput ACCEPT), so the verifier reads them."""
+    ctx = FakeArtifactContext(version("user-upload-notes.txt", 0, "text/plain"))
+    uri = f"{SESSION_PREFIX}/user-upload-notes.txt/0"
+    assert await run(f"請讀 {uri}", ctx) == [
+        genai_types.FileData(file_uri=uri, mime_type="text/plain")
+    ]
 
 
 async def test_artifact_without_upload_prefix_is_skipped():

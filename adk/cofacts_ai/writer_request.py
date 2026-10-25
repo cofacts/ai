@@ -55,6 +55,12 @@ def _media_placeholder(part: genai_types.Part) -> Optional[genai_types.Part]:
         mime_type = part.file_data.mime_type or "unknown type"
         uri = part.file_data.file_uri
         where = f" at {uri}" if uri and uri != label else ""
+        if uri and uri.startswith("gs://"):
+            return genai_types.Part(
+                text=f'[Attached file "{label}" ({mime_type}); you cannot view it. '
+                f"To inspect it, call verifier and include this exact URI in "
+                f"your request: {uri}]"
+            )
     elif part.inline_data:
         label = part.inline_data.display_name or "file"
         mime_type = part.inline_data.mime_type or "unknown type"

@@ -63,8 +63,9 @@ def test_file_data_becomes_text():
     assert content.parts is not None
     assert [p.file_data for p in content.parts] == [None, None]
     assert content.parts[1].text == (
-        '[Attached media "chart.png" (image/png) at '
-        "gs://bucket/app/user/session/chart.png/0; you cannot view it.]"
+        '[Attached file "chart.png" (image/png); you cannot view it. '
+        "To inspect it, call verifier and include this exact URI in your "
+        "request: gs://bucket/app/user/session/chart.png/0]"
     )
 
 

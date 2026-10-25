@@ -48,8 +48,9 @@ _URL_TRAILING_PUNCT = ".,;:!?)]}>\"'"
 # in src/lib/adk.ts); no other artifact of the session is ever attached.
 _UPLOAD_ARTIFACT_PREFIX = "user-upload-"
 
-# MIME types Gemini can perceive as FileData; uploads of any other type are skipped.
-_UPLOAD_MIME_PREFIXES = ("image/", "video/", "audio/", "application/pdf")
+# MIME types Gemini can perceive as FileData; uploads of any other type are
+# skipped. Mirrors ACCEPT in src/components/ChatInput.tsx.
+_UPLOAD_MIME_PREFIXES = ("image/", "video/", "audio/", "application/pdf", "text/plain")
 
 
 def _mentions(text: str, uri: str) -> bool:
