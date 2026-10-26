@@ -65,7 +65,7 @@ jobs:
         run: uv run ty check . ../.agents/skills
 
   lint-frontend:
-    name: Lint frontend (ESLint, Prettier, tsc)
+    name: Lint frontend (ESLint, Prettier, tsc, tokens, Vitest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,3 +96,11 @@ jobs:
       - name: Type check (TypeScript)
         if: ${{ !cancelled() }}
         run: pnpm exec tsc --noEmit
+
+      - name: Design tokens up to date
+        if: ${{ !cancelled() }}
+        run: pnpm run tokens:check
+
+      - name: Unit tests (Vitest)
+        if: ${{ !cancelled() }}
+        run: pnpm test

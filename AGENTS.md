@@ -36,3 +36,8 @@ self-contained bug fixes and refactors don't need a record.
 
 If the user agrees it's worth recording, follow
 [`docs/decisions/index.md`](docs/decisions/index.md) to add it.
+
+## Frontend work
+
+For any UI, styling, design-token, Storybook or route-data work, use the `cofacts-frontend`
+skill (`.agents/skills/cofacts-frontend/SKILL.md`).
