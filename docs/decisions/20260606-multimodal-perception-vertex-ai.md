@@ -1,5 +1,5 @@
 ---
-status: 'accepted'
+status: 'accepted (decision 2 superseded by 20261021-writer-on-claude-haiku)'
 date: 2026-06-06
 decision-makers: [MrOrz]
 consulted:
@@ -7,6 +7,12 @@ informed:
 ---
 
 # Multimodal media perception: writer sees images, verifier watches, delivered via Vertex AI `gs://`
+
+> [!NOTE]
+> Decision 2's "writer sees images" is superseded by
+> [`20261021-writer-on-claude-haiku`](20261021-writer-on-claude-haiku.md): the writer moved to
+> Claude and is text-only, and the verifier now perceives all media, including chat uploads.
+> Decision 1 (Vertex AI + native `gs://` delivery) still stands.
 
 ## Context and Problem Statement
 

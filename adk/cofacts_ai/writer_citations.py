@@ -95,9 +95,12 @@ _CITATION_FIELDS = ("cite_as", "cite_hint")
 
 # Cap on the call-id part of a citation id. Gemini supplies its own short
 # function-call ids (8 characters, e.g. `ygxikp2o`), which pass through whole.
-# The cap is for the other case: when the model supplies no id, ADK generates
-# `adk-<uuid4>` (`populate_client_function_call_id`), and a 32-hex-digit tail
-# would be 40 characters for the writer to copy without a mistake.
+# The cap is for the longer ids: Claude's tool_use ids on Vertex
+# (`toolu_vrtx_0136ADYNTKRYwGJzqehu9Y9Z`), and the `adk-<uuid4>` ADK generates
+# when the model supplies no id (`populate_client_function_call_id`) -- 40
+# characters would be too many for the writer to copy without a mistake. The
+# TAIL is kept, not the head: Claude ids share a fixed `toolu_vrtx_` prefix, so
+# their first 8 characters are the same for every call.
 _MAX_CALL_ID_CHARS = 8
 
 
@@ -115,11 +118,14 @@ def _citation_id(
     resolve *successfully* to the wrong content, which is far worse than not
     resolving. The `adk-` prefix is dropped and punctuation removed for the
     same reason -- what is left is the part that actually distinguishes calls.
+    Of that, the last `_MAX_CALL_ID_CHARS` are kept: the random tail of a
+    Claude `toolu_vrtx_...` id or an ADK uuid, while a Gemini 8-char id passes
+    through whole.
     """
     if not tool_name or not function_call_id:
         return None
     suffix = "".join(c for c in function_call_id.removeprefix("adk-") if c.isalnum())
-    return f"{tool_name}-{suffix[:_MAX_CALL_ID_CHARS]}" if suffix else None
+    return f"{tool_name}-{suffix[-_MAX_CALL_ID_CHARS:]}" if suffix else None
 
 
 def attach_citation(
@@ -278,6 +284,27 @@ def _render_block(cite_id: str, body: str) -> str:
     closing = f"</{cite_id}>"
     escaped = body.replace(closing, closing.replace("</", "<\\/"))
     return f"<{cite_id}>\n{escaped}\n</{cite_id}>"
+
+
+# A hoisted block as `_render_block` writes it: the id is the tag name, and the
+# same id closes it. Uses the same id alphabet as `_CITATION_RE`, and nothing
+# else about what an id looks like -- see the note there.
+_HOISTED_BLOCK_RE = re.compile(r"<([A-Za-z0-9_.-]+)>\n.*?\n</\1>", re.DOTALL)
+
+
+def strip_hoisted_blocks(text: str) -> str:
+    """`text` without the blocks `resolve_citations` hoisted into it: what the
+    writer itself wrote.
+
+    Only a block whose `[^id]` marker is also in `text` is removed -- that pair
+    is what a hoisted citation looks like, so an unrelated tag that happens to
+    look like one is left alone. A cited block's body cannot end it early:
+    `_render_block` escapes the closing tag inside it.
+    """
+    markers = {m.group(1) for m in _CITATION_RE.finditer(text)}
+    return _HOISTED_BLOCK_RE.sub(
+        lambda m: "" if m.group(1) in markers else m.group(0), text
+    )
 
 
 def resolve_citations(

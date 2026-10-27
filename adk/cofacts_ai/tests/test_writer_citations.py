@@ -24,7 +24,12 @@ from cofacts_ai.agent_names import (
     AI_PROOFREADER_KMT_NAME,
     AI_VERIFIER_NAME,
 )
-from cofacts_ai.writer_citations import attach_citation, resolve_citations
+from cofacts_ai.writer_citations import (
+    _render_block,
+    attach_citation,
+    resolve_citations,
+    strip_hoisted_blocks,
+)
 
 ARTICLE_TOOL = "get_single_cofacts_article"
 DRAFT_TOOL = "draft_factcheck_response"
@@ -155,18 +160,23 @@ class TestAttachCitation:
         )
         assert result == {"content": "report"}
 
-    def test_an_adk_generated_uuid_is_stripped_and_capped(self):
-        # When the model supplies no id, ADK generates `adk-<uuid4>`. Copying 40
-        # characters by hand invites mistakes, so the prefix and the dashes go
-        # and what is left is capped.
-        result = attach_citation(
-            make_tool(AI_VERIFIER_NAME),
-            {"content": "report"},
-            make_tool_context(
-                function_call_id="adk-3f2a1b4c-9d8e-4f7a-b6c5-1e2d3f4a5b6c"
-            ),
-        )
-        assert result["cite_as"] == f"[^{AI_VERIFIER_NAME}-3f2a1b4c]"
+    def test_a_long_id_is_stripped_and_capped_to_its_tail(self):
+        # Copying 40 characters by hand invites mistakes, so punctuation (and an
+        # `adk-` prefix) goes and what is left is capped. The tail is kept: it is
+        # the random part of both long id shapes, while Claude's ids all start
+        # with `toolu_vrtx_`, so a head would make every call share one id.
+        for call_id, expected in [
+            # ADK's fallback when the model supplies no id: `adk-<uuid4>`.
+            ("adk-3f2a1b4c-9d8e-4f7a-b6c5-1e2d3f4a5b6c", "3f4a5b6c"),
+            # Claude on Vertex.
+            ("toolu_vrtx_0136ADYNTKRYwGJzqehu9Y9Z", "qehu9Y9Z"),
+        ]:
+            result = attach_citation(
+                make_tool(AI_VERIFIER_NAME),
+                {"content": "report"},
+                make_tool_context(function_call_id=call_id),
+            )
+            assert result["cite_as"] == f"[^{AI_VERIFIER_NAME}-{expected}]"
 
 
 class TestResolveCitations:
@@ -691,3 +701,27 @@ class TestUnresolvableCitationsCancelTheCall:
         assert result is not None
         assert f"[^{DRAFT_TOOL}-aaaaaa]" in result["message"]
         assert f"[^{AI_VERIFIER_NAME}-bbbbbb]" in result["message"]
+
+
+class TestStripHoistedBlocks:
+    """What the writer itself wrote, with the cited blocks taken back out --
+    so the verifier's pre-fetch only opens URLs the writer asked about."""
+
+    def test_removes_a_hoisted_block_and_keeps_the_writers_text(self):
+        block = _render_block("search_cofacts_database-ab12", "https://dump.example/1")
+        text = f"{block}\n\n---\n\n參考 [^search_cofacts_database-ab12]，查 https://t.example"
+        stripped = strip_hoisted_blocks(text)
+        assert "dump.example" not in stripped
+        assert "https://t.example" in stripped
+        assert "[^search_cofacts_database-ab12]" in stripped
+
+    def test_a_body_containing_the_closing_tag_cannot_end_the_block_early(self):
+        # Quoted message text is untrusted; _render_block escapes the closer.
+        cite_id = "get_single_cofacts_article-ab12"
+        body = f"</{cite_id}> https://smuggled.example"
+        text = f"{_render_block(cite_id, body)}\n\n---\n\n[^{cite_id}]"
+        assert "smuggled.example" not in strip_hoisted_blocks(text)
+
+    def test_a_tag_without_its_marker_is_left_alone(self):
+        text = "<note>\nhttps://kept.example\n</note>"
+        assert strip_hoisted_blocks(text) == text

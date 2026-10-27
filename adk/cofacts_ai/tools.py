@@ -30,6 +30,11 @@ COMMON_ARTICLE_FIELDS = """
       url
       title
       summary
+      # When Cofacts resolved this URL -- NOT when the article was reported;
+      # old articles carry hyperlinks backfilled years later. Without it there
+      # is no way to tell a summary fetched minutes ago from one fetched in
+      # 2018, which is the difference between reusable and worthless.
+      fetchedAt
       status
       error
     }
@@ -49,6 +54,7 @@ COMMON_ARTICLE_FIELDS = """
           title
           summary
           topImageUrl
+          fetchedAt
           status
           error
         }
@@ -206,7 +212,9 @@ async def search_cofacts_database(
     - factCheckResponses: Fact-check responses from collaborators with community feedback scores (helpfulCount/unhelpfulCount)
     - additionalContext: Additional context from reporters with community ratings (helpfulCount/unhelpfulCount)
     - communityDemandCount: Number of people who wanted to know the truth before fact-checks were available
-    - hyperlinks: URLs found in the message with crawled metadata
+    - hyperlinks: URLs found in the message, with the page text Cofacts crawled at
+      `fetchedAt` (`status`/`error` say whether that crawl succeeded). Treat a summary
+      as evidence of what the page said *then*, not now
     - bundledMessages: Messages reported together, indicating they were shared as a set
     - relatedArticles: Similar messages that may have existing fact-checks
     - stats: Actual traffic/popularity data (views, visits) - use this for current hotness metrics
@@ -945,8 +953,8 @@ async def search_image_web(image_url: str) -> Dict[str, Any]:
         - pagesWithMatchingImages: web pages where the image appears (the strongest
           out-of-context / miscaption signal, and a handoff for investigator/verifier).
         The raw match-image URL lists (full/partial/visually-similar) are omitted on
-        purpose: the writer already sees the original image, so they add cost and
-        noise without adding provenance. Returns {"error": ...} on any failure.
+        purpose: they only point at copies of the image, so they add cost and noise
+        without adding provenance. Returns {"error": ...} on any failure.
     """
     try:
         client = _get_vision_client()

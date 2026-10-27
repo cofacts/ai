@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.apps import App
+from google.adk.models import AnthropicGenerateContentConfig, Claude
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.plugins.save_files_as_artifacts_plugin import (
@@ -42,9 +43,11 @@ from .agent_names import (
     AI_VERIFIER_NAME,
     AI_WRITER_NAME,
 )
-from .media_filedata import (
-    inject_article_attachment,
-    inject_cofacts_media_filedata,
+from .archived_pages import stage_archived_links, unpack_archived_links
+from .media_filedata import inject_cofacts_media_filedata
+from .resolved_pages import (
+    RESOLVED_META_STATE_KEY,
+    inject_resolved_url_content,
 )
 from .cofacts_site import COFACTS_SITE_URL
 from .language import (
@@ -63,7 +66,9 @@ from .tools import (
     search_suspicious_messages,
     submit_suspicious_message,
 )
+from .url_resolver.client import ResolveStatus
 from .writer_citations import attach_citation, resolve_citations
+from .writer_request import prepare_writer_request
 
 load_dotenv()
 
@@ -171,32 +176,70 @@ async def append_grounding_sources(
     return _set_text_content(llm_response, serialized)
 
 
-async def append_url_context_sources(
+async def append_verifier_sources(
     callback_context: CallbackContext, llm_response: LlmResponse
 ) -> Optional[LlmResponse]:
     """
     After-model callback for ai_verifier.
 
-    Captures clean URL-title pairs from url_context grounding_chunks and wraps
-    the response as {content, sources} JSON. url_context returns real URLs
-    directly — no redirect resolution or hallucination stripping needed.
+    Builds `sources` as the union of (a) pages url-resolver actually fetched
+    — recorded by inject_resolved_url_content in
+    callback_context.state[RESOLVED_META_STATE_KEY], since this callback only
+    sees the LlmResponse and cannot see the [RESOLVED PAGE] parts the
+    before-model callback injected into the request — and (b) url_context's
+    grounding_chunks (real URLs directly, no redirect resolution needed).
+
+    This union is self-correcting without a hard-coded ban list: a genuinely
+    dead URL is fetched by neither path (url-resolver marked it DEAD, and
+    url_context produces no grounding for a page it can't fetch either), so
+    it never appears in `sources`. A page url-resolver couldn't fetch (PDF,
+    blocked) but that url_context DID ground still shows up via (b).
+
+    Unlike the old url_context-only version, this wraps the response even
+    when url_context returned no grounding_metadata at all (e.g. the model
+    skipped calling it) — a lazy or misbehaving model should not also lose
+    the deterministically-fetched resolver sources. It only skips a response
+    with no text, so the writer's empty-response retry still fires.
     """
-    if not llm_response.grounding_metadata:
-        return None
-    metadata = llm_response.grounding_metadata
-    chunks = metadata.grounding_chunks
-    if not chunks or not llm_response.content or not llm_response.content.parts:
+    if not llm_response.content or not llm_response.content.parts:
         return None
 
-    sources_list = [
-        {
-            "title": (chunk.web and chunk.web.title) or "Unknown Source",
-            "url": chunk.web.uri if chunk.web else None,
-        }
-        for chunk in chunks
-    ]
+    resolved_meta = callback_context.state.get(RESOLVED_META_STATE_KEY) or {}
+    sources_list = []
+    seen_urls: set[str] = set()
+    for url, meta in resolved_meta.items():
+        if meta.get("status") != ResolveStatus.RESOLVED.value:
+            continue
+        # Listed under the URL the verifier was asked about, never the
+        # canonical. That is the URL its `content` names, the one the writer
+        # copies into `references` and `claim_sources`, and the one a reader
+        # will click. url-resolver's canonical is `twitter:url || og:url`,
+        # which many sites point at their homepage or a section page.
+        sources_list.append({"title": meta.get("title") or url, "url": url})
+        # The canonical still claims the page, so that url_context grounding it
+        # under that other name does not add it a second time.
+        seen_urls.add(url)
+        canonical = meta.get("canonical")
+        if canonical:
+            seen_urls.add(canonical)
+
+    metadata = llm_response.grounding_metadata
+    chunks = metadata.grounding_chunks if metadata else None
+    for chunk in chunks or []:
+        url = chunk.web.uri if chunk.web else None
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        sources_list.append(
+            {
+                "title": (chunk.web and chunk.web.title) or "Unknown Source",
+                "url": url,
+            }
+        )
 
     content = "".join(p.text or "" for p in llm_response.content.parts)
+    if not content.strip():
+        return None
 
     serialized = json.dumps(
         {"content": content, "sources": sources_list},
@@ -357,8 +400,15 @@ ai_verifier = LlmAgent(
         # Long YouTube videos can otherwise hang with no client-side deadline.
         http_options=genai_types.HttpOptions(timeout=240_000),
     ),
-    before_model_callback=[inject_youtube_filedata, inject_cofacts_media_filedata],
-    after_model_callback=append_url_context_sources,
+    before_model_callback=[
+        # First: it removes the archived-links block the writer staged, which
+        # carries URLs of its own that the URL-reading callbacks must not see.
+        unpack_archived_links,
+        inject_youtube_filedata,
+        inject_cofacts_media_filedata,
+        inject_resolved_url_content,
+    ],
+    after_model_callback=append_verifier_sources,
     instruction=f"""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
     read all the URLs and determine which sources actually support each claim.
@@ -369,10 +419,34 @@ ai_verifier = LlmAgent(
     like `<get_single_cofacts_article-1a2b3c> ... </get_single_cofacts_article-1a2b3c>`; a matching
     `[^get_single_cofacts_article-1a2b3c]` marker in the prose points at that block.
 
+    ## Pre-fetched page text
+    For plain web URLs, the system has already fetched the page and injected its text,
+    verbatim, as a `[RESOLVED PAGE] <url>` part below — sometimes only the page's short
+    description. Quote from it, never from training knowledge or a URL's plausibility;
+    where it is too short to settle a claim, judge from url_context instead.
+    A `[LINK NOT FOUND] <url>` note means the system's fetcher found no page at that URL
+    (it does not resolve, is malformed, or returned HTTP 404/410): treat this as advisory,
+    not a ban, since some sites answer bots with a 404. Still try url_context on it; only
+    if url_context ALSO retrieves no content should you report the
+    claim as ✗ / cannot-verify for that link, and never present it as a supporting source.
+    An `[ARCHIVED PAGE] <url>` part is page text Cofacts crawled ON AN EARLIER DATE, shown
+    only because the fetcher could not reach the page just now. The part states when it was
+    crawled, which can be years ago. Use it as background to understand what the link was
+    about; do NOT treat it as evidence that the page says this today, and never cite it as
+    a source you read. If url_context can still read the page, that reading wins over the
+    archived text wherever the two disagree.
+    A URL with none of these parts means the system's fetcher could not get it this time
+    (e.g. a PDF, a blocked page, a timeout, or more URLs than it fetches per turn) and no
+    archived copy exists. That says nothing about the URL itself — fall back to url_context
+    exactly as for any other URL.
+
     ## Your Task
     1. Call url_context for ALL provided web/news/YouTube page URLs in one call (up to 20) —
-       this is MANDATORY. url_context fetches web PAGE metadata (title, publish date,
-       description) from the HTML.
+       this is MANDATORY, even for URLs that already have injected `[RESOLVED PAGE]` text:
+       url_context is still the only source for page METADATA (title, publish date,
+       description) and for anything the system's fetcher could not get.
+       Division of labour: **`[RESOLVED PAGE]` text first; url_context for its gaps and
+       page metadata / upload date / video content (+ FileData)**.
        For video URLs like YouTube, page metadata and video frames are complementary:
        - url_context → upload date, uploader name, page title/description
        - FileData → observable video content (speech, visuals, on-screen text)
@@ -401,6 +475,10 @@ ai_verifier = LlmAgent(
     - Do not add analysis or verdicts beyond what the sources say
 
     ## Hard Rules — No Exceptions
+
+    **No media, no description**: If the request refers to an image, video, audio clip or file but
+    no such media is actually attached to this request, say plainly that you could not see it.
+    Do NOT describe, transcribe or guess its contents.
 
     **No training knowledge**: For video or media content, report ONLY what is directly visible or
     audible. Never use background knowledge to identify the event name, date, location, organizer,
@@ -796,15 +874,27 @@ def handle_writer_tool_error(
 # This architecture respects ADK constraints while maintaining full functionality.
 ai_writer = LlmAgent(
     name=AI_WRITER_NAME,
-    model="gemini-3-flash-preview",
+    # Claude on Vertex AI (same GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION as
+    # Gemini). The writer is text-only: it no longer perceives images itself and
+    # delegates looking at media to the verifier. Thinking counts toward
+    # max_tokens, and ADK's default 8192 is close to the ~7.2K that a draft call
+    # with heavy thinking reached on the preview; a cut-off draft call loses the
+    # whole draft. Stay at or below 21,333: above it the Anthropic SDK refuses
+    # non-streaming requests, which breaks /run.
+    model=Claude(model="claude-haiku-5-5", max_tokens=16000),
     description="AI agent that orchestrates fact-checking process and composes final fact-check replies for Cofacts.",
-    generate_content_config=genai_types.GenerateContentConfig(
-        thinking_config=genai_types.ThinkingConfig(
-            include_thoughts=True, thinking_level=genai_types.ThinkingLevel.HIGH
-        )
+    generate_content_config=AnthropicGenerateContentConfig(
+        # -1 = adaptive thinking with summarized thoughts (Claude's default is
+        # to omit them); effort "high" matches the Gemini thinking_level it replaces.
+        thinking_config=genai_types.ThinkingConfig(thinking_budget=-1),
+        effort="high",
     ),
-    before_model_callback=inject_article_attachment,
-    before_tool_callback=resolve_citations,
+    before_model_callback=prepare_writer_request,
+    # resolve_citations first: it may cancel the call, and it must not scan the
+    # archived page text stage_archived_links appends for `[^id]` markers.
+    # stage_archived_links strips the blocks resolve_citations hoists, so it
+    # sees only what the writer wrote.
+    before_tool_callback=[resolve_citations, stage_archived_links],
     after_tool_callback=after_tool,
     on_tool_error_callback=handle_writer_tool_error,
     # generate_session_title is NOT here: it only ever runs on the first turn,
@@ -828,6 +918,20 @@ ai_writer = LlmAgent(
     - Providing gentle guidance to help them write responses their target audience can actually understand
 
     Focus on collaboration, not automation - the goal is human + AI working together.
+
+    ## Audience & Language:
+
+    Assume both the user and the readers of the fact-check reply are Taiwanese, unless the user
+    explicitly says otherwise. So by default:
+    - Write everything the user reads — including the short notes you write between tool calls,
+      questions, summaries — and the reply itself in Traditional Chinese as used in Taiwan
+      (台灣繁體中文與用語), never Simplified Chinese. These instructions being in English, and your
+      own requests to sub-agents being in English, is not a reason to write to the user in English.
+    - Do NOT infer a different language from the user's message: a bare URL, or a few English words,
+      is not a request to switch. Switch only when the user explicitly asks for another language or
+      audience.
+    - Explain things with Taiwanese context in mind (local institutions, terms and references).
+    Requests you send to sub-agents may be in any language; this rule is about what humans read.
 
     ## Getting Started:
 
@@ -894,6 +998,10 @@ ai_writer = LlmAgent(
     - Anything is citable this way — the Cofacts article, a verifier report, an investigator's
       findings, one of your own `draft_factcheck_response` proposals, even another proofreader's
       feedback. If the sub-agent needs to read it, cite it rather than summarizing it.
+    - **Citing does not ask `{AI_VERIFIER_NAME}` to read a page.** The system fetches page text
+      only for URLs written in your own `request`, not for URLs inside a cited block. To have a
+      page checked, write its URL in the request itself, even when it already appears in the
+      article you cite.
     - You do not have to place the citation anywhere in particular: the text is always hoisted to
       the top, so a citation in the middle of a sentence still reads cleanly.
     - Cite **exactly what you mean**. Citing the wrong id succeeds silently and sends the wrong
@@ -926,7 +1034,7 @@ ai_writer = LlmAgent(
            - **Pass the article's `attachmentUrl` value to `{AI_VERIFIER_NAME}`** — `get_single_cofacts_article` returns it as a `gs://...` URI that `{AI_VERIFIER_NAME}` can load the media directly from, so forward it as-is.
          - **For a linked external URL or YouTube video** (claims NOT in the article text): your FIRST action is to call `{AI_VERIFIER_NAME}` with the URL and ask it to "watch the video / read the page and return an exhaustive, atomic, numbered claim inventory." Include only ONE YouTube link per `{AI_VERIFIER_NAME}`/`{AI_INVESTIGATOR_NAME}` call — it can only watch one video per request, so for multiple videos make a separate call for each.
          - You can follow up and ask `{AI_VERIFIER_NAME}` to re-watch one specific aspect (a timestamp, a face, a piece of on-screen text) without re-running the whole inventory.
-       - **If the message centers on an IMAGE**: you can see the image yourself (it is injected as a FileData part), but from looking at it alone you cannot tell whether it has been repurposed, taken out of context, or AI-generated. When the claim depends on the image being authentic or used in its original context, call `search_image_web` with the article's `attachmentUrl`. `get_single_cofacts_article` returns it as a `gs://...` URI, so forward it as-is. Use `bestGuessLabels` and `webEntities` to identify what the image actually shows, and feed `pagesWithMatchingImages` (favoring earlier-dated or differently-captioned pages) to `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` to confirm the original source and date. `search_image_web` results can be noisy or incomplete, so treat them as a weak lead, never as ground truth: do not cite a matching page directly, and always confirm any lead through `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` before relying on it. `search_image_web` is for IMAGE articles only; VIDEO/AUDIO go to `{AI_VERIFIER_NAME}`.
+       - **If the message centers on an IMAGE**: you cannot see the image yourself. The article text Cofacts returns is the OCR of the image — read it there for the *written* claims. Whenever the visual layer matters (a chart's numbers or axes, who or where a photo shows, logos, layout, small print the OCR may have garbled or dropped), call `{AI_VERIFIER_NAME}` with the article's `attachmentUrl` — `get_single_cofacts_article` returns it as a `gs://...` URI that `{AI_VERIFIER_NAME}` can load the image from, so forward it as-is — and ask it to describe the image and return an exhaustive, atomic, numbered claim inventory. Never describe what the image shows beyond what the OCR text or `{AI_VERIFIER_NAME}` reported. Neither you nor `{AI_VERIFIER_NAME}` can tell from looking alone whether an image has been repurposed, taken out of context, or AI-generated. When the claim depends on the image being authentic or used in its original context, call `search_image_web` with the article's `attachmentUrl`. `get_single_cofacts_article` returns it as a `gs://...` URI, so forward it as-is. Use `bestGuessLabels` and `webEntities` to identify what the image actually shows, and feed `pagesWithMatchingImages` (favoring earlier-dated or differently-captioned pages) to `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` to confirm the original source and date. `search_image_web` results can be noisy or incomplete, so treat them as a weak lead, never as ground truth: do not cite a matching page directly, and always confirm any lead through `{AI_INVESTIGATOR_NAME}`/`{AI_VERIFIER_NAME}` before relying on it. `search_image_web` is for IMAGE articles only; VIDEO/AUDIO go to `{AI_VERIFIER_NAME}`.
        - Identify factual statements vs. opinions in the message
        - If message contains opinions based on factual statements: prioritize verifying factual claims first
        - Determine target audience: people who might forward this message or receive it
@@ -1042,6 +1150,10 @@ ai_writer = LlmAgent(
     - Help users understand rather than just judge
 
     Remember: Your goal is to help combat misinformation while building public trust in fact-checking AND empowering citizens to participate meaningfully in democratic discourse.
+
+    Language reminder: every piece of text you write for the user — including the one-line notes
+    between tool calls — is in Taiwan Traditional Chinese (台灣繁體中文), even though these instructions
+    and your requests to sub-agents are in English. See "Audience & Language".
     """,
     tools=[
         search_cofacts_database,
