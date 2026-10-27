@@ -1,8 +1,10 @@
 """Unit tests for `generate_session_title` and `_normalize_title`.
 
-`generate_session_title` runs as an after_agent_callback on ai_writer: on the
-first turn only, it asks an LLM for a concise title and writes it to session
-state, replacing the placeholder the frontend sets at session creation. The
+`generate_session_title` runs as an after_agent_callback on ai_receptionist
+(the root): on the first turn only, it asks an LLM for a concise title and
+writes it to session state, replacing the placeholder the frontend sets at
+session creation. That placeholder is why "first turn" is decided by counting
+user events rather than by looking at the title already in state. The
 genai client is mocked so the tests are deterministic and make no network
 calls; the session/event objects are SimpleNamespace fakes since the callback
 only reads plain attributes. `_normalize_title` is exercised directly for the
@@ -16,7 +18,7 @@ from unittest.mock import AsyncMock, patch
 
 from google.adk.agents.callback_context import CallbackContext
 
-from cofacts_ai.agent_names import AI_WRITER_NAME
+from cofacts_ai.agent_names import AI_RECEPTIONIST_NAME, AI_WRITER_NAME
 from cofacts_ai.session_title import _normalize_title, generate_session_title
 
 
@@ -76,6 +78,50 @@ class TestGenerateSessionTitle:
 
         assert context.state["title"] == "台電停電查證"
         generate_content.assert_awaited_once()
+
+    async def test_titles_a_turn_the_receptionist_handled_alone(self):
+        # Not every first turn reaches the writer: a support-desk question, or a
+        # reporting flow still waiting for the user to pick a message, ends at
+        # the receptionist. Those sessions still need a title.
+        generate_content = AsyncMock(return_value=SimpleNamespace(text="退貨爭議諮詢"))
+        client = make_client(generate_content)
+        context = make_context(
+            [
+                make_event("user", "我要退貨"),
+                make_event(AI_RECEPTIONIST_NAME, "這裡不是賣家喔，建議你撥打 1950。"),
+            ],
+            user_text="我要退貨",
+            title="我要退貨",
+        )
+
+        with patch("cofacts_ai.session_title._get_client", return_value=client):
+            await generate_session_title(context)
+
+        assert context.state["title"] == "退貨爭議諮詢"
+        # The receptionist's own reply is what the title is built from.
+        call = generate_content.await_args
+        assert call is not None
+        assert "這裡不是賣家喔" in call.kwargs["contents"]
+
+    async def test_placeholder_title_does_not_block_generation(self):
+        # The frontend always seeds state["title"] with the user's truncated
+        # first message, so a truthy title says nothing about whether a real one
+        # was generated. Guarding on it would disable this callback entirely.
+        generate_content = AsyncMock(return_value=SimpleNamespace(text="台電停電查證"))
+        client = make_client(generate_content)
+        context = make_context(
+            [
+                make_event("user", "請查證台電停電傳言"),
+                make_event(AI_WRITER_NAME, "查證結果"),
+            ],
+            user_text="請查證台電停電傳言",
+            title="請查證台電停電傳言",
+        )
+
+        with patch("cofacts_ai.session_title._get_client", return_value=client):
+            await generate_session_title(context)
+
+        assert context.state["title"] == "台電停電查證"
 
     async def test_second_turn_does_not_call_llm(self):
         context = make_context(
