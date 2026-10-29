@@ -59,14 +59,16 @@ this skill is the current, executable form of it.
    `-components/`; move it to `src/components/` when a second place needs it.
 3. **Build.** Map Penpot to classes with `references/mapping-rules.md`. Data per
    `references/data-layer.md`.
-4. **Stories.** One story per Penpot state board. Pages render a pure `XxxPageView` with
-   fixtures; callbacks use `fn()`.
+4. **Stories.** Components only: one story per Penpot variant; callbacks use `fn()`. Pages get
+   no stories — every state board must still be implemented, and is reviewed on the PR preview.
 5. **Verify** (all required):
    - `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test`, `pnpm tokens:check`, `pnpm build`
-   - Storybook at 375 and 1440, in light **and** dark, compared with Penpot `export_shape`
+   - Components in Storybook, pages on the PR preview: 375 and 1440, in light **and** dark,
+     compared with Penpot `export_shape`
    - keyboard walk-through; the checklist in `references/a11y.md`
-6. **PR.** Include the Penpot link, Storybook link, deviations from Penpot, the list of unbound
-   values for the designer, and the a11y checklist.
+6. **PR.** Include the Penpot link, the preview link (plus the Storybook link when components
+   changed), deviations from Penpot, the list of unbound values for the designer, and the a11y
+   checklist.
 
 ## Changing tokens
 
