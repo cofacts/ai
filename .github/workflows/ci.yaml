@@ -42,7 +42,7 @@ jobs:
         run: >-
           uvx diff-cover coverage.xml
           --compare-branch=origin/${{ github.base_ref }}
-          --markdown-report "$RUNNER_TEMP/diff-cover.md"
+          --format "markdown:$RUNNER_TEMP/diff-cover.md"
           && { echo '### adk: coverage of changed lines'; cat "$RUNNER_TEMP/diff-cover.md"; } >> "$GITHUB_STEP_SUMMARY"
 
   lint-adk:
@@ -130,5 +130,5 @@ jobs:
         run: >-
           pipx run diff-cover coverage/cobertura-coverage.xml
           --compare-branch=origin/${{ github.base_ref }}
-          --markdown-report "$RUNNER_TEMP/diff-cover.md"
+          --format "markdown:$RUNNER_TEMP/diff-cover.md"
           && { echo '### Frontend: coverage of changed lines'; cat "$RUNNER_TEMP/diff-cover.md"; } >> "$GITHUB_STEP_SUMMARY"
