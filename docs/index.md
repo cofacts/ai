@@ -115,7 +115,7 @@ is only the overview.
 
 - **Tokens:** `design/tokens.json` (exported from Penpot) is the source. `pnpm tokens` generates
   `src/styles/tokens.css` (CSS variables + Tailwind `@theme`), `src/styles/tokens.generated.ts`
-  (names for `cn()`'s tailwind-merge, lists for Storybook).
+  (names for `cn()`'s tailwind-merge). Storybook's Tokens page reads `design/tokens.json` directly.
   CI runs `pnpm tokens:check`. Every color token is a Tailwind color named like the
   Penpot token, so any color utility takes it (`bg-surface-raised`, `text-text-primary`); typography, spacing
   and radius keep their names too (`text-type-body-m`, `p-spacing-16`, `rounded-radius-5`);

@@ -6,7 +6,7 @@
  *
  * Outputs:
  *   - src/styles/tokens.css            CSS variables (light / dark) + Tailwind @theme
- *   - src/styles/tokens.generated.ts   twMergeTheme for cn(), token lists for Storybook
+ *   - src/styles/tokens.generated.ts   twMergeTheme for cn()
  *
  * Naming rule: every token keeps its Penpot name; the class is the Tailwind utility + that name.
  *   surface-raised → bg-surface-raised, text-primary → text-text-primary,
@@ -73,10 +73,6 @@ const semanticValue = (value: string) => {
   const name = ref(value)
   return name ? `var(--${name})` : cssColor(value)
 }
-const resolveHex = (value: string): string => {
-  const name = ref(value)
-  return name ? String(get(Global, name).$value) : value
-}
 /** A numeric token value, following `{name}` references into Global. Throws on anything else. */
 const num = (token: string, value: unknown): number => {
   const name = typeof value === 'string' ? ref(value) : null
@@ -114,7 +110,6 @@ const typography = byType('typography').map(([name, t]) => {
   const lineHeightPx = ratio === 1 ? null : Math.round(size * ratio)
   return {
     name,
-    className: `text-${name}`,
     size,
     weight,
     lineHeight: lineHeightPx === null ? '1' : px(lineHeightPx),
@@ -125,7 +120,6 @@ const typography = byType('typography').map(([name, t]) => {
 const spacing = byType('spacing').map(([name, t]) => ({
   name,
   value: num(name, t.$value),
-  className: `p-${name}`,
 }))
 spacing.sort((a, b) => a.value - b.value)
 
@@ -133,7 +127,7 @@ const radius = byType('borderRadius').map(([name, t]) => {
   const value = num(name, t.$value)
   // Tailwind theme keys are lowercase: RADIUS-5 → rounded-radius-5.
   const key = name.toLowerCase()
-  return { name, key, value, className: `rounded-${key}` }
+  return { name, key, value }
 })
 radius.sort((a, b) => a.value - b.value)
 
@@ -145,7 +139,7 @@ const shadows = byType('shadow').map(([name, t]) => {
         `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.spread}px ${s.color}`,
     )
     .join(', ')
-  return { name, key, css, className: `shadow-${key}` }
+  return { name, key, css }
 })
 
 const fonts = byType('fontFamilies').map(([name, t]) => {
@@ -253,9 +247,9 @@ ${semanticNames.map(colorLine).join('\n')}
 ${typography
   .map(
     (t) =>
-      `  --text-${t.className.slice(5)}: ${px(t.size)}; /* ${t.className}: ${t.size}px / ${t.lineHeightLabel} / ${t.weight} */\n` +
-      `  --text-${t.className.slice(5)}--line-height: ${t.lineHeight};\n` +
-      `  --text-${t.className.slice(5)}--font-weight: ${t.weight};`,
+      `  --text-${t.name}: ${px(t.size)}; /* text-${t.name}: ${t.size}px / ${t.lineHeightLabel} / ${t.weight} */\n` +
+      `  --text-${t.name}--line-height: ${t.lineHeight};\n` +
+      `  --text-${t.name}--font-weight: ${t.weight};`,
   )
   .join('\n')}
 
@@ -267,19 +261,12 @@ ${shadows.map((s) => `  --shadow-${s.key}: ${s.css};`).join('\n')}
 
 // ---- tokens.generated.ts -------------------------------------------------------------------
 
-const semanticColors = semanticNames.map((name) => ({
-  name,
-  light: resolveHex(String(get(Light, name).$value)),
-  dark: resolveHex(String(get(Dark, name).$value)),
-  fixed: isFixed(name),
-}))
-
 const ts = `// ⚙️ Generated from ${SOURCE} by scripts/build-tokens.ts — do not edit. Run \`pnpm tokens\`.
 
 /** Custom theme values for tailwind-merge, so cn() merges Cofacts utilities correctly. */
 export const twMergeTheme = ${JSON.stringify(
   {
-    text: typography.map((t) => t.className.slice(5)),
+    text: typography.map((t) => t.name),
     radius: radius.map((r) => r.key),
     spacing: spacing.map((sp) => sp.name),
     font: fonts.map((f) => f.name),
@@ -288,27 +275,6 @@ export const twMergeTheme = ${JSON.stringify(
   null,
   2,
 )}
-
-/** Token lists for the Storybook foundations page. */
-export const designTokens = ${JSON.stringify(
-  {
-    semanticColors,
-    typography: typography.map(
-      ({ name, className, size, weight, lineHeightLabel }) => ({
-        name,
-        className,
-        size,
-        weight,
-        lineHeight: lineHeightLabel,
-      }),
-    ),
-    spacing,
-    radius,
-    shadows,
-  },
-  null,
-  2,
-)} as const
 `
 
 // ---- write / check -------------------------------------------------------------------------
