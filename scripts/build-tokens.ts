@@ -239,8 +239,12 @@ ${fallbackLines(Dark, '    ')}
   --radius-*: initial;
   --shadow-*: initial;
 
-  /* No numeric spacing scale: only spacing tokens (p-spacing-16) or arbitrary values (w-[343px]). */
+  /*
+   * No numeric spacing scale: only spacing tokens (p-spacing-16), 0 (p-0, inset-0) or arbitrary
+   * values (w-[343px]).
+   */
   --spacing-*: initial;
+  --spacing-0: 0px;
 
 ${fonts.map((f) => `  --font-${f.name}: '${f.family}', system-ui, sans-serif;`).join('\n')}
 

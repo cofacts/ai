@@ -34,8 +34,8 @@ this skill is the current, executable form of it.
   `style={{ color }}`), no primitive colors (`neutral-900`), no `dark:` variants (tokens flip by
   themselves), no bare font sizes (`text-16`) or `leading-*` / `font-semibold` — use a typography
   class (`text-type-body-m`, `text-type-ui-s-bold`…). Spacing and radius tokens keep their names too:
-  `spacing-16` → `p-spacing-16`, `RADIUS-5` → `rounded-radius-5`. Bare numbers (`w-343`, `p-16`) don't exist;
-  use a token or an arbitrary value (`w-[343px]`).
+  `spacing-16` → `p-spacing-16`, `RADIUS-5` → `rounded-radius-5`. Bare numbers (`w-343`, `p-16`) don't exist,
+  except 0 (`p-0`, `inset-0`); use a token or an arbitrary value (`w-[343px]`).
 - **Brand yellow is a background, never text** (R2). `bg-surface-accent` pairs with `text-text-on-accent`.
 - **Pair by name** (R4): `bg-surface-dark` → `text-text-on-dark`, `bg-surface-secondary` → `text-text-on-secondary`,
   `bg-surface-inverse` → `text-text-inverse`. A name that doesn't match is a bug.
