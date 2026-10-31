@@ -37,12 +37,12 @@ export const Colors: Story = {
                   <div
                     className="size-spacing-48 shrink-0 rounded-radius-5 border border-border-subtle"
                     // Swatch reads the live CSS variable, so it follows the Theme toolbar.
-                    style={{ background: `var(--${c.name})` }}
+                    style={{ background: `var(--color-${c.name})` }}
                   />
                   <div className="flex min-w-0 flex-col gap-spacing-4">
                     <code className="text-type-ui-s-bold">{c.name}</code>
                     <span className="text-type-caption text-text-secondary">
-                      {`var(--${c.name})`}
+                      {`var(--color-${c.name})`}
                     </span>
                     <span className="text-type-caption text-text-tertiary">
                       {c.fixed

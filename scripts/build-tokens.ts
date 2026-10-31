@@ -163,13 +163,16 @@ const primitives = byType('color')
 
 const header = `/* ⚙️ Generated from ${SOURCE} by scripts/build-tokens.ts — do not edit. Run \`pnpm tokens\`. */`
 
-/** One line per semantic token: a plain value if it's fixed, otherwise light-dark(light, dark). */
-const semanticLine = (name: string) => {
+/**
+ * One Tailwind color per semantic token, named exactly like the Penpot token: a plain value if
+ * it's fixed, otherwise light-dark(light, dark).
+ */
+const colorLine = (name: string) => {
   const light = semanticValue(String(get(Light, name).$value))
   const dark = semanticValue(String(get(Dark, name).$value))
   return isFixed(name)
-    ? `  --${name}: ${light};`
-    : `  --${name}: light-dark(${light}, ${dark});`
+    ? `  --color-${name}: ${light};`
+    : `  --color-${name}: light-dark(${light}, ${dark});`
 }
 
 /** For browsers without light-dark(): the light or dark value of each token that flips. */
@@ -178,30 +181,24 @@ const fallbackLines = (theme: TokenSet, indent: string) =>
     .filter((name) => !isFixed(name))
     .map(
       (name) =>
-        `${indent}--${name}: ${semanticValue(String(get(theme, name).$value))};`,
+        `${indent}--color-${name}: ${semanticValue(String(get(theme, name).$value))};`,
     )
     .join('\n')
 
-/** Every semantic token is a Tailwind color named exactly like the Penpot token. */
-const themeLines = semanticNames.map(
-  (name) => `  --color-${name}: var(--${name});`,
-)
-
 const css = `${header}
 
-/* Primitive colors: referenced only by the semantic tokens below. Not registered as utilities (R3). */
+/* Primitive colors: referenced only by the semantic colors in @theme. Not registered as utilities (R3). */
 :root {
 ${primitives.map(([n, t]) => `  --${n}: ${String(t.$value)};`).join('\n')}
 }
 
 /*
- * Semantic colors. Each token holds both its Light and Dark value; light-dark() picks one from
+ * Each semantic color in @theme holds both its Light and Dark value; light-dark() picks one from
  * color-scheme, which follows the OS setting (prefers-color-scheme) unless <html data-theme>
  * forces it. Components never pick light or dark themselves.
  */
 :root {
   color-scheme: light dark;
-${semanticNames.map(semanticLine).join('\n')}
 }
 
 [data-theme='light'] {
@@ -232,7 +229,8 @@ ${fallbackLines(Dark, '    ')}
   }
 }
 
-@theme {
+/* static: emit every variable, including those read only from JS (var(--color-…) in a style prop). */
+@theme static {
   /* Only Cofacts tokens exist as utilities. */
   --color-*: initial;
   --text-*: initial;
@@ -250,7 +248,7 @@ ${fonts.map((f) => `  --font-${f.name}: '${f.family}', system-ui, sans-serif;`).
 
 ${spacing.map((sp) => `  --spacing-${sp.name}: ${px(sp.value)};`).join('\n')}
 
-${themeLines.join('\n')}
+${semanticNames.map(colorLine).join('\n')}
 
 ${typography
   .map(
