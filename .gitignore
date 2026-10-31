@@ -12,6 +12,11 @@ count.txt
 .vinxi
 todos.json
 
+# test coverage (`pnpm test --coverage`, `pytest --cov`)
+coverage
+.coverage
+coverage.xml
+
 # python
 venv/
 __pycache__/
