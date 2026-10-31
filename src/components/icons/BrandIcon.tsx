@@ -19,6 +19,8 @@ const brandPaths = {
 
 export type Brand = keyof typeof brandPaths
 
+export const brands = Object.keys(brandPaths) as Array<Brand>
+
 /**
  * A brand mark from Penpot Base/Icon. Decorative (`aria-hidden`); colors come from
  * `currentColor`.

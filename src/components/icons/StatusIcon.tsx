@@ -1,6 +1,13 @@
 import { cn } from '@/lib/utils'
 
-export type ReplyType = 'RUMOR' | 'NOT_RUMOR' | 'OPINIONATED' | 'NOT_ARTICLE'
+export const replyTypes = [
+  'RUMOR',
+  'NOT_RUMOR',
+  'OPINIONATED',
+  'NOT_ARTICLE',
+] as const
+
+export type ReplyType = (typeof replyTypes)[number]
 
 /**
  * The four fact-check result shapes from Penpot Content/FactCheckReply-Title (a11y guide 03):
