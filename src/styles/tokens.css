@@ -1,6 +1,6 @@
 /* ⚙️ Generated from design/tokens.json by scripts/build-tokens.ts — do not edit. Run `pnpm tokens`. */
 
-/* Primitive colors: referenced only by the semantic tokens below. Not registered as utilities (R3). */
+/* Primitive colors: referenced only by the semantic colors in @theme. Not registered as utilities (R3). */
 :root {
   --brand-200: #ffeaba;
   --brand-300: #ffe199;
@@ -41,63 +41,12 @@
 }
 
 /*
- * Semantic colors. Each token holds both its Light and Dark value; light-dark() picks one from
+ * Each semantic color in @theme holds both its Light and Dark value; light-dark() picks one from
  * color-scheme, which follows the OS setting (prefers-color-scheme) unless <html data-theme>
  * forces it. Components never pick light or dark themselves.
  */
 :root {
   color-scheme: light dark;
-  --text-primary: light-dark(var(--neutral-900), var(--neutral-100));
-  --text-secondary: light-dark(var(--neutral-700), var(--neutral-300));
-  --text-tertiary: light-dark(var(--neutral-500), var(--neutral-400));
-  --text-disabled: light-dark(var(--neutral-400), var(--neutral-600));
-  --text-inverse: light-dark(var(--white), var(--neutral-900));
-  --text-link: light-dark(var(--blue-600), var(--blue-300));
-  --text-on-accent: var(--neutral-900);
-  --text-on-secondary: light-dark(var(--white), var(--neutral-100));
-  --text-on-status: light-dark(var(--white), var(--neutral-900));
-  --text-on-dark: var(--neutral-100);
-  --text-on-dark-muted: var(--neutral-400);
-  --text-on-info: var(--neutral-900);
-  --text-on-line: var(--white);
-  --surface-base: light-dark(var(--white), var(--neutral-900));
-  --surface-raised: light-dark(var(--neutral-100), var(--neutral-800));
-  --surface-selected: light-dark(var(--neutral-200), var(--neutral-700));
-  --surface-inverse: light-dark(var(--neutral-800), var(--neutral-100));
-  --surface-secondary: light-dark(var(--neutral-800), var(--neutral-700));
-  --surface-accent: var(--brand-500-main);
-  --surface-accent-subtle: light-dark(var(--brand-200), var(--brand-600));
-  --surface-accent-fold: var(--orange-500);
-  --surface-dark: var(--neutral-900);
-  --surface-dark-raised: var(--neutral-800);
-  --surface-on-dark: var(--white);
-  --surface-info: var(--blue-500);
-  --surface-info-strong: var(--blue-600);
-  --surface-line: var(--brand-line);
-  --border-subtle: light-dark(var(--neutral-300), var(--neutral-700));
-  --border-control: light-dark(var(--neutral-500), var(--neutral-400));
-  --border-strong: light-dark(var(--neutral-900), var(--neutral-100));
-  --border-accent: var(--brand-500-main);
-  --border-inverse: light-dark(var(--white), var(--neutral-900));
-  --border-focus: light-dark(var(--neutral-900), var(--neutral-100));
-  --border-focus-outer: var(--brand-500-main);
-  --border-on-dark: var(--neutral-700);
-  --border-on-dark-strong: var(--neutral-100);
-  --icon-default: light-dark(var(--neutral-900), var(--neutral-100));
-  --icon-muted: light-dark(var(--neutral-500), var(--neutral-400));
-  --icon-inverse: light-dark(var(--white), var(--neutral-900));
-  --icon-brand: var(--brand-500-main);
-  --icon-on-accent: var(--neutral-900);
-  --icon-on-secondary: light-dark(var(--white), var(--neutral-100));
-  --icon-on-dark: var(--neutral-100);
-  --icon-on-line: var(--white);
-  --status-incorrect: light-dark(var(--red-700), var(--red-300));
-  --status-correct: light-dark(var(--green-700), var(--green-300));
-  --status-opinion: light-dark(var(--blue-600), var(--blue-300));
-  --status-outofscope: light-dark(var(--purple-600), var(--purple-300));
-  --chart-series-1: var(--brand-500-main);
-  --chart-series-2: var(--blue-500);
-  --overlay-scrim: rgb(17 24 39 / 0.5);
 }
 
 [data-theme='light'] {
@@ -114,99 +63,100 @@
  */
 @supports not (color: light-dark(#000, #fff)) {
   :root {
-    --text-primary: var(--neutral-900);
-    --text-secondary: var(--neutral-700);
-    --text-tertiary: var(--neutral-500);
-    --text-disabled: var(--neutral-400);
-    --text-inverse: var(--white);
-    --text-link: var(--blue-600);
-    --text-on-secondary: var(--white);
-    --text-on-status: var(--white);
-    --surface-base: var(--white);
-    --surface-raised: var(--neutral-100);
-    --surface-selected: var(--neutral-200);
-    --surface-inverse: var(--neutral-800);
-    --surface-secondary: var(--neutral-800);
-    --surface-accent-subtle: var(--brand-200);
-    --border-subtle: var(--neutral-300);
-    --border-control: var(--neutral-500);
-    --border-strong: var(--neutral-900);
-    --border-inverse: var(--white);
-    --border-focus: var(--neutral-900);
-    --icon-default: var(--neutral-900);
-    --icon-muted: var(--neutral-500);
-    --icon-inverse: var(--white);
-    --icon-on-secondary: var(--white);
-    --status-incorrect: var(--red-700);
-    --status-correct: var(--green-700);
-    --status-opinion: var(--blue-600);
-    --status-outofscope: var(--purple-600);
+    --color-text-primary: var(--neutral-900);
+    --color-text-secondary: var(--neutral-700);
+    --color-text-tertiary: var(--neutral-500);
+    --color-text-disabled: var(--neutral-400);
+    --color-text-inverse: var(--white);
+    --color-text-link: var(--blue-600);
+    --color-text-on-secondary: var(--white);
+    --color-text-on-status: var(--white);
+    --color-surface-base: var(--white);
+    --color-surface-raised: var(--neutral-100);
+    --color-surface-selected: var(--neutral-200);
+    --color-surface-inverse: var(--neutral-800);
+    --color-surface-secondary: var(--neutral-800);
+    --color-surface-accent-subtle: var(--brand-200);
+    --color-border-subtle: var(--neutral-300);
+    --color-border-control: var(--neutral-500);
+    --color-border-strong: var(--neutral-900);
+    --color-border-inverse: var(--white);
+    --color-border-focus: var(--neutral-900);
+    --color-icon-default: var(--neutral-900);
+    --color-icon-muted: var(--neutral-500);
+    --color-icon-inverse: var(--white);
+    --color-icon-on-secondary: var(--white);
+    --color-status-incorrect: var(--red-700);
+    --color-status-correct: var(--green-700);
+    --color-status-opinion: var(--blue-600);
+    --color-status-outofscope: var(--purple-600);
   }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) {
-      --text-primary: var(--neutral-100);
-      --text-secondary: var(--neutral-300);
-      --text-tertiary: var(--neutral-400);
-      --text-disabled: var(--neutral-600);
-      --text-inverse: var(--neutral-900);
-      --text-link: var(--blue-300);
-      --text-on-secondary: var(--neutral-100);
-      --text-on-status: var(--neutral-900);
-      --surface-base: var(--neutral-900);
-      --surface-raised: var(--neutral-800);
-      --surface-selected: var(--neutral-700);
-      --surface-inverse: var(--neutral-100);
-      --surface-secondary: var(--neutral-700);
-      --surface-accent-subtle: var(--brand-600);
-      --border-subtle: var(--neutral-700);
-      --border-control: var(--neutral-400);
-      --border-strong: var(--neutral-100);
-      --border-inverse: var(--neutral-900);
-      --border-focus: var(--neutral-100);
-      --icon-default: var(--neutral-100);
-      --icon-muted: var(--neutral-400);
-      --icon-inverse: var(--neutral-900);
-      --icon-on-secondary: var(--neutral-100);
-      --status-incorrect: var(--red-300);
-      --status-correct: var(--green-300);
-      --status-opinion: var(--blue-300);
-      --status-outofscope: var(--purple-300);
+      --color-text-primary: var(--neutral-100);
+      --color-text-secondary: var(--neutral-300);
+      --color-text-tertiary: var(--neutral-400);
+      --color-text-disabled: var(--neutral-600);
+      --color-text-inverse: var(--neutral-900);
+      --color-text-link: var(--blue-300);
+      --color-text-on-secondary: var(--neutral-100);
+      --color-text-on-status: var(--neutral-900);
+      --color-surface-base: var(--neutral-900);
+      --color-surface-raised: var(--neutral-800);
+      --color-surface-selected: var(--neutral-700);
+      --color-surface-inverse: var(--neutral-100);
+      --color-surface-secondary: var(--neutral-700);
+      --color-surface-accent-subtle: var(--brand-600);
+      --color-border-subtle: var(--neutral-700);
+      --color-border-control: var(--neutral-400);
+      --color-border-strong: var(--neutral-100);
+      --color-border-inverse: var(--neutral-900);
+      --color-border-focus: var(--neutral-100);
+      --color-icon-default: var(--neutral-100);
+      --color-icon-muted: var(--neutral-400);
+      --color-icon-inverse: var(--neutral-900);
+      --color-icon-on-secondary: var(--neutral-100);
+      --color-status-incorrect: var(--red-300);
+      --color-status-correct: var(--green-300);
+      --color-status-opinion: var(--blue-300);
+      --color-status-outofscope: var(--purple-300);
     }
   }
 
   [data-theme='dark'] {
-    --text-primary: var(--neutral-100);
-    --text-secondary: var(--neutral-300);
-    --text-tertiary: var(--neutral-400);
-    --text-disabled: var(--neutral-600);
-    --text-inverse: var(--neutral-900);
-    --text-link: var(--blue-300);
-    --text-on-secondary: var(--neutral-100);
-    --text-on-status: var(--neutral-900);
-    --surface-base: var(--neutral-900);
-    --surface-raised: var(--neutral-800);
-    --surface-selected: var(--neutral-700);
-    --surface-inverse: var(--neutral-100);
-    --surface-secondary: var(--neutral-700);
-    --surface-accent-subtle: var(--brand-600);
-    --border-subtle: var(--neutral-700);
-    --border-control: var(--neutral-400);
-    --border-strong: var(--neutral-100);
-    --border-inverse: var(--neutral-900);
-    --border-focus: var(--neutral-100);
-    --icon-default: var(--neutral-100);
-    --icon-muted: var(--neutral-400);
-    --icon-inverse: var(--neutral-900);
-    --icon-on-secondary: var(--neutral-100);
-    --status-incorrect: var(--red-300);
-    --status-correct: var(--green-300);
-    --status-opinion: var(--blue-300);
-    --status-outofscope: var(--purple-300);
+    --color-text-primary: var(--neutral-100);
+    --color-text-secondary: var(--neutral-300);
+    --color-text-tertiary: var(--neutral-400);
+    --color-text-disabled: var(--neutral-600);
+    --color-text-inverse: var(--neutral-900);
+    --color-text-link: var(--blue-300);
+    --color-text-on-secondary: var(--neutral-100);
+    --color-text-on-status: var(--neutral-900);
+    --color-surface-base: var(--neutral-900);
+    --color-surface-raised: var(--neutral-800);
+    --color-surface-selected: var(--neutral-700);
+    --color-surface-inverse: var(--neutral-100);
+    --color-surface-secondary: var(--neutral-700);
+    --color-surface-accent-subtle: var(--brand-600);
+    --color-border-subtle: var(--neutral-700);
+    --color-border-control: var(--neutral-400);
+    --color-border-strong: var(--neutral-100);
+    --color-border-inverse: var(--neutral-900);
+    --color-border-focus: var(--neutral-100);
+    --color-icon-default: var(--neutral-100);
+    --color-icon-muted: var(--neutral-400);
+    --color-icon-inverse: var(--neutral-900);
+    --color-icon-on-secondary: var(--neutral-100);
+    --color-status-incorrect: var(--red-300);
+    --color-status-correct: var(--green-300);
+    --color-status-opinion: var(--blue-300);
+    --color-status-outofscope: var(--purple-300);
   }
 }
 
-@theme {
+/* static: emit every variable, including those read only from JS (var(--color-…) in a style prop). */
+@theme static {
   /* Only Cofacts tokens exist as utilities. */
   --color-*: initial;
   --text-*: initial;
@@ -234,57 +184,57 @@
   --spacing-spacing-64: 4rem;
   --spacing-spacing-120: 7.5rem;
 
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-tertiary: var(--text-tertiary);
-  --color-text-disabled: var(--text-disabled);
-  --color-text-inverse: var(--text-inverse);
-  --color-text-link: var(--text-link);
-  --color-text-on-accent: var(--text-on-accent);
-  --color-text-on-secondary: var(--text-on-secondary);
-  --color-text-on-status: var(--text-on-status);
-  --color-text-on-dark: var(--text-on-dark);
-  --color-text-on-dark-muted: var(--text-on-dark-muted);
-  --color-text-on-info: var(--text-on-info);
-  --color-text-on-line: var(--text-on-line);
-  --color-surface-base: var(--surface-base);
-  --color-surface-raised: var(--surface-raised);
-  --color-surface-selected: var(--surface-selected);
-  --color-surface-inverse: var(--surface-inverse);
-  --color-surface-secondary: var(--surface-secondary);
-  --color-surface-accent: var(--surface-accent);
-  --color-surface-accent-subtle: var(--surface-accent-subtle);
-  --color-surface-accent-fold: var(--surface-accent-fold);
-  --color-surface-dark: var(--surface-dark);
-  --color-surface-dark-raised: var(--surface-dark-raised);
-  --color-surface-on-dark: var(--surface-on-dark);
-  --color-surface-info: var(--surface-info);
-  --color-surface-info-strong: var(--surface-info-strong);
-  --color-surface-line: var(--surface-line);
-  --color-border-subtle: var(--border-subtle);
-  --color-border-control: var(--border-control);
-  --color-border-strong: var(--border-strong);
-  --color-border-accent: var(--border-accent);
-  --color-border-inverse: var(--border-inverse);
-  --color-border-focus: var(--border-focus);
-  --color-border-focus-outer: var(--border-focus-outer);
-  --color-border-on-dark: var(--border-on-dark);
-  --color-border-on-dark-strong: var(--border-on-dark-strong);
-  --color-icon-default: var(--icon-default);
-  --color-icon-muted: var(--icon-muted);
-  --color-icon-inverse: var(--icon-inverse);
-  --color-icon-brand: var(--icon-brand);
-  --color-icon-on-accent: var(--icon-on-accent);
-  --color-icon-on-secondary: var(--icon-on-secondary);
-  --color-icon-on-dark: var(--icon-on-dark);
-  --color-icon-on-line: var(--icon-on-line);
-  --color-status-incorrect: var(--status-incorrect);
-  --color-status-correct: var(--status-correct);
-  --color-status-opinion: var(--status-opinion);
-  --color-status-outofscope: var(--status-outofscope);
-  --color-chart-series-1: var(--chart-series-1);
-  --color-chart-series-2: var(--chart-series-2);
-  --color-overlay-scrim: var(--overlay-scrim);
+  --color-text-primary: light-dark(var(--neutral-900), var(--neutral-100));
+  --color-text-secondary: light-dark(var(--neutral-700), var(--neutral-300));
+  --color-text-tertiary: light-dark(var(--neutral-500), var(--neutral-400));
+  --color-text-disabled: light-dark(var(--neutral-400), var(--neutral-600));
+  --color-text-inverse: light-dark(var(--white), var(--neutral-900));
+  --color-text-link: light-dark(var(--blue-600), var(--blue-300));
+  --color-text-on-accent: var(--neutral-900);
+  --color-text-on-secondary: light-dark(var(--white), var(--neutral-100));
+  --color-text-on-status: light-dark(var(--white), var(--neutral-900));
+  --color-text-on-dark: var(--neutral-100);
+  --color-text-on-dark-muted: var(--neutral-400);
+  --color-text-on-info: var(--neutral-900);
+  --color-text-on-line: var(--white);
+  --color-surface-base: light-dark(var(--white), var(--neutral-900));
+  --color-surface-raised: light-dark(var(--neutral-100), var(--neutral-800));
+  --color-surface-selected: light-dark(var(--neutral-200), var(--neutral-700));
+  --color-surface-inverse: light-dark(var(--neutral-800), var(--neutral-100));
+  --color-surface-secondary: light-dark(var(--neutral-800), var(--neutral-700));
+  --color-surface-accent: var(--brand-500-main);
+  --color-surface-accent-subtle: light-dark(var(--brand-200), var(--brand-600));
+  --color-surface-accent-fold: var(--orange-500);
+  --color-surface-dark: var(--neutral-900);
+  --color-surface-dark-raised: var(--neutral-800);
+  --color-surface-on-dark: var(--white);
+  --color-surface-info: var(--blue-500);
+  --color-surface-info-strong: var(--blue-600);
+  --color-surface-line: var(--brand-line);
+  --color-border-subtle: light-dark(var(--neutral-300), var(--neutral-700));
+  --color-border-control: light-dark(var(--neutral-500), var(--neutral-400));
+  --color-border-strong: light-dark(var(--neutral-900), var(--neutral-100));
+  --color-border-accent: var(--brand-500-main);
+  --color-border-inverse: light-dark(var(--white), var(--neutral-900));
+  --color-border-focus: light-dark(var(--neutral-900), var(--neutral-100));
+  --color-border-focus-outer: var(--brand-500-main);
+  --color-border-on-dark: var(--neutral-700);
+  --color-border-on-dark-strong: var(--neutral-100);
+  --color-icon-default: light-dark(var(--neutral-900), var(--neutral-100));
+  --color-icon-muted: light-dark(var(--neutral-500), var(--neutral-400));
+  --color-icon-inverse: light-dark(var(--white), var(--neutral-900));
+  --color-icon-brand: var(--brand-500-main);
+  --color-icon-on-accent: var(--neutral-900);
+  --color-icon-on-secondary: light-dark(var(--white), var(--neutral-100));
+  --color-icon-on-dark: var(--neutral-100);
+  --color-icon-on-line: var(--white);
+  --color-status-incorrect: light-dark(var(--red-700), var(--red-300));
+  --color-status-correct: light-dark(var(--green-700), var(--green-300));
+  --color-status-opinion: light-dark(var(--blue-600), var(--blue-300));
+  --color-status-outofscope: light-dark(var(--purple-600), var(--purple-300));
+  --color-chart-series-1: var(--brand-500-main);
+  --color-chart-series-2: var(--blue-500);
+  --color-overlay-scrim: rgb(17 24 39 / 0.5);
 
   --text-type-ui-l: 1.125rem; /* text-type-ui-l: 18px / 1 / 400 */
   --text-type-ui-l--line-height: 1;
