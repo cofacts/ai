@@ -8,6 +8,14 @@ const meta = {
   component: Button,
   parameters: { penpot: { component: 'Base/Button' } },
   args: { children: '查核闢謠', onClick: fn() },
+  /** Every story shows the lg / md / sm sizes side by side; `size` is ignored. */
+  render: ({ size: _size, ...args }) => (
+    <div className="flex flex-wrap items-center gap-16">
+      {(['lg', 'md', 'sm'] as const).map((size) => (
+        <Button key={size} {...args} size={size} />
+      ))}
+    </div>
+  ),
   argTypes: {
     variant: {
       control: 'select',
