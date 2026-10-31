@@ -2,8 +2,8 @@ import { Button as ButtonPrimitive } from '@base-ui/react/button'
 import { cva } from 'class-variance-authority'
 import type { VariantProps } from 'class-variance-authority'
 
-import type { IconName } from '@/components/ui/icon'
-import { Icon } from '@/components/ui/icon'
+import type { MaterialSymbol } from '@/components/icons/material-symbols'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /** Penpot Base/Button: Size × Style × Icon. */
@@ -49,15 +49,15 @@ const buttonVariants = cva(
 
 type ButtonBaseProps = Omit<ButtonPrimitive.Props, 'children'> &
   Pick<VariantProps<typeof buttonVariants>, 'variant' | 'size'> & {
-    iconStart?: IconName
-    iconEnd?: IconName
+    iconStart?: MaterialSymbol
+    iconEnd?: MaterialSymbol
   }
 
 /** A button with text, or an icon-only button that must have an accessible name. */
 export type ButtonProps = ButtonBaseProps &
   (
     | { children: React.ReactNode }
-    | { children?: never; iconStart: IconName; 'aria-label': string }
+    | { children?: never; iconStart: MaterialSymbol; 'aria-label': string }
   )
 
 function Button({
@@ -84,9 +84,9 @@ function Button({
       )}
       {...props}
     >
-      {iconStart && <Icon name={iconStart} />}
+      {iconStart && <MaterialIcon name={iconStart} />}
       {children}
-      {iconEnd && <Icon name={iconEnd} />}
+      {iconEnd && <MaterialIcon name={iconEnd} />}
     </ButtonPrimitive>
   )
 }

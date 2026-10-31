@@ -1,4 +1,4 @@
-import { materialSymbolsHref } from '../src/components/ui/material-symbols'
+import { materialSymbolsHref } from '../src/components/icons/material-symbols'
 import type { StorybookConfig } from '@storybook/tanstack-react'
 
 const config: StorybookConfig = {

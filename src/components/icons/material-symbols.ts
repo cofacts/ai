@@ -1,10 +1,14 @@
 /**
  * The Material Symbols this app uses, and the Google Fonts request that loads them.
  *
+ * **To use an icon that isn't here, add its name to this list.** The request asks only for
+ * these glyphs (`icon_names`): a 9 KB font instead of about 550 KB for every icon. A name that
+ * isn't listed fails the type check of `<MaterialIcon name>`, and would render as plain text.
+ * Names are on https://fonts.google.com/icons.
+ *
  * The designer's settings (Penpot page "UI system", board "Icons"): style Rounded, fill 0,
- * weight 400, grade 0, optical size 20. Fill also loads 1, for solid icons (`<Icon filled>`).
- * The request asks only for these glyphs (`icon_names`), so add a name here before using it;
- * the type makes `<Icon name>` reject any other.
+ * weight 400, grade 0, optical size 20. Fill also loads 1, for solid icons
+ * (`<MaterialIcon filled>`).
  */
 export const MATERIAL_SYMBOLS = [
   'account_circle',

@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AdkPart, ChatMessage } from '@/lib/adk'
 import { stripUploadPrefix } from '@/lib/adk'
-import { Icon } from '@/components/ui/icon'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
 interface UserMessageProps {
   message: ChatMessage
@@ -21,7 +21,7 @@ function FileChip({
       title={name}
       className="inline-flex items-center gap-[6px] max-w-full rounded-radius-10 bg-surface-base border border-border-subtle px-spacing-8 py-spacing-4 text-type-caption text-text-primary"
     >
-      <Icon
+      <MaterialIcon
         name={
           mimeType?.startsWith('application/pdf')
             ? 'picture_as_pdf'

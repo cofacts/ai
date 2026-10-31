@@ -12,7 +12,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { GlobalNav } from '@/components/GlobalNav'
 import { AuthProvider } from '@/lib/auth'
 import { getCurrentUserServerFn } from '@/server/me.functions'
-import { materialSymbolsHref } from '@/components/ui/material-symbols'
+import { materialSymbolsHref } from '@/components/icons/material-symbols'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker } from '@tanstack/react-router'
-import { Icon } from '@/components/ui/icon'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
 // Map of draft messages by sessionId
 const drafts = new Map<string, string>()
@@ -155,7 +155,11 @@ export function ChatInput({
       >
         {isDragging && !disabled && !isStreaming && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-spacing-4 rounded-radius-10 bg-surface-base pointer-events-none">
-            <Icon name="upload_file" size={24} className="text-text-primary" />
+            <MaterialIcon
+              name="upload_file"
+              size={24}
+              className="text-text-primary"
+            />
             <span className="text-type-body-s text-text-primary">
               放開以附加檔案
             </span>
@@ -199,7 +203,7 @@ export function ChatInput({
             title="附加檔案"
             className="shrink-0 p-[6px] text-text-tertiary rounded-radius-10 hover:bg-surface-raised transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Icon name="attach_file" size={24} />
+            <MaterialIcon name="attach_file" size={24} />
           </button>
 
           <div className="flex flex-1 flex-wrap items-center gap-[6px] min-w-0">
@@ -216,7 +220,7 @@ export function ChatInput({
                   aria-label={`移除 ${file.name}`}
                   className="shrink-0 flex items-center justify-center rounded-full hover:bg-surface-selected transition-colors"
                 >
-                  <Icon name="close" size={24} />
+                  <MaterialIcon name="close" size={24} />
                 </button>
               </span>
             ))}
@@ -227,7 +231,7 @@ export function ChatInput({
             disabled={(!isStreaming && !canSend) || disabled}
             className="shrink-0 p-[6px] bg-surface-accent text-text-on-accent rounded-radius-10 hover:bg-surface-accent-subtle transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Icon name={isStreaming ? 'stop' : 'send'} size={24} />
+            <MaterialIcon name={isStreaming ? 'stop' : 'send'} size={24} />
           </button>
         </div>
       </div>
