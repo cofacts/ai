@@ -1,7 +1,7 @@
 import { Toggle as TogglePrimitive } from '@base-ui/react/toggle'
 
-import type { IconName } from '@/components/ui/icon'
-import { Icon } from '@/components/ui/icon'
+import type { MaterialSymbol } from '@/components/icons/material-symbols'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
@@ -13,7 +13,7 @@ function Chip({
   icon,
   children,
   ...props
-}: TogglePrimitive.Props & { icon?: IconName }) {
+}: TogglePrimitive.Props & { icon?: MaterialSymbol }) {
   return (
     <TogglePrimitive
       data-slot="chip"
@@ -26,7 +26,7 @@ function Chip({
       )}
       {...props}
     >
-      {icon && <Icon name={icon} size={22} />}
+      {icon && <MaterialIcon name={icon} size={22} />}
       {children}
     </TogglePrimitive>
   )

@@ -9,7 +9,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import appCss from '../styles/global.css?url'
 import { AuthProvider } from '@/lib/auth'
 import { getCurrentUserServerFn } from '@/server/me.functions'
-import { materialSymbolsHref } from '@/components/ui/material-symbols'
+import { materialSymbolsHref } from '@/components/icons/material-symbols'
 
 export const Route = createRootRoute({
   loader: async () => ({ serverLoadedUser: await getCurrentUserServerFn() }),

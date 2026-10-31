@@ -1,7 +1,7 @@
 import { Toggle as TogglePrimitive } from '@base-ui/react/toggle'
 
-import type { IconName } from '@/components/ui/icon'
-import { Icon } from '@/components/ui/icon'
+import type { MaterialSymbol } from '@/components/icons/material-symbols'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
@@ -13,7 +13,7 @@ function Toggle({
   icon,
   children,
   ...props
-}: TogglePrimitive.Props & { icon?: IconName }) {
+}: TogglePrimitive.Props & { icon?: MaterialSymbol }) {
   return (
     <TogglePrimitive
       data-slot="toggle"
@@ -28,8 +28,11 @@ function Toggle({
     >
       {icon && (
         <>
-          <Icon name={icon} className="group-data-pressed/toggle:hidden" />
-          <Icon
+          <MaterialIcon
+            name={icon}
+            className="group-data-pressed/toggle:hidden"
+          />
+          <MaterialIcon
             name={icon}
             filled
             className="hidden group-data-pressed/toggle:inline-flex"

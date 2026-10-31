@@ -1,6 +1,6 @@
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox'
 
-import { Icon } from '@/components/ui/icon'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
@@ -23,7 +23,7 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
       {...props}
     >
       <CheckboxPrimitive.Indicator data-slot="checkbox-indicator">
-        <Icon name="check" size={14} />
+        <MaterialIcon name="check" size={14} />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   )

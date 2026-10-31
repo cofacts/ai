@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Select as SelectPrimitive } from '@base-ui/react/select'
 
-import { Icon } from '@/components/ui/icon'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 const Select = SelectPrimitive.Root
@@ -47,7 +47,10 @@ function SelectTrigger({
       {children}
       <SelectPrimitive.Icon
         render={
-          <Icon name="keyboard_arrow_down" className="text-icon-default" />
+          <MaterialIcon
+            name="keyboard_arrow_down"
+            className="text-icon-default"
+          />
         }
       />
     </SelectPrimitive.Trigger>
@@ -140,7 +143,7 @@ function SelectItem({
           <span className="pointer-events-none absolute right-spacing-12 flex size-spacing-20 items-center justify-center" />
         }
       >
-        <Icon name="check" />
+        <MaterialIcon name="check" />
       </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>
   )
@@ -175,7 +178,7 @@ function SelectScrollUpButton({
       )}
       {...props}
     >
-      <Icon name="keyboard_arrow_up" />
+      <MaterialIcon name="keyboard_arrow_up" />
     </SelectPrimitive.ScrollUpArrow>
   )
 }
@@ -193,7 +196,7 @@ function SelectScrollDownButton({
       )}
       {...props}
     >
-      <Icon name="keyboard_arrow_down" />
+      <MaterialIcon name="keyboard_arrow_down" />
     </SelectPrimitive.ScrollDownArrow>
   )
 }

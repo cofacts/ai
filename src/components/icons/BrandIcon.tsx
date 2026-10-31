@@ -1,8 +1,10 @@
-// ⚙️ Exported from the Penpot file Cofacts-2026 (Base/Icon Name = fb, line). Brand marks aren't in
-// Material Symbols, so they stay as paths.
+import { cn } from '@/lib/utils'
 
-/** [viewBox width, viewBox height, path data] */
-export const brandIconPaths = {
+/**
+ * [viewBox width, viewBox height, path data], exported from Penpot Base/Icon (Name = fb, line).
+ * Brand marks aren't in Material Symbols, so they stay as paths.
+ */
+const brandPaths = {
   facebook: [
     22,
     22,
@@ -15,4 +17,34 @@ export const brandIconPaths = {
   ],
 } as const satisfies Record<string, readonly [number, number, string]>
 
-export type BrandIconName = keyof typeof brandIconPaths
+export type Brand = keyof typeof brandPaths
+
+/**
+ * A brand mark from Penpot Base/Icon. Decorative (`aria-hidden`); colors come from
+ * `currentColor`.
+ */
+export function BrandIcon({
+  name,
+  size = 20,
+  className,
+}: {
+  name: Brand
+  /** Rendered size in px. Penpot icons are 20px. */
+  size?: number
+  className?: string
+}) {
+  const [w, h, d] = brandPaths[name]
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      width={size}
+      height={size}
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+      className={cn('shrink-0', className)}
+    >
+      <path d={d} />
+    </svg>
+  )
+}

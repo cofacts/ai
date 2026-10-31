@@ -3,7 +3,7 @@ import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { ChatMessage } from '@/lib/adk'
 import { cn } from '@/lib/utils'
-import { Icon } from '@/components/ui/icon'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
 interface AgentMessageProps {
   message: ChatMessage
@@ -24,7 +24,11 @@ export function AgentMessage({
       {showAvatar && (
         <div className="flex items-center gap-spacing-8 mb-spacing-8 md:mb-spacing-12">
           <div className="w-spacing-24 h-spacing-24 rounded-full bg-surface-accent-subtle flex items-center justify-center">
-            <Icon name="smart_toy" size={24} className="text-text-on-accent" />
+            <MaterialIcon
+              name="smart_toy"
+              size={24}
+              className="text-text-on-accent"
+            />
           </div>
           <span className="text-type-body-s font-bold text-text-primary">
             {message.author === 'investigator'
@@ -59,7 +63,7 @@ export function AgentMessage({
                 key={i}
                 className="flex items-center gap-spacing-8 pl-spacing-4"
               >
-                <Icon
+                <MaterialIcon
                   name="subdirectory_arrow_right"
                   size={24}
                   className="text-text-disabled"
@@ -73,7 +77,7 @@ export function AgentMessage({
                   )}
                   onClick={() => onToolBadgeClick?.(id ?? '')}
                 >
-                  <Icon
+                  <MaterialIcon
                     name={
                       lowerName.includes('search')
                         ? 'search'
