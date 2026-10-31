@@ -5,8 +5,10 @@ import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import styles from './RightDrawer.module.css'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
+import type { IconName } from '@/components/ui/icon'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
 import { cn } from '@/lib/utils'
+import { Icon } from '@/components/ui/icon'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -87,9 +89,7 @@ function DrawerHeader({
             className="text-text-tertiary hover:text-text-secondary transition-colors"
             aria-label="在 Cofacts 查看"
           >
-            <span className="material-symbols-outlined text-type-heading-s">
-              open_in_new
-            </span>
+            <Icon name="open_in_new" size={24} />
           </a>
         )}
         <button
@@ -97,9 +97,7 @@ function DrawerHeader({
           className="text-text-tertiary hover:text-text-secondary transition-colors"
           aria-label="關閉"
         >
-          <span className="material-symbols-outlined text-type-heading-s">
-            close
-          </span>
+          <Icon name="close" size={24} />
         </button>
       </div>
     </div>
@@ -201,9 +199,7 @@ function SourceCard({ source, index }: { source: ToolSource; index: number }) {
       className="block bg-surface-raised rounded-radius-10 p-spacing-12 hover:bg-surface-selected transition-colors border border-border-subtle"
     >
       <div className="flex items-center gap-[6px] mb-spacing-4">
-        <span className="material-symbols-outlined text-[13px] text-text-tertiary">
-          language
-        </span>
+        <Icon name="language" size={24} className="text-text-tertiary" />
         <span className="text-[10px] text-text-tertiary font-bold uppercase truncate">
           {domain}
         </span>
@@ -392,9 +388,7 @@ function CopyButton({ value }: { value: string }) {
       className="ml-auto text-text-tertiary hover:text-text-secondary disabled:opacity-0 transition-colors"
       aria-label="複製"
     >
-      <span className="material-symbols-outlined text-type-body-m">
-        {copied ? 'check' : 'content_copy'}
-      </span>
+      <Icon name={copied ? 'check' : 'content_copy'} size={24} />
     </button>
   )
 }
@@ -406,7 +400,7 @@ type ReplyCategory = 'NOT_ARTICLE' | 'RUMOR' | 'NOT_RUMOR' | 'OPINIONATED'
 const CATEGORIES: Array<{
   key: ReplyCategory
   label: string
-  icon: string
+  icon: IconName
   colorClass: string
   activeClass: string
 }> = [
@@ -470,11 +464,11 @@ function DraftFactcheckContent({
                 }
               `}
             >
-              <span
-                className={`material-symbols-outlined text-[16px] ${isActive ? '' : cat.colorClass} ${isActive ? '' : 'opacity-40'}`}
-              >
-                {cat.icon}
-              </span>
+              <Icon
+                name={cat.icon}
+                size={24}
+                className={`${isActive ? '' : cat.colorClass} ${isActive ? '' : 'opacity-40'}`}
+              />
               <span>{cat.label}</span>
             </div>
           )
@@ -495,9 +489,7 @@ function DraftFactcheckContent({
       {/* References */}
       <div className="space-y-spacing-8">
         <label className="text-type-caption font-bold text-text-tertiary uppercase flex items-center gap-spacing-4">
-          <span className="material-symbols-outlined text-type-body-s">
-            link
-          </span>
+          <Icon name="link" size={24} />
           佐證資料
           <CopyButton value={references} />
         </label>
@@ -681,23 +673,17 @@ function CofactsArticleContent({
         <SectionLabel>統計</SectionLabel>
         <div className="flex flex-wrap gap-x-spacing-16 gap-y-[6px] text-type-caption text-text-secondary">
           <span className="flex items-center gap-spacing-4">
-            <span className="material-symbols-outlined text-type-body-s">
-              calendar_today
-            </span>
+            <Icon name="calendar_today" size={24} />
             初次回報：{formattedDate}
           </span>
           {totalVisits > 0 && (
             <span className="flex items-center gap-spacing-4">
-              <span className="material-symbols-outlined text-type-body-s">
-                trending_up
-              </span>
-              近 90 天 {totalVisits.toLocaleString()} 次造訪
+              <Icon name="trending_up" size={24} />近 90 天{' '}
+              {totalVisits.toLocaleString()} 次造訪
             </span>
           )}
           <span className="flex items-center gap-spacing-4">
-            <span className="material-symbols-outlined text-type-body-s">
-              group
-            </span>
+            <Icon name="group" size={24} />
             {article.communityDemandCount} 人回報
           </span>
         </div>
@@ -737,15 +723,11 @@ function CofactsArticleContent({
                   <div className="flex items-center gap-spacing-8 text-type-caption text-text-tertiary">
                     <span>{ar.reply.user.name}</span>
                     <span className="flex items-center gap-spacing-2">
-                      <span className="material-symbols-outlined text-type-caption">
-                        thumb_up
-                      </span>
+                      <Icon name="thumb_up" size={24} />
                       {ar.helpfulCount}
                     </span>
                     <span className="flex items-center gap-spacing-2">
-                      <span className="material-symbols-outlined text-type-caption">
-                        thumb_down
-                      </span>
+                      <Icon name="thumb_down" size={24} />
                       {ar.unhelpfulCount}
                     </span>
                   </div>

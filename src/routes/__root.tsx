@@ -12,6 +12,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { GlobalNav } from '@/components/GlobalNav'
 import { AuthProvider } from '@/lib/auth'
 import { getCurrentUserServerFn } from '@/server/me.functions'
+import { materialSymbolsHref } from '@/components/ui/material-symbols'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   {
@@ -60,7 +61,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         },
         {
           rel: 'stylesheet',
-          href: 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap',
+          href: materialSymbolsHref,
         },
       ],
     }),

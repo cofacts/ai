@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { ChatMessage } from '@/lib/adk'
 import { cn } from '@/lib/utils'
+import { Icon } from '@/components/ui/icon'
 
 interface AgentMessageProps {
   message: ChatMessage
@@ -23,9 +24,7 @@ export function AgentMessage({
       {showAvatar && (
         <div className="flex items-center gap-spacing-8 mb-spacing-8 md:mb-spacing-12">
           <div className="w-spacing-24 h-spacing-24 rounded-full bg-surface-accent-subtle flex items-center justify-center">
-            <span className="material-symbols-outlined text-type-body-s text-text-on-accent">
-              smart_toy
-            </span>
+            <Icon name="smart_toy" size={24} className="text-text-on-accent" />
           </div>
           <span className="text-type-body-s font-bold text-text-primary">
             {message.author === 'investigator'
@@ -60,9 +59,11 @@ export function AgentMessage({
                 key={i}
                 className="flex items-center gap-spacing-8 pl-spacing-4"
               >
-                <span className="material-symbols-outlined text-text-disabled text-type-caption">
-                  subdirectory_arrow_right
-                </span>
+                <Icon
+                  name="subdirectory_arrow_right"
+                  size={24}
+                  className="text-text-disabled"
+                />
                 <button
                   className={cn(
                     'inline-flex shrink-0 cursor-pointer items-center gap-[6px] rounded-full border border-border-subtle bg-surface-raised px-[10px] py-spacing-2 my-spacing-4 font-mono text-type-caption text-text-secondary transition-all hover:bg-surface-selected hover:text-text-primary',
@@ -72,16 +73,20 @@ export function AgentMessage({
                   )}
                   onClick={() => onToolBadgeClick?.(id ?? '')}
                 >
-                  <span className="material-symbols-outlined text-[14px] text-text-tertiary">
-                    {lowerName.includes('search')
-                      ? 'search'
-                      : lowerName.includes('verify') ||
-                          lowerName.includes('check')
-                        ? 'shield'
-                        : lowerName.includes('cofacts')
-                          ? 'fact_check'
-                          : 'build'}
-                  </span>
+                  <Icon
+                    name={
+                      lowerName.includes('search')
+                        ? 'search'
+                        : lowerName.includes('verify') ||
+                            lowerName.includes('check')
+                          ? 'shield'
+                          : lowerName.includes('cofacts')
+                            ? 'fact_check'
+                            : 'build'
+                    }
+                    size={24}
+                    className="text-text-tertiary"
+                  />
                   <span>{name}</span>
                 </button>
                 {isInvestigator && id && (

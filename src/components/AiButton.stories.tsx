@@ -14,7 +14,7 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {}
-export const WithIcon: Story = { args: { icon: 'edit-document' } }
+export const WithIcon: Story = { args: { icon: 'edit_document' } }
 export const Loading: Story = {
   args: { icon: 'search', loading: true, children: '搜尋資料庫' },
 }
