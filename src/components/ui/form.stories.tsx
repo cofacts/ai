@@ -1,4 +1,4 @@
-import { expect } from 'storybook/test'
+import { expect, within } from 'storybook/test'
 
 import { Checkbox } from './checkbox'
 import {
@@ -153,10 +153,11 @@ const sortItems = [
   { label: '最新回應', value: 'lastRepliedAt' },
 ]
 
+/** The play function opens the first select, to show its popup (the min-height leaves room). */
 export const Selects: Story = {
   parameters: { penpot: { component: 'Base/Select' } },
   render: () => (
-    <div className="flex gap-spacing-16">
+    <div className="flex min-h-[200px] items-start gap-spacing-16">
       <Select items={sortItems} defaultValue="lastRequestedAt">
         <SelectTrigger aria-label="排序">
           <SelectValue />
@@ -186,4 +187,11 @@ export const Selects: Story = {
       </Select>
     </div>
   ),
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.click(canvas.getAllByRole('combobox', { name: '排序' })[0]!)
+    // The popup is portaled to <body>, outside the story's canvas.
+    await expect(
+      await within(document.body).findByRole('listbox'),
+    ).toBeVisible()
+  },
 }
