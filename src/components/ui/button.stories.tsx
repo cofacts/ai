@@ -10,7 +10,7 @@ const meta = {
   args: { children: '查核闢謠', onClick: fn() },
   /** Every story shows the lg / md / sm sizes side by side; `size` is ignored. */
   render: ({ size: _size, ...args }) => (
-    <div className="flex flex-wrap items-center gap-16">
+    <div className="flex flex-wrap items-center gap-spacing-16">
       {(['lg', 'md', 'sm'] as const).map((size) => (
         <Button key={size} {...args} size={size} />
       ))}
@@ -52,7 +52,10 @@ export const OnDark: Story = {
     'aria-label': '選單',
   },
   render: (args) => (
-    <div data-surface="dark" className="flex items-center gap-16 bg-dark p-16">
+    <div
+      data-surface="dark"
+      className="flex items-center gap-spacing-16 bg-surface-dark p-spacing-16"
+    >
       <Button {...args} size="icon-touch" />
     </div>
   ),

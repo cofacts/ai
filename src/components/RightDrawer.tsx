@@ -3,10 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
+import styles from './RightDrawer.module.css'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
 import { cn } from '@/lib/utils'
-import styles from './RightDrawer.module.css'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -21,7 +21,7 @@ export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
       {isOpen && (
         <aside
           className={cn(
-            'hidden md:flex flex-1 min-w-0 bg-base border-l border-subtle flex-col shadow-btn z-10 overflow-hidden',
+            'hidden md:flex flex-1 min-w-0 bg-surface-base border-l border-border-subtle flex-col shadow-btn-shadow z-10 overflow-hidden',
             styles.drawer,
           )}
         >
@@ -74,30 +74,30 @@ function DrawerHeader({
       : undefined
 
   return (
-    <div className="flex items-center gap-8 px-16 py-12 border-b border-subtle bg-base shrink-0">
-      <h2 className="text-body-s font-bold text-primary truncate flex-1 min-w-0">
+    <div className="flex items-center gap-spacing-8 px-spacing-16 py-spacing-12 border-b border-border-subtle bg-surface-base shrink-0">
+      <h2 className="text-type-body-s font-bold text-text-primary truncate flex-1 min-w-0">
         {toolTitle(invocation)}
       </h2>
-      <div className="flex items-center gap-4 shrink-0">
+      <div className="flex items-center gap-spacing-4 shrink-0">
         {cofactsArticleId && (
           <a
             href={`https://cofacts.tw/article/${cofactsArticleId}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-tertiary hover:text-secondary transition-colors"
+            className="text-text-tertiary hover:text-text-secondary transition-colors"
             aria-label="在 Cofacts 查看"
           >
-            <span className="material-symbols-outlined text-heading-s">
+            <span className="material-symbols-outlined text-type-heading-s">
               open_in_new
             </span>
           </a>
         )}
         <button
           onClick={onClose}
-          className="text-tertiary hover:text-secondary transition-colors"
+          className="text-text-tertiary hover:text-text-secondary transition-colors"
           aria-label="關閉"
         >
-          <span className="material-symbols-outlined text-heading-s">
+          <span className="material-symbols-outlined text-type-heading-s">
             close
           </span>
         </button>
@@ -152,7 +152,7 @@ function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-bold text-tertiary uppercase mb-8">
+    <p className="text-[10px] font-bold text-text-tertiary uppercase mb-spacing-8">
       {children}
     </p>
   )
@@ -167,7 +167,7 @@ function ToolErrorSection({ message }: { message: string }) {
   return (
     <section>
       <SectionLabel>這次呼叫沒有成功</SectionLabel>
-      <p className="text-body-s text-on-accent bg-accent-subtle border border-accent rounded-10 p-12 whitespace-pre-wrap">
+      <p className="text-type-body-s text-text-on-accent bg-surface-accent-subtle border border-border-accent rounded-radius-10 p-spacing-12 whitespace-pre-wrap">
         {message}
       </p>
     </section>
@@ -176,7 +176,7 @@ function ToolErrorSection({ message }: { message: string }) {
 
 function MarkdownSection({ content }: { content: string }) {
   return (
-    <div className="prose prose-sm max-w-none prose-p:my-6 text-body-s text-primary">
+    <div className="prose prose-sm max-w-none prose-p:my-6 text-type-body-s text-text-primary">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
     </div>
   )
@@ -198,17 +198,17 @@ function SourceCard({ source, index }: { source: ToolSource; index: number }) {
       href={source.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block bg-raised rounded-10 p-12 hover:bg-selected transition-colors border border-subtle"
+      className="block bg-surface-raised rounded-radius-10 p-spacing-12 hover:bg-surface-selected transition-colors border border-border-subtle"
     >
-      <div className="flex items-center gap-6 mb-4">
-        <span className="material-symbols-outlined text-[13px] text-tertiary">
+      <div className="flex items-center gap-[6px] mb-spacing-4">
+        <span className="material-symbols-outlined text-[13px] text-text-tertiary">
           language
         </span>
-        <span className="text-[10px] text-tertiary font-bold uppercase truncate">
+        <span className="text-[10px] text-text-tertiary font-bold uppercase truncate">
           {domain}
         </span>
       </div>
-      <p className="text-[11px] text-secondary line-clamp-2 break-all">
+      <p className="text-[11px] text-text-secondary line-clamp-2 break-all">
         {source.url}
       </p>
     </a>
@@ -239,7 +239,7 @@ function InvestigatorContent({
       : []
 
   return (
-    <div className="flex-1 overflow-y-auto p-16 space-y-20">
+    <div className="flex-1 overflow-y-auto p-spacing-16 space-y-spacing-20">
       {args.request && (
         <section>
           <SectionLabel>調查主題</SectionLabel>
@@ -261,7 +261,7 @@ function InvestigatorContent({
       {sources.length > 0 && (
         <section>
           <SectionLabel>出處 ({sources.length})</SectionLabel>
-          <div className="space-y-8">
+          <div className="space-y-spacing-8">
             {sources.map((s, i) => (
               <SourceCard key={i} source={s} index={i} />
             ))}
@@ -270,7 +270,7 @@ function InvestigatorContent({
       )}
 
       {!content && !response && (
-        <p className="text-body-s text-tertiary text-center pt-32">
+        <p className="text-type-body-s text-text-tertiary text-center pt-spacing-32">
           等待調查結果…
         </p>
       )}
@@ -300,7 +300,7 @@ function VerifierContent({
       : []
 
   return (
-    <div className="flex-1 overflow-y-auto p-16 space-y-20">
+    <div className="flex-1 overflow-y-auto p-spacing-16 space-y-spacing-20">
       {args.request && (
         <section>
           <SectionLabel>待查核聲明</SectionLabel>
@@ -320,7 +320,7 @@ function VerifierContent({
       {sources.length > 0 && (
         <section>
           <SectionLabel>參考來源 ({sources.length})</SectionLabel>
-          <div className="space-y-8">
+          <div className="space-y-spacing-8">
             {sources.map((s, i) => (
               <SourceCard key={i} source={s} index={i} />
             ))}
@@ -329,7 +329,7 @@ function VerifierContent({
       )}
 
       {!content && !response && (
-        <p className="text-body-s text-tertiary text-center pt-32">
+        <p className="text-type-body-s text-text-tertiary text-center pt-spacing-32">
           等待查核結果…
         </p>
       )}
@@ -350,7 +350,7 @@ function ProofreaderContent({
   const result = response && !('error' in response) ? response.result : ''
 
   return (
-    <div className="flex-1 overflow-y-auto p-16 space-y-20">
+    <div className="flex-1 overflow-y-auto p-spacing-16 space-y-spacing-20">
       {args.request && (
         <section>
           <SectionLabel>詢問事項</SectionLabel>
@@ -368,7 +368,9 @@ function ProofreaderContent({
       )}
 
       {!result && !response && (
-        <p className="text-body-s text-tertiary text-center pt-32">等待回應…</p>
+        <p className="text-type-body-s text-text-tertiary text-center pt-spacing-32">
+          等待回應…
+        </p>
       )}
     </div>
   )
@@ -387,10 +389,10 @@ function CopyButton({ value }: { value: string }) {
     <button
       onClick={handleCopy}
       disabled={!value}
-      className="ml-auto text-tertiary hover:text-secondary disabled:opacity-0 transition-colors"
+      className="ml-auto text-text-tertiary hover:text-text-secondary disabled:opacity-0 transition-colors"
       aria-label="複製"
     >
-      <span className="material-symbols-outlined text-body-m">
+      <span className="material-symbols-outlined text-type-body-m">
         {copied ? 'check' : 'content_copy'}
       </span>
     </button>
@@ -413,28 +415,30 @@ const CATEGORIES: Array<{
     label: '不在查證範圍',
     icon: 'warning',
     colorClass: 'text-status-outofscope',
-    activeClass: 'bg-accent-subtle border-accent text-on-accent',
+    activeClass:
+      'bg-surface-accent-subtle border-border-accent text-text-on-accent',
   },
   {
     key: 'RUMOR',
     label: '含有不實訊息',
     icon: 'cancel',
     colorClass: 'text-status-incorrect',
-    activeClass: 'bg-raised border-control text-status-incorrect',
+    activeClass:
+      'bg-surface-raised border-border-control text-status-incorrect',
   },
   {
     key: 'NOT_RUMOR',
     label: '含有正確訊息',
     icon: 'check_circle',
     colorClass: 'text-status-correct',
-    activeClass: 'bg-raised border-subtle text-status-correct',
+    activeClass: 'bg-surface-raised border-border-subtle text-status-correct',
   },
   {
     key: 'OPINIONATED',
     label: '含有個人意見',
     icon: 'comment',
     colorClass: 'text-status-opinion',
-    activeClass: 'bg-raised border-subtle text-link',
+    activeClass: 'bg-surface-raised border-border-subtle text-text-link',
   },
 ]
 
@@ -448,21 +452,21 @@ function DraftFactcheckContent({
   const references = args.references ?? ''
 
   return (
-    <div className="flex-1 overflow-y-auto p-16 space-y-20 bg-raised">
+    <div className="flex-1 overflow-y-auto p-spacing-16 space-y-spacing-20 bg-surface-raised">
       {/* Classification */}
-      <div className="flex flex-row gap-4 p-4 bg-raised rounded-10 w-full overflow-x-auto [scrollbar-width:none]">
+      <div className="flex flex-row gap-spacing-4 p-spacing-4 bg-surface-raised rounded-radius-10 w-full overflow-x-auto [scrollbar-width:none]">
         {CATEGORIES.map((cat) => {
           const isActive = classification === cat.key
           return (
             <div
               key={cat.key}
               className={`
-                flex-1 min-w-[80px] whitespace-nowrap py-8 text-[10px] font-bold text-center rounded-5
-                flex flex-col items-center justify-center gap-2
+                flex-1 min-w-[80px] whitespace-nowrap py-spacing-8 text-[10px] font-bold text-center rounded-radius-5
+                flex flex-col items-center justify-center gap-spacing-2
                 ${
                   isActive
-                    ? `bg-base shadow-btn border border-subtle ${cat.activeClass}`
-                    : 'text-tertiary'
+                    ? `bg-surface-base shadow-btn-shadow border border-border-subtle ${cat.activeClass}`
+                    : 'text-text-tertiary'
                 }
               `}
             >
@@ -478,25 +482,29 @@ function DraftFactcheckContent({
       </div>
 
       {/* Response text */}
-      <div className="space-y-8">
-        <label className="text-caption font-bold text-tertiary uppercase flex items-center">
+      <div className="space-y-spacing-8">
+        <label className="text-type-caption font-bold text-text-tertiary uppercase flex items-center">
           回應內容
           <CopyButton value={text} />
         </label>
-        <div className="w-full min-h-[11rem] p-12 text-body-s text-primary bg-base border border-subtle rounded-10 whitespace-pre-wrap">
-          {text || <span className="text-disabled">（尚未產生）</span>}
+        <div className="w-full min-h-[11rem] p-spacing-12 text-type-body-s text-text-primary bg-surface-base border border-border-subtle rounded-radius-10 whitespace-pre-wrap">
+          {text || <span className="text-text-disabled">（尚未產生）</span>}
         </div>
       </div>
 
       {/* References */}
-      <div className="space-y-8">
-        <label className="text-caption font-bold text-tertiary uppercase flex items-center gap-4">
-          <span className="material-symbols-outlined text-body-s">link</span>
+      <div className="space-y-spacing-8">
+        <label className="text-type-caption font-bold text-text-tertiary uppercase flex items-center gap-spacing-4">
+          <span className="material-symbols-outlined text-type-body-s">
+            link
+          </span>
           佐證資料
           <CopyButton value={references} />
         </label>
-        <div className="w-full min-h-[8rem] p-12 text-body-s font-mono text-secondary bg-base border border-subtle rounded-10 whitespace-pre-wrap">
-          {references || <span className="text-disabled">（尚未產生）</span>}
+        <div className="w-full min-h-[8rem] p-spacing-12 text-type-body-s font-mono text-text-secondary bg-surface-base border border-border-subtle rounded-radius-10 whitespace-pre-wrap">
+          {references || (
+            <span className="text-text-disabled">（尚未產生）</span>
+          )}
         </div>
       </div>
     </div>
@@ -514,19 +522,22 @@ type RelatedArticleNode =
 const REPLY_TYPE_INFO: Record<string, { label: string; className: string }> = {
   RUMOR: {
     label: '含有不實訊息',
-    className: 'bg-raised text-status-incorrect border border-control',
+    className:
+      'bg-surface-raised text-status-incorrect border border-border-control',
   },
   NOT_RUMOR: {
     label: '不含不實訊息',
-    className: 'bg-raised text-status-correct border border-subtle',
+    className:
+      'bg-surface-raised text-status-correct border border-border-subtle',
   },
   OPINIONATED: {
     label: '含有個人意見',
-    className: 'bg-raised text-link border border-subtle',
+    className: 'bg-surface-raised text-text-link border border-border-subtle',
   },
   NOT_ARTICLE: {
     label: '不是可查核的內容',
-    className: 'bg-accent-subtle text-on-accent border border-accent',
+    className:
+      'bg-surface-accent-subtle text-text-on-accent border border-border-accent',
   },
 }
 
@@ -536,18 +547,18 @@ function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
       href={`https://cofacts.tw/article/${article.id}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="shrink-0 w-[210px] rounded-10 border border-subtle bg-raised p-12 hover:bg-selected transition-colors flex flex-col gap-8"
+      className="shrink-0 w-[210px] rounded-radius-10 border border-border-subtle bg-surface-raised p-spacing-12 hover:bg-surface-selected transition-colors flex flex-col gap-spacing-8"
     >
-      <p className="text-caption text-secondary line-clamp-4 flex-1">
+      <p className="text-type-caption text-text-secondary line-clamp-4 flex-1">
         {article.text || `[${article.articleType}]`}
       </p>
       <div>
         {article.factCheckCount > 0 ? (
-          <span className="text-[10px] bg-raised text-status-correct border border-subtle rounded-5 px-6 py-2">
+          <span className="text-[10px] bg-surface-raised text-status-correct border border-border-subtle rounded-radius-5 px-[6px] py-spacing-2">
             {article.factCheckCount} 則查核
           </span>
         ) : (
-          <span className="text-[10px] bg-raised text-tertiary rounded-5 px-6 py-2">
+          <span className="text-[10px] bg-surface-raised text-text-tertiary rounded-radius-5 px-[6px] py-spacing-2">
             待查核
           </span>
         )}
@@ -578,16 +589,18 @@ function ArticleMedia({
   })
 
   if (isPending) {
-    return <div className="w-full h-192 rounded-10 bg-raised animate-pulse" />
+    return (
+      <div className="w-full h-[192px] rounded-radius-10 bg-surface-raised animate-pulse" />
+    )
   }
   if (isError || !url) {
-    return <p className="text-body-s text-tertiary">附件載入失敗</p>
+    return <p className="text-type-body-s text-text-tertiary">附件載入失敗</p>
   }
   if (articleType === 'IMAGE') {
-    return <img src={url} alt="訊息附件" className="w-full rounded-10" />
+    return <img src={url} alt="訊息附件" className="w-full rounded-radius-10" />
   }
   if (articleType === 'VIDEO') {
-    return <video src={url} controls className="w-full rounded-10" />
+    return <video src={url} controls className="w-full rounded-radius-10" />
   }
   if (articleType === 'AUDIO') {
     return <audio src={url} controls className="w-full" />
@@ -602,7 +615,7 @@ function CofactsArticleContent({
 }) {
   if (!response) {
     return (
-      <p className="text-body-s text-tertiary text-center pt-32 p-16">
+      <p className="text-type-body-s text-text-tertiary text-center pt-spacing-32 p-spacing-16">
         等待資料載入…
       </p>
     )
@@ -610,7 +623,7 @@ function CofactsArticleContent({
 
   if (response.error) {
     return (
-      <p className="text-body-s text-status-incorrect text-center pt-32 p-16">
+      <p className="text-type-body-s text-status-incorrect text-center pt-spacing-32 p-spacing-16">
         {response.error}
       </p>
     )
@@ -619,7 +632,7 @@ function CofactsArticleContent({
   const article = response.article
   if (!article) {
     return (
-      <p className="text-body-s text-tertiary text-center pt-32 p-16">
+      <p className="text-type-body-s text-text-tertiary text-center pt-spacing-32 p-spacing-16">
         找不到此訊息
       </p>
     )
@@ -641,7 +654,7 @@ function CofactsArticleContent({
   const relatedEdges = article.relatedArticles.edges
 
   return (
-    <div className="flex-1 overflow-y-auto p-16 space-y-20">
+    <div className="flex-1 overflow-y-auto p-spacing-16 space-y-spacing-20">
       {/* Media attachment — attachmentUrl from the tool is a gs:// URI the
           browser can't load, so ArticleMedia fetches a fresh signed URL. */}
       {isMedia && article.attachmentUrl && (
@@ -657,7 +670,7 @@ function CofactsArticleContent({
       {article.text && (
         <section>
           <SectionLabel>{isMedia ? '逐字稿' : '訊息內文'}</SectionLabel>
-          <p className="text-body-s text-primary whitespace-pre-wrap">
+          <p className="text-type-body-s text-text-primary whitespace-pre-wrap">
             {article.text}
           </p>
         </section>
@@ -666,23 +679,25 @@ function CofactsArticleContent({
       {/* Metadata */}
       <section>
         <SectionLabel>統計</SectionLabel>
-        <div className="flex flex-wrap gap-x-16 gap-y-6 text-caption text-secondary">
-          <span className="flex items-center gap-4">
-            <span className="material-symbols-outlined text-body-s">
+        <div className="flex flex-wrap gap-x-spacing-16 gap-y-[6px] text-type-caption text-text-secondary">
+          <span className="flex items-center gap-spacing-4">
+            <span className="material-symbols-outlined text-type-body-s">
               calendar_today
             </span>
             初次回報：{formattedDate}
           </span>
           {totalVisits > 0 && (
-            <span className="flex items-center gap-4">
-              <span className="material-symbols-outlined text-body-s">
+            <span className="flex items-center gap-spacing-4">
+              <span className="material-symbols-outlined text-type-body-s">
                 trending_up
               </span>
               近 90 天 {totalVisits.toLocaleString()} 次造訪
             </span>
           )}
-          <span className="flex items-center gap-4">
-            <span className="material-symbols-outlined text-body-s">group</span>
+          <span className="flex items-center gap-spacing-4">
+            <span className="material-symbols-outlined text-type-body-s">
+              group
+            </span>
             {article.communityDemandCount} 人回報
           </span>
         </div>
@@ -692,42 +707,43 @@ function CofactsArticleContent({
       <section>
         <SectionLabel>查核回應（{article.factCheckCount}）</SectionLabel>
         {article.factCheckResponses.length === 0 ? (
-          <p className="text-body-s text-tertiary">尚無查核回應</p>
+          <p className="text-type-body-s text-text-tertiary">尚無查核回應</p>
         ) : (
-          <div className="space-y-12">
+          <div className="space-y-spacing-12">
             {article.factCheckResponses.map((ar, i) => {
               const typeInfo = REPLY_TYPE_INFO[ar.reply.type] ?? {
                 label: ar.reply.type,
-                className: 'bg-raised text-secondary border border-subtle',
+                className:
+                  'bg-surface-raised text-text-secondary border border-border-subtle',
               }
               return (
                 <div
                   key={i}
-                  className="rounded-10 border border-subtle bg-raised p-12 space-y-8"
+                  className="rounded-radius-10 border border-border-subtle bg-surface-raised p-spacing-12 space-y-spacing-8"
                 >
                   <span
-                    className={`inline-block text-[10px] font-bold rounded-5 px-6 py-2 ${typeInfo.className}`}
+                    className={`inline-block text-[10px] font-bold rounded-radius-5 px-[6px] py-spacing-2 ${typeInfo.className}`}
                   >
                     {typeInfo.label}
                   </span>
-                  <p className="text-body-s text-primary whitespace-pre-wrap">
+                  <p className="text-type-body-s text-text-primary whitespace-pre-wrap">
                     {ar.reply.text}
                   </p>
                   {ar.reply.reference && (
-                    <p className="text-caption text-tertiary whitespace-pre-wrap">
+                    <p className="text-type-caption text-text-tertiary whitespace-pre-wrap">
                       {ar.reply.reference}
                     </p>
                   )}
-                  <div className="flex items-center gap-8 text-caption text-tertiary">
+                  <div className="flex items-center gap-spacing-8 text-type-caption text-text-tertiary">
                     <span>{ar.reply.user.name}</span>
-                    <span className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-caption">
+                    <span className="flex items-center gap-spacing-2">
+                      <span className="material-symbols-outlined text-type-caption">
                         thumb_up
                       </span>
                       {ar.helpfulCount}
                     </span>
-                    <span className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-caption">
+                    <span className="flex items-center gap-spacing-2">
+                      <span className="material-symbols-outlined text-type-caption">
                         thumb_down
                       </span>
                       {ar.unhelpfulCount}
@@ -746,7 +762,7 @@ function CofactsArticleContent({
           <SectionLabel>
             相似可疑訊息（{article.relatedArticles.totalCount}）
           </SectionLabel>
-          <div className="flex gap-12 overflow-x-auto pb-8 -mx-16 px-16">
+          <div className="flex gap-spacing-12 overflow-x-auto pb-spacing-8 -mx-spacing-16 px-spacing-16">
             {relatedEdges.map(({ node }) => (
               <RelatedArticleCard key={node.id} article={node} />
             ))}
@@ -769,17 +785,17 @@ function GenericToolContent({
   response: Record<string, unknown> | null
 }) {
   return (
-    <div className="flex-1 overflow-y-auto p-16 space-y-16">
+    <div className="flex-1 overflow-y-auto p-spacing-16 space-y-spacing-16">
       <section>
         <SectionLabel>Tool: {name}</SectionLabel>
-        <pre className="text-caption bg-raised rounded-5 p-12 overflow-x-auto whitespace-pre-wrap break-all border border-subtle">
+        <pre className="text-type-caption bg-surface-raised rounded-radius-5 p-spacing-12 overflow-x-auto whitespace-pre-wrap break-all border border-border-subtle">
           {JSON.stringify(args, null, 2)}
         </pre>
       </section>
       {response && (
         <section>
           <SectionLabel>Response</SectionLabel>
-          <pre className="text-caption bg-raised rounded-5 p-12 overflow-x-auto whitespace-pre-wrap break-all border border-subtle">
+          <pre className="text-type-caption bg-surface-raised rounded-radius-5 p-spacing-12 overflow-x-auto whitespace-pre-wrap break-all border border-border-subtle">
             {JSON.stringify(response, null, 2)}
           </pre>
         </section>
@@ -849,23 +865,23 @@ function MobileBottomSheet({
   return (
     <div className="fixed inset-0 z-50 md:hidden">
       <div
-        className="absolute inset-0 bg-scrim backdrop-blur-[1px]"
+        className="absolute inset-0 bg-overlay-scrim backdrop-blur-[1px]"
         onClick={onClose}
       />
       <div
         className={cn(
-          'absolute bottom-0 left-0 w-full flex flex-col bg-raised rounded-t-10 shadow-btn transition-[height] duration-100',
+          'absolute bottom-0 left-0 w-full flex flex-col bg-surface-raised rounded-t-radius-10 shadow-btn-shadow transition-[height] duration-100',
           styles.drawerMobile,
         )}
         style={{ height: `${sheetHeight}vh` }}
       >
         <div
-          className="w-full flex justify-center pt-12 pb-4 cursor-grab touch-none"
+          className="w-full flex justify-center pt-spacing-12 pb-spacing-4 cursor-grab touch-none"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          <div className="w-48 h-6 bg-selected rounded-full" />
+          <div className="w-spacing-48 h-[6px] bg-surface-selected rounded-full" />
         </div>
         {children}
       </div>

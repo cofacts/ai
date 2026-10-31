@@ -21,7 +21,7 @@ function AppLayout() {
       <Header onToggleSidebar={toggleSidebar} />
 
       {/* Main content */}
-      <main className="flex-1 flex overflow-hidden bg-base">
+      <main className="flex-1 flex overflow-hidden bg-surface-base">
         {!user ? (
           <LoggedOutLanding />
         ) : (

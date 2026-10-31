@@ -35,7 +35,7 @@ type Story = StoryObj<typeof meta>
 export const Inputs: Story = {
   parameters: { penpot: { component: 'Base/Input' } },
   render: () => (
-    <div className="flex w-277 flex-col gap-24">
+    <div className="flex w-[277px] flex-col gap-spacing-24">
       <Input placeholder="輸入關鍵字" aria-label="關鍵字" />
       <Input defaultValue="世紀颱風" aria-label="關鍵字" />
       <Input placeholder="輸入關鍵字" aria-label="關鍵字" disabled />
@@ -62,7 +62,7 @@ export const Inputs: Story = {
 export const Checkboxes: Story = {
   parameters: { penpot: { component: 'Base/Checkbox' } },
   render: () => (
-    <div className="flex flex-col gap-16">
+    <div className="flex flex-col gap-spacing-16">
       <Label>
         <Checkbox />
         標題
@@ -82,7 +82,7 @@ export const Checkboxes: Story = {
 export const Switches: Story = {
   parameters: { penpot: { component: 'Base/Switch' } },
   render: () => (
-    <div className="flex flex-col gap-16">
+    <div className="flex flex-col gap-spacing-16">
       <Label>
         <Switch />
         標題
@@ -131,7 +131,7 @@ const sortItems = [
 export const Selects: Story = {
   parameters: { penpot: { component: 'Base/Select' } },
   render: () => (
-    <div className="flex gap-16">
+    <div className="flex gap-spacing-16">
       <Select items={sortItems} defaultValue="lastRequestedAt">
         <SelectTrigger aria-label="排序">
           <SelectValue />

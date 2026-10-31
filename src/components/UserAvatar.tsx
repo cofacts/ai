@@ -66,15 +66,15 @@ export function UserAvatar({
       <span
         className={cn(
           'flex rounded-full',
-          certified && 'border-2 border-accent',
+          certified && 'border-2 border-border-accent',
         )}
       >
         {picture}
       </span>
       {level !== undefined && (
-        // border-inverse has the same value as surface-base in both themes: it cuts the badge
+        // border-border-inverse has the same value as surface-base in both themes: it cuts the badge
         // out of the picture.
-        <span className="absolute bottom-0 rounded-full border-2 border-inverse bg-inverse px-8 py-2 text-ui-xs-bold whitespace-nowrap text-inverse">
+        <span className="absolute bottom-0 rounded-full border-2 border-border-inverse bg-surface-inverse px-spacing-8 py-spacing-2 text-type-ui-xs-bold whitespace-nowrap text-text-inverse">
           Lv{level}
         </span>
       )}

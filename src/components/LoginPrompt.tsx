@@ -7,12 +7,14 @@ interface LoginPromptProps {
 export function LoginPrompt({ message }: LoginPromptProps) {
   const { login } = useAuth()
   return (
-    <div className="border-t border-subtle bg-base p-16 flex flex-col items-center gap-12">
-      <p className="text-body-s text-secondary text-center">{message}</p>
+    <div className="border-t border-border-subtle bg-surface-base p-spacing-16 flex flex-col items-center gap-spacing-12">
+      <p className="text-type-body-s text-text-secondary text-center">
+        {message}
+      </p>
       <button
         type="button"
         onClick={() => login()}
-        className="px-16 py-6 rounded-full bg-accent text-on-accent text-body-s hover:bg-accent-subtle cursor-pointer"
+        className="px-spacing-16 py-[6px] rounded-full bg-surface-accent text-text-on-accent text-type-body-s hover:bg-surface-accent-subtle cursor-pointer"
       >
         登入 / 註冊
       </button>
