@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
  * yellow alone is too weak. Invalid: red border + aria-invalid; pair it with a FieldError.
  */
 export const inputBoxClassName =
-  'w-full min-w-0 rounded-5 border-[0.5px] border-control bg-base text-primary placeholder:text-tertiary hover:border-strong focus:border-accent focus:border focus:hover:border-accent aria-invalid:border aria-invalid:border-status-incorrect disabled:pointer-events-none disabled:opacity-50'
+  'w-full min-w-0 rounded-radius-5 border-[0.5px] border-border-control bg-surface-base text-text-primary placeholder:text-text-tertiary hover:border-border-strong focus:border-border-accent focus:border focus:hover:border-border-accent aria-invalid:border aria-invalid:border-status-incorrect disabled:pointer-events-none disabled:opacity-50'
 
 function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
   return (
@@ -18,7 +18,7 @@ function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
       data-slot="input"
       className={cn(
         inputBoxClassName,
-        'min-h-38 px-12 py-12 text-ui-s',
+        'min-h-[38px] px-spacing-12 py-spacing-12 text-type-ui-s',
         className,
       )}
       {...props}

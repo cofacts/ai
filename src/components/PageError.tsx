@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/button'
 export function PageError({ reset }: Pick<ErrorComponentProps, 'reset'>) {
   const router = useRouter()
   return (
-    <main className="mx-auto flex w-full max-w-1136 flex-1 flex-col items-start gap-16 px-20 py-32 lg:px-48">
-      <h1 className="text-heading-l text-primary">頁面載入失敗</h1>
-      <p className="text-body-m text-secondary">
+    <main className="mx-auto flex w-full max-w-[1136px] flex-1 flex-col items-start gap-spacing-16 px-spacing-20 py-spacing-32 lg:px-spacing-48">
+      <h1 className="text-type-heading-l text-text-primary">頁面載入失敗</h1>
+      <p className="text-type-body-m text-text-secondary">
         資料暫時無法取得，請稍後再試。
       </p>
       <Button

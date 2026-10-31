@@ -16,11 +16,11 @@ export const Default: Story = {}
 
 export const All: Story = {
   render: () => (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-16 text-icon-default">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-spacing-16 text-icon-default">
       {iconNames.map((name) => (
-        <div key={name} className="flex flex-col items-center gap-8">
+        <div key={name} className="flex flex-col items-center gap-spacing-8">
           <Icon name={name} />
-          <code className="text-caption text-secondary">{name}</code>
+          <code className="text-type-caption text-text-secondary">{name}</code>
         </div>
       ))}
     </div>

@@ -15,8 +15,8 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
       nativeButton
       render={<button type="button" />}
       className={cn(
-        'relative flex size-16 shrink-0 items-center justify-center rounded-2 border border-control bg-base text-inverse',
-        'after:absolute after:-inset-8 data-checked:border-inverse data-checked:bg-inverse',
+        'relative flex size-spacing-16 shrink-0 items-center justify-center rounded-radius-2 border border-border-control bg-surface-base text-text-inverse',
+        'after:absolute after:-inset-spacing-8 data-checked:border-border-inverse data-checked:bg-surface-inverse',
         'disabled:pointer-events-none disabled:opacity-50',
         className,
       )}

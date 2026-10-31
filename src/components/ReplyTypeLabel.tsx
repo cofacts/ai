@@ -36,7 +36,7 @@ export function ReplyTypeLabel({
   return (
     <p
       className={cn(
-        'flex items-center gap-12 text-heading-xs md:gap-20 md:text-heading-s',
+        'flex items-center gap-spacing-12 text-type-heading-xs md:gap-spacing-20 md:text-type-heading-s',
         textClass[type],
         className,
       )}

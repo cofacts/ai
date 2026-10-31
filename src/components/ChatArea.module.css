@@ -5,7 +5,7 @@
   height: 4px;
   margin: 0 1px;
   border-radius: 50%;
-  background-color: var(--icon-muted);
+  background-color: var(--color-icon-muted);
   animation: typing 1.4s infinite ease-in-out both;
 }
 .typing span:nth-child(1) {

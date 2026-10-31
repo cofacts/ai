@@ -22,7 +22,7 @@ function AppLayout() {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Mobile: the session sidebar is opened from here; the site menu is in the nav. */}
       {user && (
-        <div className="flex items-center border-b border-subtle bg-base px-20 py-8 md:hidden">
+        <div className="flex items-center border-b border-border-subtle bg-surface-base px-spacing-20 py-spacing-8 md:hidden">
           <Button
             variant="outline"
             size="icon-touch"
@@ -35,7 +35,7 @@ function AppLayout() {
       )}
 
       {/* Main content */}
-      <main className="flex-1 flex overflow-hidden bg-base">
+      <main className="flex-1 flex overflow-hidden bg-surface-base">
         {!user ? (
           <LoggedOutLanding />
         ) : (

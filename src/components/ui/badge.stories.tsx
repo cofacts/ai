@@ -20,7 +20,7 @@ export const Fixed: Story = { args: { icon: 'error' } }
 /** Type = normal / normal-active / disable: a filter chip (`Chip`, `<button aria-pressed>`). */
 export const Chips: Story = {
   render: () => (
-    <div className="flex flex-wrap gap-12">
+    <div className="flex flex-wrap gap-spacing-12">
       <Chip onPressedChange={fn()}># 標籤</Chip>
       <Chip defaultPressed># 已選取</Chip>
       <Chip disabled># 停用</Chip>

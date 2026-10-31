@@ -13,17 +13,17 @@ export function Flag({
   className?: string
 }) {
   return (
-    <div className={cn('-ml-8 flex w-fit items-start', className)}>
-      <span aria-hidden="true" className="flex w-8 flex-col">
-        <span className="h-36 bg-accent" />
-        <span className="size-8 bg-accent-fold [clip-path:polygon(0_0,100%_0,100%_100%)]" />
+    <div className={cn('-ml-spacing-8 flex w-fit items-start', className)}>
+      <span aria-hidden="true" className="flex w-spacing-8 flex-col">
+        <span className="h-[36px] bg-surface-accent" />
+        <span className="size-spacing-8 bg-surface-accent-fold [clip-path:polygon(0_0,100%_0,100%_100%)]" />
       </span>
-      <p className="flex min-h-36 items-center bg-accent px-4 py-8 text-ui-m-bold text-on-accent">
+      <p className="flex min-h-[36px] items-center bg-surface-accent px-spacing-4 py-spacing-8 text-type-ui-m-bold text-text-on-accent">
         {children}
       </p>
       <span
         aria-hidden="true"
-        className="h-36 w-26 shrink-0 bg-accent [clip-path:polygon(0_0,100%_0,62%_50%,100%_100%,0_100%)]"
+        className="h-[36px] w-[26px] shrink-0 bg-surface-accent [clip-path:polygon(0_0,100%_0,62%_50%,100%_100%,0_100%)]"
       />
     </div>
   )

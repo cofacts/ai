@@ -11,7 +11,7 @@ function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
   return (
     <RadioGroupPrimitive
       data-slot="radio-group"
-      className={cn('flex flex-col gap-12', className)}
+      className={cn('flex flex-col gap-spacing-12', className)}
       {...props}
     />
   )
@@ -26,8 +26,8 @@ function RadioGroupItem({ className, ...props }: Radio.Root.Props) {
       nativeButton
       render={<button type="button" />}
       className={cn(
-        'relative flex size-20 shrink-0 rounded-full border border-control bg-base',
-        'after:absolute after:-inset-6 data-checked:border-3 data-checked:border-strong',
+        'relative flex size-spacing-20 shrink-0 rounded-full border border-border-control bg-surface-base',
+        'after:absolute after:-inset-[6px] data-checked:border-3 data-checked:border-border-strong',
         'disabled:pointer-events-none disabled:opacity-50',
         className,
       )}

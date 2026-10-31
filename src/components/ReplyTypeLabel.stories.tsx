@@ -22,7 +22,7 @@ export const NotVerifiable: Story = {
 
 export const All: Story = {
   render: () => (
-    <div className="flex flex-col gap-24">
+    <div className="flex flex-col gap-spacing-24">
       <ReplyTypeLabel type="RUMOR" author="Jack5566" />
       <ReplyTypeLabel type="NOT_RUMOR" author="Jack5566" />
       <ReplyTypeLabel type="OPINIONATED" author="woof!" />

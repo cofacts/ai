@@ -64,13 +64,13 @@ export const Route = createFileRoute('/(lists)/articles')({
 function ArticlesPage() {
   const { data } = useSuspenseQuery(articlesQuery)
   return (
-    <main className="mx-auto flex w-full max-w-1136 flex-1 flex-col gap-16 px-20 py-32 lg:px-48">
-      <h1 className="text-heading-l text-primary">可疑訊息</h1>
-      <p className="text-body-m text-secondary">
+    <main className="mx-auto flex w-full max-w-[1136px] flex-1 flex-col gap-spacing-16 px-spacing-20 py-spacing-32 lg:px-spacing-48">
+      <h1 className="text-type-heading-l text-text-primary">可疑訊息</h1>
+      <p className="text-type-body-m text-text-secondary">
         共 {data.ListArticles?.totalCount ?? 0} 則。以下是 server function
         載入的原始資料。
       </p>
-      <pre className="overflow-x-auto rounded-5 bg-raised p-16 font-mono text-caption text-primary">
+      <pre className="overflow-x-auto rounded-radius-5 bg-surface-raised p-spacing-16 font-mono text-type-caption text-text-primary">
         {JSON.stringify(data, null, 2)}
       </pre>
     </main>

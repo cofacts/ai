@@ -6,7 +6,9 @@ const meta = {
   component: Flag,
   parameters: { penpot: { component: 'Base/Flag' } },
   args: { children: '有 999k 人想知道以下訊息的真實性' },
-  decorators: [(Story) => <div className="bg-base p-24">{Story()}</div>],
+  decorators: [
+    (Story) => <div className="bg-surface-base p-spacing-24">{Story()}</div>,
+  ],
 } satisfies Meta<typeof Flag>
 
 export default meta

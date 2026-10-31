@@ -108,8 +108,10 @@ export function SiteNav({
       <div
         data-surface={menuOpen ? 'dark' : undefined}
         className={cn(
-          'flex min-h-60 items-center gap-32 border-b px-20 py-12 lg:min-h-64 lg:px-48 lg:py-16',
-          menuOpen ? 'border-on-dark bg-dark' : 'border-subtle bg-base',
+          'flex min-h-[60px] items-center gap-spacing-32 border-b px-spacing-20 py-spacing-12 lg:min-h-spacing-64 lg:px-spacing-48 lg:py-spacing-16',
+          menuOpen
+            ? 'border-border-on-dark bg-surface-dark'
+            : 'border-border-subtle bg-surface-base',
         )}
       >
         <a
@@ -125,7 +127,7 @@ export function SiteNav({
         ) : (
           <>
             <nav aria-label="主選單" className="hidden flex-1 lg:block">
-              <ul className="flex items-center gap-24">
+              <ul className="flex items-center gap-spacing-24">
                 {MAIN_ITEMS.map((key) => (
                   <li key={key}>
                     <NavItem
@@ -138,14 +140,14 @@ export function SiteNav({
               </ul>
             </nav>
 
-            <div className="ml-auto flex items-center gap-8">
+            <div className="ml-auto flex items-center gap-spacing-8">
               <a
                 href={NAV_LINKS.line.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(
                   buttonVariants({ variant: 'outline', withIcon: true }),
-                  'hidden min-h-40 border-transparent bg-raised xl:inline-flex',
+                  'hidden min-h-[40px] border-transparent bg-surface-raised xl:inline-flex',
                 )}
               >
                 <LineMark />
@@ -155,7 +157,7 @@ export function SiteNav({
                 href={NAV_LINKS.report.href}
                 className={cn(
                   buttonVariants({ variant: 'primary', withIcon: true }),
-                  'hidden min-h-40 lg:inline-flex',
+                  'hidden min-h-[40px] lg:inline-flex',
                 )}
               >
                 <Icon name="flag" />
@@ -201,9 +203,9 @@ export function SiteNav({
           id={menuId}
           aria-label="主選單"
           data-surface="dark"
-          className="absolute inset-x-0 top-full flex flex-col items-center gap-24 bg-dark px-64 pt-24 pb-32 lg:hidden"
+          className="absolute inset-x-0 top-full flex flex-col items-center gap-spacing-24 bg-surface-dark px-spacing-64 pt-spacing-24 pb-spacing-32 lg:hidden"
         >
-          <ul className="flex flex-col items-center gap-24">
+          <ul className="flex flex-col items-center gap-spacing-24">
             {(
               [
                 'articles',
@@ -220,15 +222,15 @@ export function SiteNav({
                   ref={i === 0 ? firstItemRef : undefined}
                   href={NAV_LINKS[key].href}
                   aria-current={current === key ? 'page' : undefined}
-                  className="text-ui-m text-on-dark hover:underline aria-[current=page]:underline"
+                  className="text-type-ui-m text-text-on-dark hover:underline aria-[current=page]:underline"
                 >
                   {NAV_LINKS[key].label}
                 </a>
               </li>
             ))}
-            <li className="text-ui-m text-on-dark">LINE:@cofacts</li>
+            <li className="text-type-ui-m text-text-on-dark">LINE:@cofacts</li>
           </ul>
-          <div className="flex w-full flex-col gap-8">
+          <div className="flex w-full flex-col gap-spacing-8">
             <a
               href={NAV_LINKS.report.href}
               className={cn(
@@ -293,12 +295,12 @@ function NavItem({
     <a
       href={href}
       aria-current={current ? 'page' : undefined}
-      className="group flex flex-col gap-2 text-ui-l whitespace-nowrap text-primary no-underline"
+      className="group flex flex-col gap-spacing-2 text-type-ui-l whitespace-nowrap text-text-primary no-underline"
     >
-      <span className="flex items-center gap-4">
+      <span className="flex items-center gap-spacing-4">
         {label}
         {shown && (
-          <span className="rounded-full bg-status-incorrect px-6 py-2 text-ui-xs text-on-status">
+          <span className="rounded-full bg-status-incorrect px-[6px] py-spacing-2 text-type-ui-xs text-text-on-status">
             <span aria-hidden="true">{shown}</span>
             <span className="sr-only">
               ，{count && count > 99 ? '99 則以上' : `${count} 則`}新訊息
@@ -306,7 +308,7 @@ function NavItem({
           </span>
         )}
       </span>
-      <span className="h-2 w-full bg-transparent group-hover:bg-accent group-aria-[current=page]:bg-accent" />
+      <span className="h-spacing-2 w-full bg-transparent group-hover:bg-surface-accent group-aria-[current=page]:bg-surface-accent" />
     </a>
   )
 }
@@ -320,7 +322,7 @@ function AccountControl({
   if (user === undefined) {
     return (
       <span
-        className="block size-40 rounded-full bg-raised"
+        className="block size-[40px] rounded-full bg-surface-raised"
         aria-hidden="true"
       />
     )
@@ -330,7 +332,7 @@ function AccountControl({
       <Button
         variant="secondary"
         iconStart="account-circle"
-        className="min-h-40"
+        className="min-h-[40px]"
         onClick={onLogin}
       >
         登入
@@ -350,10 +352,10 @@ function AccountControl({
       >
         <UserAvatar user={user} size={40} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-224">
-        <div className="flex items-center gap-12 px-12 py-8">
+      <DropdownMenuContent align="end" className="w-[224px]">
+        <div className="flex items-center gap-spacing-12 px-spacing-12 py-spacing-8">
           <UserAvatar user={user} size={40} />
-          <span className="min-w-0 flex-1 truncate text-ui-m text-primary">
+          <span className="min-w-0 flex-1 truncate text-type-ui-m text-text-primary">
             {user.name}
           </span>
         </div>
@@ -370,7 +372,7 @@ function SearchForm({ onClose }: { onClose: () => void }) {
     <form
       action={NAV_LINKS.search.href}
       role="search"
-      className="flex flex-1 items-center gap-8"
+      className="flex flex-1 items-center gap-spacing-8"
       onKeyDown={(e) => {
         if (e.key === 'Escape') onClose()
       }}
@@ -379,14 +381,14 @@ function SearchForm({ onClose }: { onClose: () => void }) {
         <span className="sr-only">搜尋</span>
         <Icon
           name="search"
-          className="pointer-events-none absolute top-1/2 left-12 -translate-y-1/2 text-icon-muted"
+          className="pointer-events-none absolute top-1/2 left-spacing-12 -translate-y-1/2 text-icon-muted"
         />
         <input
           name="q"
           type="search"
           autoFocus
           placeholder="搜尋可疑訊息或查核報告..."
-          className="min-h-36 w-full rounded-5 border-[0.5px] border-control bg-base py-8 pr-12 pl-40 text-ui-s text-primary placeholder:text-tertiary focus:border focus:border-accent"
+          className="min-h-[36px] w-full rounded-radius-5 border-[0.5px] border-border-control bg-surface-base py-spacing-8 pr-spacing-12 pl-[40px] text-type-ui-s text-text-primary placeholder:text-text-tertiary focus:border focus:border-border-accent"
         />
       </label>
       <Button
@@ -404,7 +406,7 @@ function SearchForm({ onClose }: { onClose: () => void }) {
 function LineMark() {
   return (
     <span
-      className="flex size-20 items-center justify-center rounded-5 bg-line text-on-line"
+      className="flex size-spacing-20 items-center justify-center rounded-radius-5 bg-surface-line text-text-on-line"
       aria-hidden="true"
     >
       <Icon name="line" size={16} />

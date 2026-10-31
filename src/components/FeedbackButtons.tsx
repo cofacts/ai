@@ -53,22 +53,22 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
   }
 
   return (
-    <div className="flex items-center gap-12 pt-8 mt-16 border-t border-subtle w-full">
+    <div className="flex items-center gap-spacing-12 pt-spacing-8 mt-spacing-16 border-t border-border-subtle w-full">
       <Popover
         open={isPopoverOpen}
         onOpenChange={(open) => {
           if (!open) setIsPopoverOpen(false)
         }}
       >
-        <div className="flex gap-12">
+        <div className="flex gap-spacing-12">
           <PopoverTrigger
             onClick={() => handleFeedback(1)}
             aria-label="有幫助"
             aria-pressed={feedbackGiven === 1}
-            className={`p-4 rounded-5 transition-colors ${
+            className={`p-spacing-4 rounded-radius-5 transition-colors ${
               feedbackGiven === 1
-                ? 'bg-accent-subtle text-on-accent'
-                : 'text-tertiary hover:bg-raised hover:text-secondary'
+                ? 'bg-surface-accent-subtle text-text-on-accent'
+                : 'text-text-tertiary hover:bg-surface-raised hover:text-text-secondary'
             }`}
           >
             <span className="material-symbols-outlined text-[18px]">
@@ -79,10 +79,10 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
             onClick={() => handleFeedback(-1)}
             aria-label="沒有幫助"
             aria-pressed={feedbackGiven === -1}
-            className={`p-4 rounded-5 hover:bg-raised transition-colors ${
+            className={`p-spacing-4 rounded-radius-5 hover:bg-surface-raised transition-colors ${
               feedbackGiven === -1
                 ? 'text-status-incorrect'
-                : 'text-tertiary hover:text-secondary'
+                : 'text-text-tertiary hover:text-text-secondary'
             }`}
           >
             <span className="material-symbols-outlined text-[18px]">

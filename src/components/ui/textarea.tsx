@@ -10,7 +10,7 @@ function Textarea({ className, ...props }: React.ComponentProps<'textarea'>) {
       data-slot="textarea"
       className={cn(
         inputBoxClassName,
-        'field-sizing-content min-h-106 resize-y p-12 text-body-s',
+        'field-sizing-content min-h-[106px] resize-y p-spacing-12 text-type-body-s',
         className,
       )}
       {...props}
