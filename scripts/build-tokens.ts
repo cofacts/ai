@@ -239,8 +239,8 @@ ${fallbackLines(Dark, '    ')}
   --radius-*: initial;
   --shadow-*: initial;
 
-  /* 1 spacing unit = 1px, so a 343px width → w-343. */
-  --spacing: 0.0625rem;
+  /* No numeric spacing scale: only spacing tokens (p-spacing-16) or arbitrary values (w-[343px]). */
+  --spacing-*: initial;
 
 ${fonts.map((f) => `  --font-${f.name}: '${f.family}', system-ui, sans-serif;`).join('\n')}
 
