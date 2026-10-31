@@ -1,7 +1,7 @@
 import { expect, within } from 'storybook/test'
 
 import { Checkbox } from './checkbox'
-import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from './field'
+import { Field, FieldError, FieldLegend, FieldSet } from './field'
 import { Input } from './input'
 import { Label } from './label'
 import { RadioGroup, RadioGroupItem } from './radio-group'
@@ -41,11 +41,11 @@ export const Inputs: Story = {
       <Input defaultValue="世紀颱風" aria-label="關鍵字" />
       <Input placeholder="輸入關鍵字" aria-label="關鍵字" disabled />
       <Field>
-        <FieldLabel htmlFor="title">標題</FieldLabel>
+        <Label htmlFor="title">標題</Label>
         <Input id="title" placeholder="輸入關鍵字" />
       </Field>
       <Field data-invalid>
-        <FieldLabel htmlFor="url">網址</FieldLabel>
+        <Label htmlFor="url">網址</Label>
         <Input
           id="url"
           defaultValue="not a url"
