@@ -61,7 +61,7 @@ until the designer defines breakpoints; content max width 1040 centered).
 - `characters` is placeholder copy; real text comes from data or existing copy (lingui).
 - `Base/Icon` `Name` value → `<MaterialIcon name>` with the Material Symbol name, snake_case
   (`Open-In-New` → `open_in_new`); add a name that isn't in `material-symbols.ts` there first. The
-  exceptions are in the `icons/Icons` Penpot story: `rss` → `rss_feed`, `plus` → `add`, `flag` →
+  exceptions are in the `components/Icons` Penpot story: `rss` → `rss_feed`, `plus` → `add`, `flag` →
   `flag_2` filled, `report` → `flag_check` filled, `Bookmark-fill` → `bookmark` filled, and Build /
   Thumb Up / Thumb Down are `filled`; `fb` / `line` are `BrandIcon`, `status-*` are `StatusIcon`.
 - State boards (`A-…`, `B-1-…`, `…-未登入`) each become a story.

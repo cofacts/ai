@@ -1,31 +1,66 @@
-import { BrandIcon } from './BrandIcon'
+import { BrandIcon, brands } from './BrandIcon'
 import { MaterialIcon } from './MaterialIcon'
 import { MATERIAL_SYMBOLS } from './material-symbols'
-import { StatusIcon } from './StatusIcon'
+import { StatusIcon, replyTypes } from './StatusIcon'
 import type { ReactNode } from 'react'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
 const meta = {
-  title: 'icons/Icons',
+  title: 'components/Icons',
   component: MaterialIcon,
   parameters: { penpot: { component: 'Base/Icon' } },
-  args: { name: 'search' },
-  argTypes: { name: { control: 'select', options: MATERIAL_SYMBOLS } },
+  args: { name: 'search', filled: false, size: 20 },
+  argTypes: {
+    name: { control: 'select', options: MATERIAL_SYMBOLS },
+    filled: { control: 'boolean' },
+    size: { control: { type: 'range', min: 12, max: 64, step: 2 } },
+  },
 } satisfies Meta<typeof MaterialIcon>
 
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** `MaterialIcon` with its props: pick a name from `material-symbols.ts`, toggle `filled`. */
-export const Default: Story = {}
+/**
+ * `MaterialIcon`: pick a name from `material-symbols.ts`, and try `filled` and `size` in the
+ * controls.
+ */
+export const Material: Story = { name: 'MaterialIcon' }
 
-function Cell({ penpot, children }: { penpot: string; children: ReactNode }) {
+function Cell({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-spacing-8">
       {children}
-      <code className="text-type-caption text-text-secondary">{penpot}</code>
+      <code className="text-type-caption text-text-secondary">{label}</code>
     </div>
   )
+}
+
+/** `BrandIcon`: every brand mark. */
+export const Brand: Story = {
+  name: 'BrandIcon',
+  render: () => (
+    <div className="flex flex-wrap gap-spacing-24 text-icon-default">
+      {brands.map((name) => (
+        <Cell key={name} label={name}>
+          <BrandIcon name={name} />
+        </Cell>
+      ))}
+    </div>
+  ),
+}
+
+/** `StatusIcon`: the four fact-check results, at their default (result-title) size. */
+export const Status: Story = {
+  name: 'StatusIcon',
+  render: () => (
+    <div className="flex flex-wrap gap-spacing-24">
+      {replyTypes.map((type) => (
+        <Cell key={type} label={type}>
+          <StatusIcon type={type} />
+        </Cell>
+      ))}
+    </div>
+  ),
 }
 
 /**
@@ -41,127 +76,127 @@ function Cell({ penpot, children }: { penpot: string; children: ReactNode }) {
 export const Penpot: Story = {
   render: () => (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-spacing-16 text-icon-default">
-      <Cell penpot="rss">
+      <Cell label="rss">
         <MaterialIcon name="rss_feed" />
       </Cell>
-      <Cell penpot="More-Horiz">
+      <Cell label="More-Horiz">
         <MaterialIcon name="more_horiz" />
       </Cell>
-      <Cell penpot="Arrow-Back">
+      <Cell label="Arrow-Back">
         <MaterialIcon name="arrow_back" />
       </Cell>
-      <Cell penpot="Arrow-Forward">
+      <Cell label="Arrow-Forward">
         <MaterialIcon name="arrow_forward" />
       </Cell>
-      <Cell penpot="Open-In-New">
+      <Cell label="Open-In-New">
         <MaterialIcon name="open_in_new" />
       </Cell>
-      <Cell penpot="Bookmark">
+      <Cell label="Bookmark">
         <MaterialIcon name="bookmark" />
       </Cell>
-      <Cell penpot="Bookmark-fill">
+      <Cell label="Bookmark-fill">
         <MaterialIcon name="bookmark" filled />
       </Cell>
-      <Cell penpot="Keyboard-Arrow-Down">
+      <Cell label="Keyboard-Arrow-Down">
         <MaterialIcon name="keyboard_arrow_down" />
       </Cell>
-      <Cell penpot="Keyboard-Arrow-Up">
+      <Cell label="Keyboard-Arrow-Up">
         <MaterialIcon name="keyboard_arrow_up" />
       </Cell>
-      <Cell penpot="Search">
+      <Cell label="Search">
         <MaterialIcon name="search" />
       </Cell>
-      <Cell penpot="Check">
+      <Cell label="Check">
         <MaterialIcon name="check" />
       </Cell>
-      <Cell penpot="status-pending">
+      <Cell label="status-pending">
         <StatusIcon type="OPINIONATED" className="size-[22px] md:size-[22px]" />
       </Cell>
-      <Cell penpot="status-correct">
+      <Cell label="status-correct">
         <StatusIcon type="NOT_RUMOR" className="size-[22px] md:size-[22px]" />
       </Cell>
-      <Cell penpot="status-false">
+      <Cell label="status-false">
         <StatusIcon type="RUMOR" className="size-[22px] md:size-[22px]" />
       </Cell>
-      <Cell penpot="status-out-of-scope">
+      <Cell label="status-out-of-scope">
         <StatusIcon type="NOT_ARTICLE" className="size-[22px] md:size-[22px]" />
       </Cell>
-      <Cell penpot="Account-Circle">
+      <Cell label="Account-Circle">
         <MaterialIcon name="account_circle" />
       </Cell>
-      <Cell penpot="Menu">
+      <Cell label="Menu">
         <MaterialIcon name="menu" />
       </Cell>
-      <Cell penpot="Close">
+      <Cell label="Close">
         <MaterialIcon name="close" />
       </Cell>
-      <Cell penpot="Mail">
+      <Cell label="Mail">
         <MaterialIcon name="mail" />
       </Cell>
-      <Cell penpot="fb">
+      <Cell label="fb">
         <BrandIcon name="facebook" />
       </Cell>
-      <Cell penpot="line">
+      <Cell label="line">
         <BrandIcon name="line" />
       </Cell>
-      <Cell penpot="Build">
+      <Cell label="Build">
         <MaterialIcon name="build" filled />
       </Cell>
-      <Cell penpot="Thumb Down">
+      <Cell label="Thumb Down">
         <MaterialIcon name="thumb_down" filled />
       </Cell>
-      <Cell penpot="Thumb Up">
+      <Cell label="Thumb Up">
         <MaterialIcon name="thumb_up" filled />
       </Cell>
-      <Cell penpot="Arrow Drop Down">
+      <Cell label="Arrow Drop Down">
         <MaterialIcon name="arrow_drop_down" />
       </Cell>
-      <Cell penpot="edit">
+      <Cell label="edit">
         <MaterialIcon name="edit" />
       </Cell>
-      <Cell penpot="plus">
+      <Cell label="plus">
         <MaterialIcon name="add" />
       </Cell>
-      <Cell penpot="Link">
+      <Cell label="Link">
         <MaterialIcon name="link" />
       </Cell>
-      <Cell penpot="flag">
+      <Cell label="flag">
         <MaterialIcon name="flag_2" filled />
       </Cell>
-      <Cell penpot="Error">
+      <Cell label="Error">
         <MaterialIcon name="error" />
       </Cell>
-      <Cell penpot="Format List Bulleted">
+      <Cell label="Format List Bulleted">
         <MaterialIcon name="format_list_bulleted" />
       </Cell>
-      <Cell penpot="Format List Numbered">
+      <Cell label="Format List Numbered">
         <MaterialIcon name="format_list_numbered" />
       </Cell>
-      <Cell penpot="Add Reaction">
+      <Cell label="Add Reaction">
         <MaterialIcon name="add_reaction" />
       </Cell>
-      <Cell penpot="send">
+      <Cell label="send">
         <MaterialIcon name="send" />
       </Cell>
-      <Cell penpot="Attach File">
+      <Cell label="Attach File">
         <MaterialIcon name="attach_file" />
       </Cell>
-      <Cell penpot="Help">
+      <Cell label="Help">
         <MaterialIcon name="help" />
       </Cell>
-      <Cell penpot="Content Copy">
+      <Cell label="Content Copy">
         <MaterialIcon name="content_copy" />
       </Cell>
-      <Cell penpot="Filter List">
+      <Cell label="Filter List">
         <MaterialIcon name="filter_list" />
       </Cell>
-      <Cell penpot="report">
+      <Cell label="report">
         <MaterialIcon name="flag_check" filled />
       </Cell>
-      <Cell penpot="Edit Document">
+      <Cell label="Edit Document">
         <MaterialIcon name="edit_document" />
       </Cell>
-      <Cell penpot="Side Navigation">
+      <Cell label="Side Navigation">
         <MaterialIcon name="side_navigation" />
       </Cell>
     </div>

@@ -48,7 +48,7 @@ Colocate per component: `Foo.tsx`, `Foo.stories.tsx`, `Foo.module.css` (only whe
   - `BrandIcon`: brand marks that aren't Material Symbols (`facebook`, `line`), as SVG paths.
   - `StatusIcon`: the four fact-check result shapes.
 
-  The `icons/Icons` Penpot story lists every icon on Penpot's Base/Icon with the code for it.
+  The `components/Icons` Penpot story lists every icon on Penpot's Base/Icon with the code for it.
 
 - Animations respect `prefers-reduced-motion`.
 
