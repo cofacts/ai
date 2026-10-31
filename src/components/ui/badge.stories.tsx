@@ -23,7 +23,7 @@ export const Pressed: Story = { args: { defaultPressed: true } }
 /** Type = disable. */
 export const Disabled: Story = { args: { disabled: true } }
 
-/** Type = icon-default / icon-active: an icon before the text. */
+/** Type = icon-default / icon-active: an icon before the text. Pressed, only the border goes away. */
 export const WithIcon: Story = {
   args: {
     children: '含有不實訊息',
