@@ -1,14 +1,7 @@
 import { expect, within } from 'storybook/test'
 
 import { Checkbox } from './checkbox'
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from './field'
+import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from './field'
 import { Input } from './input'
 import { Label } from './label'
 import { RadioGroup, RadioGroupItem } from './radio-group'
@@ -50,7 +43,6 @@ export const Inputs: Story = {
       <Field>
         <FieldLabel htmlFor="title">標題</FieldLabel>
         <Input id="title" placeholder="輸入關鍵字" />
-        <FieldDescription>項目的說明文字</FieldDescription>
       </Field>
       <Field data-invalid>
         <FieldLabel htmlFor="url">網址</FieldLabel>
