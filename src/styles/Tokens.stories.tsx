@@ -35,11 +35,11 @@ export const Colors: Story = {
               .map((c) => (
                 <div key={c.name} className="flex items-center gap-spacing-12">
                   <div
-                    className="size-48 shrink-0 rounded-radius-5 border border-border-subtle"
+                    className="size-spacing-48 shrink-0 rounded-radius-5 border border-border-subtle"
                     // Swatch reads the live CSS variable, so it follows the Theme toolbar.
                     style={{ background: `var(--${c.name})` }}
                   />
-                  <div className="flex min-w-0 flex-col gap-spacing-4">
+                  <div className="flex min-w-[0px] flex-col gap-spacing-4">
                     <code className="text-type-ui-s-bold">{c.name}</code>
                     <span className="text-type-caption text-text-secondary">
                       {`var(--${c.name})`}
@@ -85,9 +85,9 @@ export const Spacing: Story = {
     <div className="flex flex-col gap-spacing-8">
       {designTokens.spacing.map((s) => (
         <div key={s.name} className="flex items-center gap-spacing-16">
-          <code className="w-120 text-type-ui-s">{s.name}</code>
+          <code className="w-spacing-120 text-type-ui-s">{s.name}</code>
           <div
-            className="h-16 bg-surface-accent"
+            className="h-spacing-16 bg-surface-accent"
             style={{ width: `${s.value}px` }}
           />
           <span className="text-type-caption text-text-tertiary">
@@ -105,7 +105,7 @@ export const RadiusAndShadow: Story = {
       {designTokens.radius.map((r) => (
         <div key={r.name} className="flex flex-col items-center gap-spacing-8">
           <div
-            className={`size-64 border border-border-control bg-surface-raised ${r.className}`}
+            className={`size-spacing-64 border border-border-control bg-surface-raised ${r.className}`}
           />
           <code className="text-type-caption">{r.className}</code>
         </div>
@@ -113,7 +113,7 @@ export const RadiusAndShadow: Story = {
       {designTokens.shadows.map((s) => (
         <div key={s.name} className="flex flex-col items-center gap-spacing-8">
           <div
-            className={`size-64 rounded-radius-5 bg-surface-base ${s.className}`}
+            className={`size-spacing-64 rounded-radius-5 bg-surface-base ${s.className}`}
           />
           <code className="text-type-caption">{s.className}</code>
         </div>
