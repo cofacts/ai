@@ -1,42 +1,46 @@
-import { mergeProps } from '@base-ui/react/merge-props'
-import { useRender } from '@base-ui/react/use-render'
+import { Toggle as TogglePrimitive } from '@base-ui/react/toggle'
+import type { ReactNode } from 'react'
 
-import type { MaterialSymbol } from '@/components/icons/material-symbols'
-import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
- * Penpot Base/Badge, Type = fix: a static pill label such as「還未有效查核」.
- * For a selectable filter pill (Type = normal / normal-active) use `Chip`.
+ * Penpot Base/Badge: a pill-shaped toggle for a filter, `<button aria-pressed>`. It is a Toggle
+ * with a different look: Base/Toggle is the square one.
+ *
+ * Penpot's Type values map to its state and props:
+ * - `normal` / `normal-active` / `disable`: unpressed, pressed (`pressed` / `defaultPressed`) and
+ *   `disabled`.
+ * - `icon-default` / `icon-active`: the same with an `icon` before the text, e.g. a `StatusIcon`.
+ * - `fix` (a trailing wrench) marks a filter that is an internal feature; the designer's note says
+ *   it will go away, so it has no prop here.
+ *
+ * For a row of badges, wrap them in shadcn's `ToggleGroup`.
  */
 function Badge({
   className,
   icon,
   children,
-  render,
   ...props
-}: useRender.ComponentProps<'span'> & { icon?: MaterialSymbol }) {
-  return useRender({
-    defaultTagName: 'span',
-    props: mergeProps<'span'>(
-      {
-        className: cn(
-          'inline-flex w-fit shrink-0 items-center gap-spacing-4 rounded-full border border-border-control py-spacing-8 pr-spacing-12 pl-spacing-16 text-type-ui-m whitespace-nowrap text-text-primary',
-          !icon && 'pr-spacing-16',
-          className,
-        ),
-        children: (
-          <>
-            {children}
-            {icon && <MaterialIcon name={icon} />}
-          </>
-        ),
-      },
-      props,
-    ),
-    render,
-    state: { slot: 'badge' },
-  })
+}: TogglePrimitive.Props & {
+  /** Shown before the text (Type = icon-*). */
+  icon?: ReactNode
+}) {
+  return (
+    <TogglePrimitive
+      data-slot="badge"
+      className={cn(
+        'inline-flex shrink-0 items-center gap-spacing-8 rounded-full border border-border-control px-spacing-16 py-spacing-8 text-type-ui-m whitespace-nowrap text-text-primary',
+        'hover:bg-surface-raised data-pressed:border-transparent data-pressed:bg-surface-selected',
+        'disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-selected disabled:text-text-secondary disabled:opacity-50',
+        icon !== undefined && 'gap-spacing-4',
+        className,
+      )}
+      {...props}
+    >
+      {icon}
+      {children}
+    </TogglePrimitive>
+  )
 }
 
 export { Badge }
