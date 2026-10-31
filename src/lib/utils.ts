@@ -2,21 +2,13 @@ import { clsx } from 'clsx'
 import { extendTailwindMerge } from 'tailwind-merge'
 import type { ClassValue } from 'clsx'
 
-import { twMergeColors, twMergeTheme } from '@/styles/tokens.generated'
+import { twMergeTheme } from '@/styles/tokens.generated'
 
 // tailwind-merge doesn't read our @theme. Without these names it treats `text-type-body-m` as a
-// text color and drops it when merged with `text-text-primary`. Colors are registered per prefix,
-// so a surface name like `base` doesn't turn `text-base` into a text color.
-const twMerge = extendTailwindMerge({
-  extend: {
-    theme: twMergeTheme,
-    classGroups: {
-      'text-color': [{ text: twMergeColors.text }],
-      'bg-color': [{ bg: twMergeColors.bg }],
-      'border-color': [{ border: twMergeColors.border }],
-    },
-  },
-})
+// text color and drops it when merged with `text-text-primary`, and leaves spacing, radius and
+// shadow tokens unmerged. Colors need no list: any unrecognized value after text-, bg- or
+// border- is already a color to tailwind-merge.
+const twMerge = extendTailwindMerge({ extend: { theme: twMergeTheme } })
 
 export function cn(...inputs: Array<ClassValue>) {
   return twMerge(clsx(inputs))

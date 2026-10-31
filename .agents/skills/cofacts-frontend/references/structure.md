@@ -23,15 +23,12 @@ Colocate per component: `Foo.tsx`, `Foo.stories.tsx`, `Foo.module.css` (only whe
 
 - Tailwind with Cofacts tokens. CSS Modules only where Tailwind can't express it: complex
   keyframes, `::before` decoration, scroll-driven animation, third-party DOM. **No CSS-in-JS.**
-- Document-level rules (`::view-transition-*`) go in a plain `Foo.css` imported for its side
-  effect (`import './Foo.css'`). A CSS Module imported that way is tree-shaken from the
-  production build because nothing reads its exports.
 - `src/styles/global.css` holds only truly global rules (Tailwind import, tokens, body base,
   focus ring). Component styles never go there.
 - Variants with `class-variance-authority` (cva). Penpot's named variant properties map 1:1 to
   cva `variants`.
 - Merge classes with `cn()` from `@/lib/utils`. It is configured with the token names
-  (`twMergeTheme`); a plain `twMerge` would drop `text-body-m` when merged with `text-primary`.
+  (`twMergeTheme`); a plain `twMerge` would drop `text-type-body-m` when merged with `text-text-primary`.
 - Props: plain TypeScript types describing the fields a component needs. No GraphQL fragments.
   When a component should reuse a query's type, take a subtype of the codegen result type.
 - One responsive component replaces Penpot's desktop / `-Mobile` pairs.

@@ -14,7 +14,7 @@
 
 @layer base {
   html {
-    @apply bg-surface-base font-noto text-primary;
+    @apply bg-surface-base font-noto text-text-primary;
   }
 
   /*
