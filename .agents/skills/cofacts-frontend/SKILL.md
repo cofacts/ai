@@ -39,11 +39,10 @@ this skill is the current, executable form of it.
 - **Brand yellow is a background, never text** (R2). `bg-surface-accent` pairs with `text-text-on-accent`.
 - **Pair by name** (R4): `bg-surface-dark` → `text-text-on-dark`, `bg-surface-secondary` → `text-text-on-secondary`,
   `bg-surface-inverse` → `text-text-inverse`. A name that doesn't match is a bug.
-- **Status colors** (`text-status-*`, `bg-status-*`) only in `ReplyTypeLabel`, `VerdictPicker`
-  and status badges, always with text and a shape icon (R1).
 - **Disabled = default look + `opacity-50`**, plus `disabled` or `aria-disabled="true"` (R5).
 - **Focus is global.** Never add `focus-visible:ring-*` or per-component focus styles. Put
-  `data-surface="dark"` on fixed-dark containers.
+  `data-surface="dark"` on fixed-dark containers. The one exception is Select options (yellow
+  background instead of the ring; see `references/a11y.md`).
 - **Merge classes with `cn()`** (`@/lib/utils`), which knows the token names. Variants use cva.
 - **Components don't fetch data.** Shared components and `-components/` take typed props; only
   route components call query hooks. See `references/data-layer.md`.

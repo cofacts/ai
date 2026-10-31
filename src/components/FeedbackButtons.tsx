@@ -7,6 +7,7 @@ import {
   getFeedbackForTrace,
   submitFeedbackForTrace,
 } from '@/server/feedbackScores.functions'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
 interface FeedbackButtonsProps {
   traceId: string
@@ -53,37 +54,33 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
   }
 
   return (
-    <div className="flex items-center gap-3 pt-2 mt-4 border-t border-gray-100 w-full">
+    <div className="flex items-center gap-spacing-12 pt-spacing-8 mt-spacing-16 border-t border-border-subtle w-full">
       <Popover
         open={isPopoverOpen}
         onOpenChange={(open) => {
           if (!open) setIsPopoverOpen(false)
         }}
       >
-        <div className="flex gap-3">
+        <div className="flex gap-spacing-12">
           <PopoverTrigger
             onClick={() => handleFeedback(1)}
-            className={`p-1 rounded hover:bg-gray-100 transition-colors ${
+            className={`p-spacing-4 rounded-radius-5 transition-colors ${
               feedbackGiven === 1
-                ? 'text-primary'
-                : 'text-gray-400 hover:text-gray-600'
+                ? 'bg-surface-accent-subtle text-text-on-accent'
+                : 'text-text-tertiary hover:bg-surface-raised hover:text-text-secondary'
             }`}
           >
-            <span className="material-symbols-outlined text-[18px]">
-              thumb_up
-            </span>
+            <MaterialIcon name="thumb_up" size={24} />
           </PopoverTrigger>
           <PopoverTrigger
             onClick={() => handleFeedback(-1)}
-            className={`p-1 rounded hover:bg-gray-100 transition-colors ${
+            className={`p-spacing-4 rounded-radius-5 hover:bg-surface-raised transition-colors ${
               feedbackGiven === -1
-                ? 'text-destructive'
-                : 'text-gray-400 hover:text-gray-600'
+                ? 'text-status-incorrect'
+                : 'text-text-tertiary hover:text-text-secondary'
             }`}
           >
-            <span className="material-symbols-outlined text-[18px]">
-              thumb_down
-            </span>
+            <MaterialIcon name="thumb_down" size={24} />
           </PopoverTrigger>
         </div>
         <PopoverContent align="start">

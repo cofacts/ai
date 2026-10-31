@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
 interface HeaderProps {
   onToggleSidebar: () => void
@@ -17,50 +18,52 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   const { user, isLoading, login, logout } = useAuth()
 
   return (
-    <header className="h-14 md:h-16 bg-white border-b border-border-subtle flex items-center justify-between px-4 shrink-0 z-30 relative shadow-sm">
-      <div className="flex items-center gap-4 md:gap-6">
+    <header className="h-[56px] md:h-spacing-64 bg-surface-base border-b border-border-subtle flex items-center justify-between px-spacing-16 shrink-0 z-30 relative shadow-btn-shadow">
+      <div className="flex items-center gap-spacing-16 md:gap-spacing-24">
         {/* Mobile hamburger */}
         <button
           onClick={onToggleSidebar}
-          className="p-2 -ml-2 text-text-muted hover:text-text-main md:hidden"
+          className="p-spacing-8 -ml-spacing-8 text-text-secondary hover:text-text-primary md:hidden"
         >
-          <span className="material-symbols-outlined">menu</span>
+          <MaterialIcon name="menu" size={24} />
         </button>
 
         {/* Logo */}
-        <a className="flex items-center gap-2" href="/">
-          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-lg">
+        <a className="flex items-center gap-spacing-8" href="/">
+          <div className="w-spacing-32 h-spacing-32 bg-surface-accent rounded-full flex items-center justify-center text-text-on-accent font-bold text-type-body-l">
             C
           </div>
-          <span className="font-bold text-lg md:text-xl tracking-tight text-text-main">
+          <span className="font-bold text-type-body-l md:text-type-heading-s text-text-primary">
             Cofacts
           </span>
         </a>
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-text-muted">
+        <nav className="hidden md:flex items-center gap-spacing-24 text-type-body-s text-text-secondary">
           <a
-            className="hover:text-primary transition-colors"
+            className="hover:text-text-primary transition-colors"
             href="https://cofacts.tw"
             target="_blank"
             rel="noopener noreferrer"
           >
             查核資料庫
           </a>
-          <a className="hover:text-primary transition-colors" href="/">
+          <a className="hover:text-text-primary transition-colors" href="/">
             協作區
           </a>
         </nav>
       </div>
 
       {/* Desktop search bar */}
-      <div className="flex-1 max-w-xl mx-8 hidden lg:block">
+      <div className="flex-1 max-w-xl mx-spacing-32 hidden lg:block">
         <div className="relative group">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary">
-            search
-          </span>
+          <MaterialIcon
+            name="search"
+            size={24}
+            className="absolute left-spacing-12 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary"
+          />
           <input
-            className="w-full bg-gray-100 border-none rounded-full py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary focus:bg-white transition-all"
+            className="w-full bg-surface-raised border-none rounded-full py-spacing-8 pl-[40px] pr-spacing-16 text-type-body-s focus:bg-surface-base transition-all"
             placeholder="搜尋可疑訊息或查核報告..."
             type="text"
           />
@@ -68,15 +71,17 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       </div>
 
       {/* Right actions */}
-      <div className="flex items-center gap-3 md:gap-4">
-        <button className="p-2 hover:bg-gray-100 rounded-full text-text-muted relative hidden md:block">
-          <span className="material-symbols-outlined">notifications</span>
+      <div className="flex items-center gap-spacing-12 md:gap-spacing-16">
+        <button className="p-spacing-8 hover:bg-surface-raised rounded-full text-text-secondary relative hidden md:block">
+          <MaterialIcon name="notifications" size={24} />
         </button>
         {isLoading ? (
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gray-200 overflow-hidden border border-gray-300 flex items-center justify-center">
-            <span className="material-symbols-outlined text-gray-500">
-              person
-            </span>
+          <div className="w-spacing-32 h-spacing-32 md:w-[36px] md:h-[36px] rounded-full bg-surface-selected overflow-hidden border border-border-subtle flex items-center justify-center">
+            <MaterialIcon
+              name="person"
+              size={24}
+              className="text-text-tertiary"
+            />
           </div>
         ) : user ? (
           <DropdownMenu>
@@ -85,17 +90,17 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                 <button
                   type="button"
                   aria-label={user.name ?? ''}
-                  className="rounded-full overflow-hidden cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="rounded-full overflow-hidden cursor-pointer"
                 />
               }
             >
               <UserAvatar user={user} size={36} />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="flex items-center gap-3 px-3 py-2.5">
+            <DropdownMenuContent align="end" className="w-[224px]">
+              <div className="flex items-center gap-spacing-12 px-spacing-12 py-[10px]">
                 <UserAvatar user={user} size={40} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-text-main truncate">
+                  <div className="text-type-body-s text-text-primary truncate">
                     {user.name}
                   </div>
                 </div>
@@ -111,7 +116,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           <button
             type="button"
             onClick={() => login()}
-            className="px-4 py-1.5 rounded-full bg-primary text-white text-sm font-medium hover:bg-primary/90 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            className="px-spacing-16 py-[6px] rounded-full bg-surface-accent text-text-on-accent text-type-body-s hover:bg-surface-accent-subtle cursor-pointer"
           >
             登入 / 註冊
           </button>

@@ -57,6 +57,7 @@
   "devDependencies": {
     "@graphql-codegen/cli": "^7.0.0",
     "@graphql-codegen/client-preset": "^6.0.0",
+    "@storybook/addon-docs": "10.6.2",
     "@storybook/tanstack-react": "10.6.2",
     "@tanstack/devtools-vite": "^0.3.11",
     "@tanstack/eslint-config": "^0.3.0",
@@ -72,6 +73,7 @@
     "eslint": "^9.39.4",
     "graphql": "^16.13.2",
     "jsdom": "^27.0.0",
+    "material-symbols": "0.48.2",
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.5.3",
     "storybook": "10.6.2",

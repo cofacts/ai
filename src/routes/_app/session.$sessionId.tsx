@@ -10,6 +10,7 @@ import { ChatArea } from '@/components/ChatArea'
 import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
 import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
@@ -86,12 +87,12 @@ function SessionPage() {
     <>
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {error && (
-          <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[16px]">error</span>
+          <div className="bg-surface-raised border-b border-border-control px-spacing-16 py-spacing-8 text-type-body-s text-status-incorrect flex items-center gap-spacing-8">
+            <MaterialIcon name="error" size={24} />
             <span>連線錯誤: {error}</span>
             <button
               onClick={() => window.location.reload()}
-              className="ml-auto text-xs text-red-600 hover:text-red-800 underline"
+              className="ml-auto text-type-caption text-status-incorrect hover:text-status-incorrect underline"
             >
               重新整理
             </button>

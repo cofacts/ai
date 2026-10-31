@@ -51,13 +51,13 @@ export function FeedbackPopoverContent({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <h4 className="font-medium text-sm">Tell us more</h4>
+    <div className="flex flex-col gap-spacing-16">
+      <div className="flex flex-col gap-spacing-8">
+        <h4 className="text-type-body-s">Tell us more</h4>
         {options.map((option) => (
           <label
             key={option}
-            className="flex items-center gap-2 cursor-pointer text-sm"
+            className="flex items-center gap-spacing-8 cursor-pointer text-type-body-s"
           >
             <Checkbox
               checked={selectedOptions.has(option)}
