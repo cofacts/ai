@@ -24,7 +24,7 @@ export function Logo({
       viewBox={`0 0 ${variant === 'symbol' ? 110 : 40} 31`}
       aria-hidden="true"
       focusable="false"
-      className={cn('h-28 w-auto shrink-0', className)}
+      className={cn('h-[28px] w-auto shrink-0', className)}
     >
       {paths.map(([isBrand, d], i) => (
         <path

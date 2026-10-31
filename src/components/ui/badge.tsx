@@ -21,8 +21,8 @@ function Badge({
     props: mergeProps<'span'>(
       {
         className: cn(
-          'inline-flex w-fit shrink-0 items-center gap-4 rounded-full border border-control py-8 pr-12 pl-16 text-ui-m whitespace-nowrap text-primary',
-          !icon && 'pr-16',
+          'inline-flex w-fit shrink-0 items-center gap-spacing-4 rounded-full border border-border-control py-spacing-8 pr-spacing-12 pl-spacing-16 text-type-ui-m whitespace-nowrap text-text-primary',
+          !icon && 'pr-spacing-16',
           className,
         ),
         children: (

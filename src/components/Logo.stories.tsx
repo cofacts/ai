@@ -14,5 +14,7 @@ export const Symbol: Story = {}
 export const Icon: Story = { args: { variant: 'icon' } }
 export const OnDark: Story = {
   args: { onDark: true },
-  decorators: [(Story) => <div className="bg-dark p-16">{Story()}</div>],
+  decorators: [
+    (Story) => <div className="bg-surface-dark p-spacing-16">{Story()}</div>,
+  ],
 }

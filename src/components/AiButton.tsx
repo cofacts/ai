@@ -27,10 +27,11 @@ export function AiButton({
       data-slot="ai-button"
       aria-busy={loading || undefined}
       className={cn(
-        'inline-flex min-h-36 shrink-0 items-center gap-8 rounded-full px-16 py-8 text-ui-m whitespace-nowrap text-primary',
+        'inline-flex min-h-[36px] shrink-0 items-center gap-spacing-8 rounded-full px-spacing-16 py-spacing-8 text-type-ui-m whitespace-nowrap text-text-primary',
         variant === 'default' &&
-          'border-2 border-transparent [background:linear-gradient(var(--surface-base),var(--surface-base))_padding-box,linear-gradient(90deg,var(--brand-500-main),var(--brand-300))_border-box] hover:text-on-accent hover:[background:linear-gradient(var(--surface-accent),var(--surface-accent))_padding-box,linear-gradient(90deg,var(--brand-500-main),var(--brand-300))_border-box]',
-        variant === 'secondary' && 'gap-4 bg-raised hover:bg-selected',
+          'border-2 border-transparent [background:linear-gradient(var(--color-surface-base),var(--color-surface-base))_padding-box,linear-gradient(90deg,var(--brand-500-main),var(--brand-300))_border-box] hover:text-text-on-accent hover:[background:linear-gradient(var(--color-surface-accent),var(--color-surface-accent))_padding-box,linear-gradient(90deg,var(--brand-500-main),var(--brand-300))_border-box]',
+        variant === 'secondary' &&
+          'gap-spacing-4 bg-surface-raised hover:bg-surface-selected',
         'disabled:pointer-events-none disabled:opacity-50',
         className,
       )}

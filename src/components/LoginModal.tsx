@@ -29,19 +29,20 @@ const PROVIDERS: ReadonlyArray<ProviderConfig> = [
     id: 'facebook',
     label: 'Facebook',
     icon: FacebookIcon,
-    className: 'bg-[#1976D2] text-on-line hover:bg-[#155fa3]',
+    className: 'bg-[#1976D2] text-text-on-line hover:bg-[#155fa3]',
   },
   {
     id: 'github',
     label: 'GitHub',
     icon: GithubIcon,
-    className: 'bg-[#2B414D] text-on-line hover:bg-[#1e2f38]',
+    className: 'bg-[#2B414D] text-text-on-line hover:bg-[#1e2f38]',
   },
   {
     id: 'google',
     label: 'Google',
     icon: GoogleIcon,
-    className: 'border border-control bg-base text-primary hover:bg-raised',
+    className:
+      'border border-border-control bg-surface-base text-text-primary hover:bg-surface-raised',
   },
 ]
 
@@ -68,10 +69,10 @@ export function LoginModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle className="text-center text-heading-s">
+        <DialogTitle className="text-center text-type-heading-s">
           登入 / 註冊
         </DialogTitle>
-        <div className="flex flex-col gap-8 pt-8">
+        <div className="flex flex-col gap-spacing-8 pt-spacing-8">
           {PROVIDERS.map((p) => {
             const Icon = p.icon
             return (
@@ -86,21 +87,21 @@ export function LoginModal({
                     },
                   })
                 }
-                className={`relative flex min-h-44 items-center justify-center rounded-5 px-48 py-12 text-ui-m-bold transition-colors ${p.className}`}
+                className={`relative flex min-h-[44px] items-center justify-center rounded-radius-5 px-spacing-48 py-spacing-12 text-type-ui-m-bold transition-colors ${p.className}`}
               >
-                <Icon className="absolute left-12 size-24" />
+                <Icon className="absolute left-spacing-12 size-spacing-24" />
                 <span>{p.label}</span>
               </button>
             )
           })}
         </div>
-        <p className="mt-8 text-caption text-secondary">
+        <p className="mt-spacing-8 text-type-caption text-text-secondary">
           登入即代表您同意{' '}
           <a
             href={TERMS_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-link underline"
+            className="text-text-link underline"
           >
             使用者條款
           </a>
@@ -109,7 +110,7 @@ export function LoginModal({
             href={LICENSE_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-link underline"
+            className="text-text-link underline"
           >
             創用 CC 姓名標示-相同方式分享 4.0
           </a>
@@ -118,7 +119,7 @@ export function LoginModal({
             href={EDITOR_FACEBOOK_GROUP}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-link underline"
+            className="text-text-link underline"
           >
             Cofacts 真的假的訊息回報機器人與查證協作社群
           </a>{' '}

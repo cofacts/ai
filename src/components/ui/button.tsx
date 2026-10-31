@@ -8,32 +8,35 @@ import { cn } from '@/lib/utils'
 
 /** Penpot Base/Button: Size × Style × Icon. */
 const buttonVariants = cva(
-  'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-5 select-none disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
+  'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-radius-5 select-none disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
   {
     variants: {
       variant: {
-        primary: 'bg-accent text-on-accent hover:bg-accent-subtle',
-        outline: 'border border-control text-primary hover:bg-raised',
-        secondary: 'bg-secondary text-on-secondary hover:opacity-90',
-        line: 'bg-line text-on-line hover:opacity-90',
+        primary:
+          'bg-surface-accent text-text-on-accent hover:bg-surface-accent-subtle',
+        outline:
+          'border border-border-control text-text-primary hover:bg-surface-raised',
+        secondary:
+          'bg-surface-secondary text-text-on-secondary hover:opacity-90',
+        line: 'bg-surface-line text-text-on-line hover:opacity-90',
         'on-dark':
-          'border border-on-dark bg-dark text-on-dark hover:bg-dark-raised',
+          'border border-border-on-dark bg-surface-dark text-text-on-dark hover:bg-surface-dark-raised',
       },
       size: {
-        lg: 'min-h-44 gap-4 px-20 py-12 text-ui-l',
-        md: 'min-h-36 gap-4 px-16 py-8 text-ui-m',
-        sm: 'min-h-28 gap-4 px-8 py-4 text-ui-xs',
-        'icon-touch': 'size-32 p-4',
+        lg: 'min-h-[44px] gap-spacing-4 px-spacing-20 py-spacing-12 text-type-ui-l',
+        md: 'min-h-[36px] gap-spacing-4 px-spacing-16 py-spacing-8 text-type-ui-m',
+        sm: 'min-h-[28px] gap-spacing-4 px-spacing-8 py-spacing-4 text-type-ui-xs',
+        'icon-touch': 'size-spacing-32 p-spacing-4',
       },
       /** Buttons with an icon use tighter horizontal padding (Penpot Icon = Front/Back/Both). */
       withIcon: { true: '', false: '' },
       iconOnly: { true: '', false: '' },
     },
     compoundVariants: [
-      { size: 'md', withIcon: true, className: 'px-12' },
-      { size: 'md', iconOnly: true, className: 'size-36 p-8' },
-      { size: 'sm', iconOnly: true, className: 'size-28 p-4' },
-      { size: 'lg', iconOnly: true, className: 'size-44 p-12' },
+      { size: 'md', withIcon: true, className: 'px-spacing-12' },
+      { size: 'md', iconOnly: true, className: 'size-[36px] p-spacing-8' },
+      { size: 'sm', iconOnly: true, className: 'size-[28px] p-spacing-4' },
+      { size: 'lg', iconOnly: true, className: 'size-[44px] p-spacing-12' },
     ],
     defaultVariants: {
       variant: 'primary',

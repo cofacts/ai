@@ -86,12 +86,12 @@ function SessionPage() {
     <>
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {error && (
-          <div className="bg-raised border-b border-control px-16 py-8 text-body-s text-status-incorrect flex items-center gap-8">
+          <div className="bg-surface-raised border-b border-border-control px-spacing-16 py-spacing-8 text-type-body-s text-status-incorrect flex items-center gap-spacing-8">
             <span className="material-symbols-outlined text-[16px]">error</span>
             <span>連線錯誤: {error}</span>
             <button
               onClick={() => window.location.reload()}
-              className="ml-auto text-caption text-status-incorrect hover:text-status-incorrect underline"
+              className="ml-auto text-type-caption text-status-incorrect hover:text-status-incorrect underline"
             >
               重新整理
             </button>

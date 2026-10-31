@@ -34,9 +34,12 @@ export const Disabled: Story = { args: { disabled: true } }
 /** Penpot Size × Style × Icon, side by side. */
 export const Matrix: Story = {
   render: () => (
-    <div className="flex flex-col gap-24">
+    <div className="flex flex-col gap-spacing-24">
       {(['primary', 'outline', 'secondary'] as const).map((variant) => (
-        <div key={variant} className="flex flex-wrap items-center gap-16">
+        <div
+          key={variant}
+          className="flex flex-wrap items-center gap-spacing-16"
+        >
           {(['lg', 'md', 'sm'] as const).map((size) => (
             <Button key={size} variant={variant} size={size}>
               查核闢謠
@@ -62,7 +65,7 @@ export const Matrix: Story = {
       ))}
       <div
         data-surface="dark"
-        className="flex items-center gap-16 bg-dark p-16"
+        className="flex items-center gap-spacing-16 bg-surface-dark p-spacing-16"
       >
         <Button
           variant="on-dark"

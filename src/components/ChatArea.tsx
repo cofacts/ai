@@ -39,7 +39,7 @@ export function ChatArea({
       {/* Messages area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-16 md:p-24 [scrollbar-gutter:stable] pb-0"
+        className="flex-1 overflow-y-auto p-spacing-16 md:p-spacing-24 [scrollbar-gutter:stable] pb-0"
       >
         {messages.map((msg, index) => {
           const prevMsg = messages[index - 1] as ChatMessage | undefined
@@ -75,9 +75,9 @@ export function ChatArea({
         })}
 
         {isStreaming && (
-          <p className="flex items-center gap-8 text-tertiary mt-8">
+          <p className="flex items-center gap-spacing-8 text-text-tertiary mt-spacing-8">
             正在思考中
-            <span className={`${styles.typing} ml-4`}>
+            <span className={`${styles.typing} ml-spacing-4`}>
               <span />
               <span />
               <span />
@@ -86,7 +86,7 @@ export function ChatArea({
         )}
 
         {/* Extra space at the bottom */}
-        <div className="h-16" />
+        <div className="h-spacing-16" />
       </div>
 
       {/* Input area */}

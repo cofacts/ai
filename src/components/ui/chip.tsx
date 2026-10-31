@@ -18,10 +18,10 @@ function Chip({
     <TogglePrimitive
       data-slot="chip"
       className={cn(
-        'inline-flex shrink-0 items-center gap-8 rounded-full border border-control px-16 py-8 text-ui-m whitespace-nowrap text-primary',
-        'hover:bg-raised data-pressed:border-transparent data-pressed:bg-selected',
-        'disabled:pointer-events-none disabled:border-transparent disabled:bg-selected disabled:text-secondary disabled:opacity-50',
-        icon && 'gap-4',
+        'inline-flex shrink-0 items-center gap-spacing-8 rounded-full border border-border-control px-spacing-16 py-spacing-8 text-type-ui-m whitespace-nowrap text-text-primary',
+        'hover:bg-surface-raised data-pressed:border-transparent data-pressed:bg-surface-selected',
+        'disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-selected disabled:text-text-secondary disabled:opacity-50',
+        icon && 'gap-spacing-4',
         className,
       )}
       {...props}
