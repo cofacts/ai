@@ -14,18 +14,18 @@ No match: decide whether it should be a new shared component instead of page cod
 
 ## 2. Bound tokens: read `shape.tokens`
 
-| `shape.tokens` property        | Shape             | Class                                                                   |
-| ------------------------------ | ----------------- | ----------------------------------------------------------------------- |
-| `fill`                         | board / rect      | `bg-{token}`: `bg-surface-raised`, `bg-overlay-scrim`                   |
-| `fill`                         | text              | `text-{token}`: `text-text-primary`, or `text-status-*`                 |
-| `fill`                         | path / svg (icon) | `text-icon-*` (icons use `currentColor`)                                |
-| `strokeColor`                  | any               | `border-{token}`: `border-border-control`                               |
-| `strokeWidth`                  | any               | `border` (1), `border-2`, `border-3`, `border-4`, `border-[0.5px]`      |
-| `paddingTop/Right/Bottom/Left` | flex/grid board   | `pt-N`…; merge equal sides into `p-N` / `px-N` / `py-N`                 |
-| `rowGap` / `columnGap`         | flex board        | `gap-N` along the main axis; grid: `gap-x-N` / `gap-y-N`                |
-| `borderRadius*`                | any               | `rounded-N` (`RADIUS-100` → `rounded-full`); per corner `rounded-tl-N`… |
-| `typography`                   | text              | `text-{drop type-}` — gives size, line height and weight                |
-| `shadow`                       | any               | `shadow-btn`                                                            |
+| `shape.tokens` property        | Shape             | Class                                                                       |
+| ------------------------------ | ----------------- | --------------------------------------------------------------------------- |
+| `fill`                         | board / rect      | `bg-{token}`: `bg-surface-raised`, `bg-overlay-scrim`                       |
+| `fill`                         | text              | `text-{token}`: `text-text-primary`, or `text-status-*`                     |
+| `fill`                         | path / svg (icon) | `text-icon-*` (icons use `currentColor`)                                    |
+| `strokeColor`                  | any               | `border-{token}`: `border-border-control`                                   |
+| `strokeWidth`                  | any               | `border` (1), `border-2`, `border-3`, `border-4`, `border-[0.5px]`          |
+| `paddingTop/Right/Bottom/Left` | flex/grid board   | `pt-{token}`: `pt-spacing-16`; merge equal sides into `p-` / `px-` / `py-`  |
+| `rowGap` / `columnGap`         | flex board        | `gap-{token}` along the main axis; grid: `gap-x-` / `gap-y-`                |
+| `borderRadius*`                | any               | `rounded-{token, lowercase}`: `rounded-radius-5`; per corner `rounded-tl-`… |
+| `typography`                   | text              | `text-{token}`: `text-type-body-m` — gives size, line height and weight     |
+| `shadow`                       | any               | `shadow-btn-shadow`                                                         |
 
 Never read a text shape's `fontSize`, `lineHeight` or `fontWeight` directly; the typography
 token is the source. Weights are only 400 and 700.

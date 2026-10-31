@@ -213,10 +213,22 @@
   --radius-*: initial;
   --shadow-*: initial;
 
-  /* 1 spacing unit = 1px, so spacing-16 → p-16 and a 343px width → w-343. */
+  /* 1 spacing unit = 1px, so a 343px width → w-343. */
   --spacing: 0.0625rem;
 
-  --font-sans: 'Noto Sans TC', system-ui, sans-serif;
+  --font-noto: 'Noto Sans TC', system-ui, sans-serif;
+
+  --spacing-spacing-2: 0.125rem;
+  --spacing-spacing-4: 0.25rem;
+  --spacing-spacing-8: 0.5rem;
+  --spacing-spacing-12: 0.75rem;
+  --spacing-spacing-16: 1rem;
+  --spacing-spacing-20: 1.25rem;
+  --spacing-spacing-24: 1.5rem;
+  --spacing-spacing-32: 2rem;
+  --spacing-spacing-48: 3rem;
+  --spacing-spacing-64: 4rem;
+  --spacing-spacing-120: 7.5rem;
 
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
@@ -270,62 +282,62 @@
   --color-chart-series-2: var(--chart-series-2);
   --color-overlay-scrim: var(--overlay-scrim);
 
-  --text-ui-l: 1.125rem; /* text-ui-l: 18px / 1 / 400 */
-  --text-ui-l--line-height: 1;
-  --text-ui-l--font-weight: 400;
-  --text-ui-l-bold: 1.125rem; /* text-ui-l-bold: 18px / 1 / 700 */
-  --text-ui-l-bold--line-height: 1;
-  --text-ui-l-bold--font-weight: 700;
-  --text-ui-m: 1rem; /* text-ui-m: 16px / 1 / 400 */
-  --text-ui-m--line-height: 1;
-  --text-ui-m--font-weight: 400;
-  --text-ui-m-bold: 1rem; /* text-ui-m-bold: 16px / 1 / 700 */
-  --text-ui-m-bold--line-height: 1;
-  --text-ui-m-bold--font-weight: 700;
-  --text-ui-s: 0.875rem; /* text-ui-s: 14px / 1 / 400 */
-  --text-ui-s--line-height: 1;
-  --text-ui-s--font-weight: 400;
-  --text-ui-s-bold: 0.875rem; /* text-ui-s-bold: 14px / 1 / 700 */
-  --text-ui-s-bold--line-height: 1;
-  --text-ui-s-bold--font-weight: 700;
-  --text-ui-xs: 0.75rem; /* text-ui-xs: 12px / 1 / 400 */
-  --text-ui-xs--line-height: 1;
-  --text-ui-xs--font-weight: 400;
-  --text-ui-xs-bold: 0.75rem; /* text-ui-xs-bold: 12px / 1 / 700 */
-  --text-ui-xs-bold--line-height: 1;
-  --text-ui-xs-bold--font-weight: 700;
-  --text-body-l: 1.125rem; /* text-body-l: 18px / 32px / 400 */
-  --text-body-l--line-height: 2rem;
-  --text-body-l--font-weight: 400;
-  --text-body-m: 1rem; /* text-body-m: 16px / 28px / 400 */
-  --text-body-m--line-height: 1.75rem;
-  --text-body-m--font-weight: 400;
-  --text-body-s: 0.875rem; /* text-body-s: 14px / 24px / 400 */
-  --text-body-s--line-height: 1.5rem;
-  --text-body-s--font-weight: 400;
-  --text-caption: 0.75rem; /* text-caption: 12px / 20px / 400 */
-  --text-caption--line-height: 1.25rem;
-  --text-caption--font-weight: 400;
-  --text-heading-xl: 2.25rem; /* text-heading-xl: 36px / 44px / 700 */
-  --text-heading-xl--line-height: 2.75rem;
-  --text-heading-xl--font-weight: 700;
-  --text-heading-l: 1.75rem; /* text-heading-l: 28px / 36px / 700 */
-  --text-heading-l--line-height: 2.25rem;
-  --text-heading-l--font-weight: 700;
-  --text-heading-m: 1.5rem; /* text-heading-m: 24px / 32px / 700 */
-  --text-heading-m--line-height: 2rem;
-  --text-heading-m--font-weight: 700;
-  --text-heading-s: 1.125rem; /* text-heading-s: 18px / 24px / 700 */
-  --text-heading-s--line-height: 1.5rem;
-  --text-heading-s--font-weight: 700;
-  --text-heading-xs: 1rem; /* text-heading-xs: 16px / 24px / 700 */
-  --text-heading-xs--line-height: 1.5rem;
-  --text-heading-xs--font-weight: 700;
+  --text-type-ui-l: 1.125rem; /* text-type-ui-l: 18px / 1 / 400 */
+  --text-type-ui-l--line-height: 1;
+  --text-type-ui-l--font-weight: 400;
+  --text-type-ui-l-bold: 1.125rem; /* text-type-ui-l-bold: 18px / 1 / 700 */
+  --text-type-ui-l-bold--line-height: 1;
+  --text-type-ui-l-bold--font-weight: 700;
+  --text-type-ui-m: 1rem; /* text-type-ui-m: 16px / 1 / 400 */
+  --text-type-ui-m--line-height: 1;
+  --text-type-ui-m--font-weight: 400;
+  --text-type-ui-m-bold: 1rem; /* text-type-ui-m-bold: 16px / 1 / 700 */
+  --text-type-ui-m-bold--line-height: 1;
+  --text-type-ui-m-bold--font-weight: 700;
+  --text-type-ui-s: 0.875rem; /* text-type-ui-s: 14px / 1 / 400 */
+  --text-type-ui-s--line-height: 1;
+  --text-type-ui-s--font-weight: 400;
+  --text-type-ui-s-bold: 0.875rem; /* text-type-ui-s-bold: 14px / 1 / 700 */
+  --text-type-ui-s-bold--line-height: 1;
+  --text-type-ui-s-bold--font-weight: 700;
+  --text-type-ui-xs: 0.75rem; /* text-type-ui-xs: 12px / 1 / 400 */
+  --text-type-ui-xs--line-height: 1;
+  --text-type-ui-xs--font-weight: 400;
+  --text-type-ui-xs-bold: 0.75rem; /* text-type-ui-xs-bold: 12px / 1 / 700 */
+  --text-type-ui-xs-bold--line-height: 1;
+  --text-type-ui-xs-bold--font-weight: 700;
+  --text-type-body-l: 1.125rem; /* text-type-body-l: 18px / 32px / 400 */
+  --text-type-body-l--line-height: 2rem;
+  --text-type-body-l--font-weight: 400;
+  --text-type-body-m: 1rem; /* text-type-body-m: 16px / 28px / 400 */
+  --text-type-body-m--line-height: 1.75rem;
+  --text-type-body-m--font-weight: 400;
+  --text-type-body-s: 0.875rem; /* text-type-body-s: 14px / 24px / 400 */
+  --text-type-body-s--line-height: 1.5rem;
+  --text-type-body-s--font-weight: 400;
+  --text-type-caption: 0.75rem; /* text-type-caption: 12px / 20px / 400 */
+  --text-type-caption--line-height: 1.25rem;
+  --text-type-caption--font-weight: 400;
+  --text-type-heading-xl: 2.25rem; /* text-type-heading-xl: 36px / 44px / 700 */
+  --text-type-heading-xl--line-height: 2.75rem;
+  --text-type-heading-xl--font-weight: 700;
+  --text-type-heading-l: 1.75rem; /* text-type-heading-l: 28px / 36px / 700 */
+  --text-type-heading-l--line-height: 2.25rem;
+  --text-type-heading-l--font-weight: 700;
+  --text-type-heading-m: 1.5rem; /* text-type-heading-m: 24px / 32px / 700 */
+  --text-type-heading-m--line-height: 2rem;
+  --text-type-heading-m--font-weight: 700;
+  --text-type-heading-s: 1.125rem; /* text-type-heading-s: 18px / 24px / 700 */
+  --text-type-heading-s--line-height: 1.5rem;
+  --text-type-heading-s--font-weight: 700;
+  --text-type-heading-xs: 1rem; /* text-type-heading-xs: 16px / 24px / 700 */
+  --text-type-heading-xs--line-height: 1.5rem;
+  --text-type-heading-xs--font-weight: 700;
 
-  --radius-2: 2px;
-  --radius-5: 5px;
-  --radius-10: 10px;
-  --radius-full: 9999px;
+  --radius-radius-2: 2px;
+  --radius-radius-5: 5px;
+  --radius-radius-10: 10px;
+  --radius-radius-100: 100px;
 
-  --shadow-btn: 2px 2px 6px 0px rgba(0, 0, 0, 0.07);
+  --shadow-btn-shadow: 2px 2px 6px 0px rgba(0, 0, 0, 0.07);
 }

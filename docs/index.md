@@ -117,7 +117,8 @@ is only the overview.
   `src/styles/tokens.css` (CSS variables + Tailwind `@theme`), `src/styles/tokens.generated.ts`
   (names for `cn()`'s tailwind-merge, lists for Storybook).
   CI runs `pnpm tokens:check`. Every color token is a Tailwind color named like the
-  Penpot token, so any color utility takes it (`bg-surface-raised`, `text-text-primary`); typography is `type-body-m` → `text-body-m`; spacing is 1px per unit;
+  Penpot token, so any color utility takes it (`bg-surface-raised`, `text-text-primary`); typography, spacing
+  and radius keep their names too (`text-type-body-m`, `p-spacing-16`, `rounded-radius-5`);
   Tailwind's default palette, font sizes, radii and shadows are switched off.
 - **Themes:** each semantic token is `light-dark(light, dark)`; `color-scheme` follows
   `prefers-color-scheme` unless `<html data-theme>` forces one. Components never use `dark:`.

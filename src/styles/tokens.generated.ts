@@ -56,32 +56,48 @@ export const twMergeTheme = {
     "overlay-scrim"
   ],
   "text": [
-    "ui-l",
-    "ui-l-bold",
-    "ui-m",
-    "ui-m-bold",
-    "ui-s",
-    "ui-s-bold",
-    "ui-xs",
-    "ui-xs-bold",
-    "body-l",
-    "body-m",
-    "body-s",
-    "caption",
-    "heading-xl",
-    "heading-l",
-    "heading-m",
-    "heading-s",
-    "heading-xs"
+    "type-ui-l",
+    "type-ui-l-bold",
+    "type-ui-m",
+    "type-ui-m-bold",
+    "type-ui-s",
+    "type-ui-s-bold",
+    "type-ui-xs",
+    "type-ui-xs-bold",
+    "type-body-l",
+    "type-body-m",
+    "type-body-s",
+    "type-caption",
+    "type-heading-xl",
+    "type-heading-l",
+    "type-heading-m",
+    "type-heading-s",
+    "type-heading-xs"
   ],
   "radius": [
-    "2",
-    "5",
-    "10",
-    "full"
+    "radius-2",
+    "radius-5",
+    "radius-10",
+    "radius-100"
+  ],
+  "spacing": [
+    "spacing-2",
+    "spacing-4",
+    "spacing-8",
+    "spacing-12",
+    "spacing-16",
+    "spacing-20",
+    "spacing-24",
+    "spacing-32",
+    "spacing-48",
+    "spacing-64",
+    "spacing-120"
+  ],
+  "font": [
+    "noto"
   ],
   "shadow": [
-    "btn"
+    "btn-shadow"
   ]
 }
 
@@ -398,119 +414,119 @@ export const designTokens = {
   "typography": [
     {
       "name": "type-ui-l",
-      "className": "text-ui-l",
+      "className": "text-type-ui-l",
       "size": 18,
       "weight": 400,
       "lineHeight": "1"
     },
     {
       "name": "type-ui-l-bold",
-      "className": "text-ui-l-bold",
+      "className": "text-type-ui-l-bold",
       "size": 18,
       "weight": 700,
       "lineHeight": "1"
     },
     {
       "name": "type-ui-m",
-      "className": "text-ui-m",
+      "className": "text-type-ui-m",
       "size": 16,
       "weight": 400,
       "lineHeight": "1"
     },
     {
       "name": "type-ui-m-bold",
-      "className": "text-ui-m-bold",
+      "className": "text-type-ui-m-bold",
       "size": 16,
       "weight": 700,
       "lineHeight": "1"
     },
     {
       "name": "type-ui-s",
-      "className": "text-ui-s",
+      "className": "text-type-ui-s",
       "size": 14,
       "weight": 400,
       "lineHeight": "1"
     },
     {
       "name": "type-ui-s-bold",
-      "className": "text-ui-s-bold",
+      "className": "text-type-ui-s-bold",
       "size": 14,
       "weight": 700,
       "lineHeight": "1"
     },
     {
       "name": "type-ui-xs",
-      "className": "text-ui-xs",
+      "className": "text-type-ui-xs",
       "size": 12,
       "weight": 400,
       "lineHeight": "1"
     },
     {
       "name": "type-ui-xs-bold",
-      "className": "text-ui-xs-bold",
+      "className": "text-type-ui-xs-bold",
       "size": 12,
       "weight": 700,
       "lineHeight": "1"
     },
     {
       "name": "type-body-l",
-      "className": "text-body-l",
+      "className": "text-type-body-l",
       "size": 18,
       "weight": 400,
       "lineHeight": "32px"
     },
     {
       "name": "type-body-m",
-      "className": "text-body-m",
+      "className": "text-type-body-m",
       "size": 16,
       "weight": 400,
       "lineHeight": "28px"
     },
     {
       "name": "type-body-s",
-      "className": "text-body-s",
+      "className": "text-type-body-s",
       "size": 14,
       "weight": 400,
       "lineHeight": "24px"
     },
     {
       "name": "type-caption",
-      "className": "text-caption",
+      "className": "text-type-caption",
       "size": 12,
       "weight": 400,
       "lineHeight": "20px"
     },
     {
       "name": "type-heading-xl",
-      "className": "text-heading-xl",
+      "className": "text-type-heading-xl",
       "size": 36,
       "weight": 700,
       "lineHeight": "44px"
     },
     {
       "name": "type-heading-l",
-      "className": "text-heading-l",
+      "className": "text-type-heading-l",
       "size": 28,
       "weight": 700,
       "lineHeight": "36px"
     },
     {
       "name": "type-heading-m",
-      "className": "text-heading-m",
+      "className": "text-type-heading-m",
       "size": 24,
       "weight": 700,
       "lineHeight": "32px"
     },
     {
       "name": "type-heading-s",
-      "className": "text-heading-s",
+      "className": "text-type-heading-s",
       "size": 18,
       "weight": 700,
       "lineHeight": "24px"
     },
     {
       "name": "type-heading-xs",
-      "className": "text-heading-xs",
+      "className": "text-type-heading-xs",
       "size": 16,
       "weight": 700,
       "lineHeight": "24px"
@@ -519,81 +535,92 @@ export const designTokens = {
   "spacing": [
     {
       "name": "spacing-2",
-      "value": 2
+      "value": 2,
+      "className": "p-spacing-2"
     },
     {
       "name": "spacing-4",
-      "value": 4
+      "value": 4,
+      "className": "p-spacing-4"
     },
     {
       "name": "spacing-8",
-      "value": 8
+      "value": 8,
+      "className": "p-spacing-8"
     },
     {
       "name": "spacing-12",
-      "value": 12
+      "value": 12,
+      "className": "p-spacing-12"
     },
     {
       "name": "spacing-16",
-      "value": 16
+      "value": 16,
+      "className": "p-spacing-16"
     },
     {
       "name": "spacing-20",
-      "value": 20
+      "value": 20,
+      "className": "p-spacing-20"
     },
     {
       "name": "spacing-24",
-      "value": 24
+      "value": 24,
+      "className": "p-spacing-24"
     },
     {
       "name": "spacing-32",
-      "value": 32
+      "value": 32,
+      "className": "p-spacing-32"
     },
     {
       "name": "spacing-48",
-      "value": 48
+      "value": 48,
+      "className": "p-spacing-48"
     },
     {
       "name": "spacing-64",
-      "value": 64
+      "value": 64,
+      "className": "p-spacing-64"
     },
     {
       "name": "spacing-120",
-      "value": 120
+      "value": 120,
+      "className": "p-spacing-120"
     }
   ],
   "radius": [
     {
       "name": "RADIUS-2",
-      "key": "2",
+      "key": "radius-2",
       "value": 2,
-      "className": "rounded-2"
+      "className": "rounded-radius-2"
     },
     {
       "name": "RADIUS-5",
-      "key": "5",
+      "key": "radius-5",
       "value": 5,
-      "className": "rounded-5"
+      "className": "rounded-radius-5"
     },
     {
       "name": "RADIUS-10",
-      "key": "10",
+      "key": "radius-10",
       "value": 10,
-      "className": "rounded-10"
+      "className": "rounded-radius-10"
     },
     {
       "name": "RADIUS-100",
-      "key": "full",
+      "key": "radius-100",
       "value": 100,
-      "className": "rounded-full"
+      "className": "rounded-radius-100"
     }
   ],
   "shadows": [
     {
       "name": "btn-shadow",
-      "key": "btn",
+      "key": "btn-shadow",
       "css": "2px 2px 6px 0px rgba(0, 0, 0, 0.07)",
-      "className": "shadow-btn"
+      "className": "shadow-btn-shadow"
     }
   ]
 } as const

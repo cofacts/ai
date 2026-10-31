@@ -4,16 +4,18 @@ import { cn } from '../utils'
 
 describe('cn', () => {
   it('keeps a typography token next to a text color', () => {
-    expect(cn('text-body-m', 'text-text-primary')).toBe(
-      'text-body-m text-text-primary',
+    expect(cn('text-type-body-m', 'text-text-primary')).toBe(
+      'text-type-body-m text-text-primary',
     )
-    expect(cn('text-ui-s-bold', 'text-text-on-accent')).toBe(
-      'text-ui-s-bold text-text-on-accent',
+    expect(cn('text-type-ui-s-bold', 'text-text-on-accent')).toBe(
+      'text-type-ui-s-bold text-text-on-accent',
     )
   })
 
   it('lets a later typography token override an earlier one', () => {
-    expect(cn('text-heading-xl', 'text-heading-m')).toBe('text-heading-m')
+    expect(cn('text-type-heading-xl', 'text-type-heading-m')).toBe(
+      'text-type-heading-m',
+    )
   })
 
   it('lets a later text color override an earlier one', () => {
@@ -23,8 +25,8 @@ describe('cn', () => {
   })
 
   it('merges custom radius and shadow tokens', () => {
-    expect(cn('rounded-5', 'rounded-full')).toBe('rounded-full')
-    expect(cn('shadow-btn', 'shadow-none')).toBe('shadow-none')
+    expect(cn('rounded-radius-5', 'rounded-full')).toBe('rounded-full')
+    expect(cn('shadow-btn-shadow', 'shadow-none')).toBe('shadow-none')
   })
 
   it('merges surface colors', () => {
@@ -42,8 +44,8 @@ describe('cn', () => {
       'border-status-incorrect',
     )
     expect(cn('bg-surface-raised', 'bg-border-accent')).toBe('bg-border-accent')
-    expect(cn('text-body-m', 'text-status-correct')).toBe(
-      'text-body-m text-status-correct',
+    expect(cn('text-type-body-m', 'text-status-correct')).toBe(
+      'text-type-body-m text-status-correct',
     )
   })
 
