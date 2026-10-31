@@ -1,8 +1,8 @@
 import { mergeProps } from '@base-ui/react/merge-props'
 import { useRender } from '@base-ui/react/use-render'
 
-import type { IconName } from '@/components/ui/icon'
-import { Icon } from '@/components/ui/icon'
+import type { MaterialSymbol } from '@/components/icons/material-symbols'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
@@ -15,7 +15,7 @@ function Badge({
   children,
   render,
   ...props
-}: useRender.ComponentProps<'span'> & { icon?: IconName }) {
+}: useRender.ComponentProps<'span'> & { icon?: MaterialSymbol }) {
   return useRender({
     defaultTagName: 'span',
     props: mergeProps<'span'>(
@@ -28,7 +28,7 @@ function Badge({
         children: (
           <>
             {children}
-            {icon && <Icon name={icon} />}
+            {icon && <MaterialIcon name={icon} />}
           </>
         ),
       },

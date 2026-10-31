@@ -11,7 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Icon } from '@/components/ui/icon'
+import { BrandIcon } from '@/components/icons/BrandIcon'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
@@ -160,7 +161,7 @@ export function SiteNav({
                   'hidden min-h-[40px] lg:inline-flex',
                 )}
               >
-                <Icon name="flag_2" filled />
+                <MaterialIcon name="flag_2" filled />
                 {NAV_LINKS.report.label}
               </a>
               <div className="hidden lg:block">
@@ -238,7 +239,7 @@ export function SiteNav({
                 'w-full',
               )}
             >
-              <Icon name="flag_2" filled />
+              <MaterialIcon name="flag_2" filled />
               {NAV_LINKS.report.label}
             </a>
             <a
@@ -250,7 +251,7 @@ export function SiteNav({
                 'w-full',
               )}
             >
-              <Icon name="line" size={22} />
+              <BrandIcon name="line" size={22} />
               {NAV_LINKS.line.label}
             </a>
             {user ? (
@@ -379,7 +380,7 @@ function SearchForm({ onClose }: { onClose: () => void }) {
     >
       <label className="relative flex-1">
         <span className="sr-only">搜尋</span>
-        <Icon
+        <MaterialIcon
           name="search"
           className="pointer-events-none absolute top-1/2 left-spacing-12 -translate-y-1/2 text-icon-muted"
         />
@@ -409,7 +410,7 @@ function LineMark() {
       className="flex size-spacing-20 items-center justify-center rounded-radius-5 bg-surface-line text-text-on-line"
       aria-hidden="true"
     >
-      <Icon name="line" size={16} />
+      <BrandIcon name="line" size={16} />
     </span>
   )
 }

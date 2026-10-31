@@ -1,5 +1,5 @@
-import { StatusIcon } from './StatusIcon'
-import type { ReplyType } from './StatusIcon'
+import { StatusIcon } from './icons/StatusIcon'
+import type { ReplyType } from './icons/StatusIcon'
 import { cn } from '@/lib/utils'
 
 export type { ReplyType }

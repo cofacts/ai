@@ -1,7 +1,7 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button'
 
-import type { IconName } from '@/components/ui/icon'
-import { Icon } from '@/components/ui/icon'
+import type { MaterialSymbol } from '@/components/icons/material-symbols'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
@@ -17,7 +17,7 @@ export function AiButton({
   children,
   ...props
 }: ButtonPrimitive.Props & {
-  icon?: IconName
+  icon?: MaterialSymbol
   loading?: boolean
   /** secondary = grey pill without the gradient border (Penpot State = Secondary). */
   variant?: 'default' | 'secondary'
@@ -38,7 +38,7 @@ export function AiButton({
       {...props}
     >
       {icon && (
-        <Icon
+        <MaterialIcon
           name={icon}
           className={cn(loading && 'motion-safe:animate-spin')}
         />
