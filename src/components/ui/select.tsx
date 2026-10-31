@@ -10,7 +10,7 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
     <SelectPrimitive.Group
       data-slot="select-group"
-      className={cn('scroll-my-spacing-4 p-spacing-4', className)}
+      className={cn('flex flex-col gap-spacing-4', className)}
       {...props}
     />
   )
@@ -88,7 +88,9 @@ function SelectContent({
           {...props}
         >
           <SelectScrollUpButton />
-          <SelectPrimitive.List>{children}</SelectPrimitive.List>
+          <SelectPrimitive.List className="flex flex-col gap-spacing-4">
+            {children}
+          </SelectPrimitive.List>
           <SelectScrollDownButton />
         </SelectPrimitive.Popup>
       </SelectPrimitive.Positioner>
@@ -104,7 +106,7 @@ function SelectLabel({
     <SelectPrimitive.GroupLabel
       data-slot="select-label"
       className={cn(
-        'px-spacing-12 pt-spacing-4 pb-spacing-8 text-type-ui-m text-text-tertiary',
+        'px-spacing-12 text-type-ui-m text-text-tertiary',
         className,
       )}
       {...props}
@@ -112,6 +114,10 @@ function SelectLabel({
   )
 }
 
+/**
+ * Focus is the highlighted item's yellow background instead of the global ring: the popup scrolls,
+ * so it would clip a ring that extends 8px past the item. The selected item is marked by the check.
+ */
 function SelectItem({
   className,
   children,
@@ -121,7 +127,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        'relative flex w-full cursor-default items-center gap-spacing-8 rounded-radius-2 py-spacing-4 pr-[36px] pl-spacing-12 text-type-ui-m text-text-primary outline-hidden select-none data-highlighted:bg-surface-raised data-selected:bg-surface-accent-subtle data-selected:text-text-on-accent data-disabled:pointer-events-none data-disabled:opacity-50',
+        'relative flex w-full cursor-default scroll-my-spacing-4 items-center gap-spacing-8 rounded-radius-5 py-spacing-4 pr-[36px] pl-spacing-12 text-type-ui-m text-text-primary outline-hidden select-none focus-visible:[box-shadow:none] data-highlighted:bg-surface-accent-subtle data-highlighted:text-text-on-accent data-disabled:pointer-events-none data-disabled:opacity-50',
         className,
       )}
       {...props}
