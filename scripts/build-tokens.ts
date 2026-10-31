@@ -6,12 +6,13 @@
  *
  * Outputs:
  *   - src/styles/tokens.css            CSS variables (light / dark) + Tailwind @theme
- *   - src/styles/tokens.generated.ts   twMergeTheme for cn(), token lists for Storybook
+ *   - src/styles/tokens.generated.ts   twMergeTheme for cn()
  *
- * Naming rule: drop the Penpot role prefix to get the class.
- *   surface-raised → bg-raised, text-secondary → text-secondary, border-control → border-control,
- *   icon-muted → text-icon-muted, status-incorrect → text-status-incorrect / bg-status-incorrect,
- *   type-body-m → text-body-m, spacing-16 → p-16 (1 unit = 1px), RADIUS-5 → rounded-5.
+ * Naming rule: every token keeps its Penpot name; the class is the Tailwind utility + that name.
+ *   surface-raised → bg-surface-raised, text-primary → text-text-primary,
+ *   border-control → border-border-control (any color utility takes any color token),
+ *   type-body-m → text-type-body-m, spacing-16 → p-spacing-16, RADIUS-5 → rounded-radius-5,
+ *   btn-shadow → shadow-btn-shadow, noto → font-noto.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -72,10 +73,6 @@ const semanticValue = (value: string) => {
   const name = ref(value)
   return name ? `var(--${name})` : cssColor(value)
 }
-const resolveHex = (value: string): string => {
-  const name = ref(value)
-  return name ? String(get(Global, name).$value) : value
-}
 /** A numeric token value, following `{name}` references into Global. Throws on anything else. */
 const num = (token: string, value: unknown): number => {
   const name = typeof value === 'string' ? ref(value) : null
@@ -86,55 +83,6 @@ const num = (token: string, value: unknown): number => {
 }
 
 // ---- Semantic colors → Tailwind namespaces -------------------------------------------------
-
-type Utility = { namespace: string; className: string }
-
-/** Which Tailwind utilities a semantic color token becomes. Empty = CSS variable only. */
-function utilitiesFor(name: string): Array<Utility> {
-  const [prefix, ...rest] = name.split('-')
-  const suffix = rest.join('-')
-  switch (prefix) {
-    case 'surface':
-      return [
-        {
-          namespace: `--background-color-${suffix}`,
-          className: `bg-${suffix}`,
-        },
-      ]
-    case 'overlay':
-      return [
-        {
-          namespace: `--background-color-${suffix}`,
-          className: `bg-${suffix}`,
-        },
-      ]
-    case 'text':
-      return [
-        { namespace: `--text-color-${suffix}`, className: `text-${suffix}` },
-      ]
-    case 'icon':
-      return [{ namespace: `--text-color-${name}`, className: `text-${name}` }]
-    case 'status':
-      return [
-        { namespace: `--text-color-${name}`, className: `text-${name}` },
-        { namespace: `--background-color-${name}`, className: `bg-${name}` },
-      ]
-    case 'border':
-      // The focus ring colors are used only by the global :focus-visible rule.
-      if (suffix === 'focus' || suffix === 'focus-outer') return []
-      return [
-        {
-          namespace: `--border-color-${suffix}`,
-          className: `border-${suffix}`,
-        },
-      ]
-    case 'chart':
-      // Data colors: read var(--chart-series-N) in chart code, never a UI utility.
-      return []
-    default:
-      throw new Error(`Unknown semantic token prefix: ${name}`)
-  }
-}
 
 const semanticNames = Object.keys(Light)
 for (const name of semanticNames) {
@@ -162,7 +110,6 @@ const typography = byType('typography').map(([name, t]) => {
   const lineHeightPx = ratio === 1 ? null : Math.round(size * ratio)
   return {
     name,
-    className: `text-${name.replace(/^type-/, '')}`,
     size,
     weight,
     lineHeight: lineHeightPx === null ? '1' : px(lineHeightPx),
@@ -178,28 +125,31 @@ spacing.sort((a, b) => a.value - b.value)
 
 const radius = byType('borderRadius').map(([name, t]) => {
   const value = num(name, t.$value)
-  const key = value >= 100 ? 'full' : String(value)
-  return { name, key, value, className: `rounded-${key}` }
+  // Tailwind theme keys are lowercase: RADIUS-5 → rounded-radius-5.
+  const key = name.toLowerCase()
+  return { name, key, value }
 })
 radius.sort((a, b) => a.value - b.value)
 
 const shadows = byType('shadow').map(([name, t]) => {
-  const key = name.replace(/-shadow$/, '')
+  const key = name
   const css = (t.$value as Array<Shadow>)
     .map(
       (s) =>
         `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.spread}px ${s.color}`,
     )
     .join(', ')
-  return { name, key, css, className: `shadow-${key}` }
+  return { name, key, css }
 })
 
-const fontFamilies = byType('fontFamilies')[0]?.[1].$value
-const fontFamily = Array.isArray(fontFamilies) ? fontFamilies[0] : fontFamilies
-if (typeof fontFamily !== 'string' || !fontFamily)
-  throw new Error(
-    `fontFamilies: expected a font name, got ${JSON.stringify(fontFamilies)}`,
-  )
+const fonts = byType('fontFamilies').map(([name, t]) => {
+  const family = Array.isArray(t.$value) ? t.$value[0] : t.$value
+  if (typeof family !== 'string' || !family)
+    throw new Error(
+      `${name}: expected a font name, got ${JSON.stringify(t.$value)}`,
+    )
+  return { name, family }
+})
 
 const primitives = byType('color')
 
@@ -207,13 +157,16 @@ const primitives = byType('color')
 
 const header = `/* ⚙️ Generated from ${SOURCE} by scripts/build-tokens.ts — do not edit. Run \`pnpm tokens\`. */`
 
-/** One line per semantic token: a plain value if it's fixed, otherwise light-dark(light, dark). */
-const semanticLine = (name: string) => {
+/**
+ * One Tailwind color per semantic token, named exactly like the Penpot token: a plain value if
+ * it's fixed, otherwise light-dark(light, dark).
+ */
+const colorLine = (name: string) => {
   const light = semanticValue(String(get(Light, name).$value))
   const dark = semanticValue(String(get(Dark, name).$value))
   return isFixed(name)
-    ? `  --${name}: ${light};`
-    : `  --${name}: light-dark(${light}, ${dark});`
+    ? `  --color-${name}: ${light};`
+    : `  --color-${name}: light-dark(${light}, ${dark});`
 }
 
 /** For browsers without light-dark(): the light or dark value of each token that flips. */
@@ -222,31 +175,24 @@ const fallbackLines = (theme: TokenSet, indent: string) =>
     .filter((name) => !isFixed(name))
     .map(
       (name) =>
-        `${indent}--${name}: ${semanticValue(String(get(theme, name).$value))};`,
+        `${indent}--color-${name}: ${semanticValue(String(get(theme, name).$value))};`,
     )
     .join('\n')
 
-const themeLines: Array<string> = []
-for (const name of semanticNames) {
-  for (const u of utilitiesFor(name))
-    themeLines.push(`  ${u.namespace}: var(--${name}); /* ${u.className} */`)
-}
-
 const css = `${header}
 
-/* Primitive colors: referenced only by the semantic tokens below. Not registered as utilities (R3). */
+/* Primitive colors: referenced only by the semantic colors in @theme. Not registered as utilities (R3). */
 :root {
 ${primitives.map(([n, t]) => `  --${n}: ${String(t.$value)};`).join('\n')}
 }
 
 /*
- * Semantic colors. Each token holds both its Light and Dark value; light-dark() picks one from
+ * Each semantic color in @theme holds both its Light and Dark value; light-dark() picks one from
  * color-scheme, which follows the OS setting (prefers-color-scheme) unless <html data-theme>
  * forces it. Components never pick light or dark themselves.
  */
 :root {
   color-scheme: light dark;
-${semanticNames.map(semanticLine).join('\n')}
 }
 
 [data-theme='light'] {
@@ -277,31 +223,37 @@ ${fallbackLines(Dark, '    ')}
   }
 }
 
-@theme {
+/* static: emit every variable, including those read only from JS (var(--color-…) in a style prop). */
+@theme static {
   /* Only Cofacts tokens exist as utilities. */
   --color-*: initial;
   --text-*: initial;
   --radius-*: initial;
   --shadow-*: initial;
-  --font-*: initial;
 
-  /* 1 spacing unit = 1px, so spacing-16 → p-16 and a 343px width → w-343. */
-  --spacing: 0.0625rem;
+  /*
+   * No numeric spacing scale: only spacing tokens (p-spacing-16), 0 (p-0, inset-0) or arbitrary
+   * values (w-[343px]).
+   */
+  --spacing-*: initial;
+  --spacing-0: 0px;
 
-  --font-sans: '${fontFamily}', system-ui, sans-serif;
+${fonts.map((f) => `  --font-${f.name}: '${f.family}', system-ui, sans-serif;`).join('\n')}
 
-${themeLines.join('\n')}
+${spacing.map((sp) => `  --spacing-${sp.name}: ${px(sp.value)};`).join('\n')}
+
+${semanticNames.map(colorLine).join('\n')}
 
 ${typography
   .map(
     (t) =>
-      `  --text-${t.className.slice(5)}: ${px(t.size)}; /* ${t.className}: ${t.size}px / ${t.lineHeightLabel} / ${t.weight} */\n` +
-      `  --text-${t.className.slice(5)}--line-height: ${t.lineHeight};\n` +
-      `  --text-${t.className.slice(5)}--font-weight: ${t.weight};`,
+      `  --text-${t.name}: ${px(t.size)}; /* text-${t.name}: ${t.size}px / ${t.lineHeightLabel} / ${t.weight} */\n` +
+      `  --text-${t.name}--line-height: ${t.lineHeight};\n` +
+      `  --text-${t.name}--font-weight: ${t.weight};`,
   )
   .join('\n')}
 
-${radius.map((r) => `  --radius-${r.key}: ${r.key === 'full' ? '9999px' : `${r.value}px`};`).join('\n')}
+${radius.map((r) => `  --radius-${r.key}: ${r.value}px;`).join('\n')}
 
 ${shadows.map((s) => `  --shadow-${s.key}: ${s.css};`).join('\n')}
 }
@@ -309,61 +261,20 @@ ${shadows.map((s) => `  --shadow-${s.key}: ${s.css};`).join('\n')}
 
 // ---- tokens.generated.ts -------------------------------------------------------------------
 
-/** Color class names per utility prefix: `{ text: ['primary', …], bg: [...], border: [...] }`. */
-const colorClasses: Record<string, Array<string>> = {}
-for (const name of semanticNames) {
-  for (const { className } of utilitiesFor(name)) {
-    const [, prefix = '', suffix = ''] = /^([a-z]+)-(.+)$/.exec(className) ?? []
-    ;(colorClasses[prefix] ??= []).push(suffix)
-  }
-}
-
-const semanticColors = semanticNames.map((name) => ({
-  name,
-  classes: utilitiesFor(name).map((u) => u.className),
-  light: resolveHex(String(get(Light, name).$value)),
-  dark: resolveHex(String(get(Dark, name).$value)),
-  fixed: isFixed(name),
-}))
-
 const ts = `// ⚙️ Generated from ${SOURCE} by scripts/build-tokens.ts — do not edit. Run \`pnpm tokens\`.
 
-/**
- * Custom class names for tailwind-merge, so cn() merges Cofacts utilities correctly.
- * Colors are listed per prefix: \`bg-base\` is a color, \`text-base\` is not.
- */
-export const twMergeColors = ${JSON.stringify(colorClasses, null, 2)}
-
+/** Custom theme values for tailwind-merge, so cn() merges Cofacts utilities correctly. */
 export const twMergeTheme = ${JSON.stringify(
   {
-    text: typography.map((t) => t.className.slice(5)),
+    text: typography.map((t) => t.name),
     radius: radius.map((r) => r.key),
+    spacing: spacing.map((sp) => sp.name),
+    font: fonts.map((f) => f.name),
     shadow: shadows.map((s) => s.key),
   },
   null,
   2,
 )}
-
-/** Token lists for the Storybook foundations page. */
-export const designTokens = ${JSON.stringify(
-  {
-    semanticColors,
-    typography: typography.map(
-      ({ name, className, size, weight, lineHeightLabel }) => ({
-        name,
-        className,
-        size,
-        weight,
-        lineHeight: lineHeightLabel,
-      }),
-    ),
-    spacing,
-    radius,
-    shadows,
-  },
-  null,
-  2,
-)} as const
 `
 
 // ---- write / check -------------------------------------------------------------------------
