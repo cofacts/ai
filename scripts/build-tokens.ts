@@ -281,7 +281,6 @@ const ts = `// ⚙️ Generated from ${SOURCE} by scripts/build-tokens.ts — do
 /** Custom theme values for tailwind-merge, so cn() merges Cofacts utilities correctly. */
 export const twMergeTheme = ${JSON.stringify(
   {
-    color: semanticNames,
     text: typography.map((t) => t.className.slice(5)),
     radius: radius.map((r) => r.key),
     spacing: spacing.map((sp) => sp.name),
