@@ -160,7 +160,7 @@ export function SiteNav({
                   'hidden min-h-[40px] lg:inline-flex',
                 )}
               >
-                <Icon name="flag" />
+                <Icon name="flag_2" filled />
                 {NAV_LINKS.report.label}
               </a>
               <div className="hidden lg:block">
@@ -238,7 +238,7 @@ export function SiteNav({
                 'w-full',
               )}
             >
-              <Icon name="flag" />
+              <Icon name="flag_2" filled />
               {NAV_LINKS.report.label}
             </a>
             <a
@@ -331,7 +331,7 @@ function AccountControl({
     return (
       <Button
         variant="secondary"
-        iconStart="account-circle"
+        iconStart="account_circle"
         className="min-h-[40px]"
         onClick={onLogin}
       >

@@ -9,6 +9,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import appCss from '../styles/global.css?url'
 import { AuthProvider } from '@/lib/auth'
 import { getCurrentUserServerFn } from '@/server/me.functions'
+import { materialSymbolsHref } from '@/components/ui/material-symbols'
 
 export const Route = createRootRoute({
   loader: async () => ({ serverLoadedUser: await getCurrentUserServerFn() }),
@@ -50,7 +51,7 @@ export const Route = createRootRoute({
       },
       {
         rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap',
+        href: materialSymbolsHref,
       },
     ],
   }),

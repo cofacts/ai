@@ -7,6 +7,7 @@ import {
   getFeedbackForTrace,
   submitFeedbackForTrace,
 } from '@/server/feedbackScores.functions'
+import { Icon } from '@/components/ui/icon'
 
 interface FeedbackButtonsProps {
   traceId: string
@@ -71,9 +72,7 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
                 : 'text-text-tertiary hover:bg-surface-raised hover:text-text-secondary'
             }`}
           >
-            <span className="material-symbols-outlined text-[18px]">
-              thumb_up
-            </span>
+            <Icon name="thumb_up" size={24} />
           </PopoverTrigger>
           <PopoverTrigger
             onClick={() => handleFeedback(-1)}
@@ -85,9 +84,7 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
                 : 'text-text-tertiary hover:text-text-secondary'
             }`}
           >
-            <span className="material-symbols-outlined text-[18px]">
-              thumb_down
-            </span>
+            <Icon name="thumb_down" size={24} />
           </PopoverTrigger>
         </div>
         <PopoverContent align="start">

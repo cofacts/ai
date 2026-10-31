@@ -1,3 +1,5 @@
+import { expect } from 'storybook/test'
+
 import { Checkbox } from './checkbox'
 import {
   Field,
@@ -23,7 +25,13 @@ import { Switch } from './switch'
 import { Textarea } from './textarea'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
-/** Penpot Base/Input, Checkbox, Switch, RadioGroup, Select. */
+/**
+ * Penpot Base/Input, Checkbox, Switch, RadioGroup, Select.
+ *
+ * The play functions check the a11y guide's rule that a control's title is bound with <label>:
+ * Base UI renders a role element next to a hidden <input>, so the role element itself must be
+ * labelable for the wrapping <label> to name it, and clicking the text must toggle it once.
+ */
 const meta = {
   title: 'ui/Form controls',
   parameters: { layout: 'padded' },
@@ -77,6 +85,12 @@ export const Checkboxes: Story = {
       </Label>
     </div>
   ),
+  play: async ({ canvas, userEvent }) => {
+    const checkbox = canvas.getByRole('checkbox', { name: '標題' })
+    await expect(canvas.getByRole('checkbox', { name: '已勾選' })).toBeChecked()
+    await userEvent.click(canvas.getByText('標題'))
+    await expect(checkbox).toBeChecked()
+  },
 }
 
 export const Switches: Story = {
@@ -97,6 +111,12 @@ export const Switches: Story = {
       </Label>
     </div>
   ),
+  play: async ({ canvas, userEvent }) => {
+    const toggle = canvas.getByRole('switch', { name: '標題' })
+    await expect(canvas.getByRole('switch', { name: '開啟' })).toBeChecked()
+    await userEvent.click(canvas.getByText('標題'))
+    await expect(toggle).toBeChecked()
+  },
 }
 
 export const Radios: Story = {
@@ -120,6 +140,11 @@ export const Radios: Story = {
       </RadioGroup>
     </FieldSet>
   ),
+  play: async ({ canvas, userEvent }) => {
+    await expect(canvas.getByRole('radio', { name: '文字' })).toBeChecked()
+    await userEvent.click(canvas.getByText('圖片'))
+    await expect(canvas.getByRole('radio', { name: '圖片' })).toBeChecked()
+  },
 }
 
 const sortItems = [

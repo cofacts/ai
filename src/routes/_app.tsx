@@ -27,7 +27,7 @@ function AppLayout() {
           <Button
             variant="outline"
             size="icon-touch"
-            iconStart="side-navigation"
+            iconStart="side_navigation"
             aria-label="開啟對話列表"
             aria-expanded={sidebarOpen}
             onClick={toggleSidebar}

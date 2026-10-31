@@ -35,7 +35,7 @@ export const Line: Story = {
   args: { variant: 'line', children: '用 LINE 查詢' },
 }
 export const WithIcons: Story = {
-  args: { iconStart: 'edit-document', iconEnd: 'arrow-forward' },
+  args: { iconStart: 'edit_document', iconEnd: 'arrow_forward' },
 }
 export const Disabled: Story = { args: { disabled: true } }
 

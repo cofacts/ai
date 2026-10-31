@@ -5,16 +5,15 @@ import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
 
 /**
- * Penpot Base/Toggle (e.g. 收藏). `<button aria-pressed>`; pressed shows a strong border, and
- * `pressedIcon` (e.g. bookmark-fill) if given.
+ * Penpot Base/Toggle (e.g. 收藏). `<button aria-pressed>`; pressed shows a strong border and the
+ * icon's solid version (bookmark → filled bookmark).
  */
 function Toggle({
   className,
   icon,
-  pressedIcon,
   children,
   ...props
-}: TogglePrimitive.Props & { icon?: IconName; pressedIcon?: IconName }) {
+}: TogglePrimitive.Props & { icon?: IconName }) {
   return (
     <TogglePrimitive
       data-slot="toggle"
@@ -29,16 +28,12 @@ function Toggle({
     >
       {icon && (
         <>
+          <Icon name={icon} className="group-data-pressed/toggle:hidden" />
           <Icon
             name={icon}
-            className={cn(pressedIcon && 'group-data-pressed/toggle:hidden')}
+            filled
+            className="hidden group-data-pressed/toggle:inline-flex"
           />
-          {pressedIcon && (
-            <Icon
-              name={pressedIcon}
-              className="hidden group-data-pressed/toggle:block"
-            />
-          )}
         </>
       )}
       {children}

@@ -32,7 +32,11 @@ Colocate per component: `Foo.tsx`, `Foo.stories.tsx`, `Foo.module.css` (only whe
 - Props: plain TypeScript types describing the fields a component needs. No GraphQL fragments.
   When a component should reuse a query's type, take a subtype of the codegen result type.
 - One responsive component replaces Penpot's desktop / `-Mobile` pairs.
-- Icons: one `<Icon name>` component with SVG imports (Material Symbols names), `aria-hidden`.
+- Icons: one `<Icon name>` component, `aria-hidden`. It renders a Material Symbol (Rounded, the
+  designer's settings) by name, `filled` for the solid version. The font request only asks for
+  the names in `src/components/ui/material-symbols.ts`, so add a new name there. Brand marks
+  (`facebook`, `line`) are SVG paths; fact-check results are `StatusIcon`. The `ui/Icon` Penpot
+  story shows the code for every icon on Penpot's Base/Icon.
 - Animations respect `prefers-reduced-motion`.
 
 ## Themes
