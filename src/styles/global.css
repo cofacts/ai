@@ -12,7 +12,7 @@
 
 @layer base {
   html {
-    @apply bg-base font-sans text-primary;
+    @apply bg-surface-base font-sans text-text-primary;
   }
 
   /*

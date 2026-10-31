@@ -8,9 +8,11 @@
  *   - src/styles/tokens.css            CSS variables (light / dark) + Tailwind @theme
  *   - src/styles/tokens.generated.ts   twMergeTheme for cn(), token lists for Storybook
  *
- * Naming rule: drop the Penpot role prefix to get the class.
- *   surface-raised → bg-raised, text-secondary → text-secondary, border-control → border-control,
- *   icon-muted → text-icon-muted, status-incorrect → text-status-incorrect / bg-status-incorrect,
+ * Naming rule: a color class is the Tailwind utility plus the Penpot token name, unchanged.
+ *   surface-raised → bg-surface-raised, text-secondary → text-text-secondary,
+ *   border-control → border-border-control, icon-muted → text-icon-muted,
+ *   status-incorrect → text-status-incorrect / bg-status-incorrect.
+ * Typography, spacing and radius use Tailwind's own scales instead:
  *   type-body-m → text-body-m, spacing-16 → p-16 (1 unit = 1px), RADIUS-5 → rounded-5.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -89,51 +91,39 @@ const num = (token: string, value: unknown): number => {
 
 type Utility = { namespace: string; className: string }
 
-/** Which Tailwind utilities a semantic color token becomes. Empty = CSS variable only. */
+/** Penpot role prefix → the Tailwind utility prefixes its color tokens are registered under. */
+const UTILITY_PREFIXES: Record<string, Array<string>> = {
+  surface: ['bg'],
+  overlay: ['bg'],
+  text: ['text'],
+  icon: ['text'],
+  status: ['text', 'bg'],
+  border: ['border'],
+  // Data colors: read var(--chart-series-N) in chart code, never a UI utility.
+  chart: [],
+}
+const NAMESPACES: Record<string, string> = {
+  bg: '--background-color',
+  text: '--text-color',
+  border: '--border-color',
+}
+
+/**
+ * Which Tailwind utilities a semantic color token becomes. The class is the utility prefix plus
+ * the Penpot token name, unchanged: surface-raised → bg-raised becomes bg-surface-raised.
+ * Empty = CSS variable only.
+ */
 function utilitiesFor(name: string): Array<Utility> {
-  const [prefix, ...rest] = name.split('-')
-  const suffix = rest.join('-')
-  switch (prefix) {
-    case 'surface':
-      return [
-        {
-          namespace: `--background-color-${suffix}`,
-          className: `bg-${suffix}`,
-        },
-      ]
-    case 'overlay':
-      return [
-        {
-          namespace: `--background-color-${suffix}`,
-          className: `bg-${suffix}`,
-        },
-      ]
-    case 'text':
-      return [
-        { namespace: `--text-color-${suffix}`, className: `text-${suffix}` },
-      ]
-    case 'icon':
-      return [{ namespace: `--text-color-${name}`, className: `text-${name}` }]
-    case 'status':
-      return [
-        { namespace: `--text-color-${name}`, className: `text-${name}` },
-        { namespace: `--background-color-${name}`, className: `bg-${name}` },
-      ]
-    case 'border':
-      // The focus ring colors are used only by the global :focus-visible rule.
-      if (suffix === 'focus' || suffix === 'focus-outer') return []
-      return [
-        {
-          namespace: `--border-color-${suffix}`,
-          className: `border-${suffix}`,
-        },
-      ]
-    case 'chart':
-      // Data colors: read var(--chart-series-N) in chart code, never a UI utility.
-      return []
-    default:
-      throw new Error(`Unknown semantic token prefix: ${name}`)
-  }
+  const [prefix = ''] = name.split('-')
+  const utilityPrefixes = UTILITY_PREFIXES[prefix]
+  if (!utilityPrefixes)
+    throw new Error(`Unknown semantic token prefix: ${name}`)
+  // The focus ring colors are used only by the global :focus-visible rule.
+  if (name === 'border-focus' || name === 'border-focus-outer') return []
+  return utilityPrefixes.map((u) => ({
+    namespace: `${NAMESPACES[u]}-${name}`,
+    className: `${u}-${name}`,
+  }))
 }
 
 const semanticNames = Object.keys(Light)

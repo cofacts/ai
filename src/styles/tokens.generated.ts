@@ -6,19 +6,19 @@
  */
 export const twMergeColors = {
   "text": [
-    "primary",
-    "secondary",
-    "tertiary",
-    "disabled",
-    "inverse",
-    "link",
-    "on-accent",
-    "on-secondary",
-    "on-status",
-    "on-dark",
-    "on-dark-muted",
-    "on-info",
-    "on-line",
+    "text-primary",
+    "text-secondary",
+    "text-tertiary",
+    "text-disabled",
+    "text-inverse",
+    "text-link",
+    "text-on-accent",
+    "text-on-secondary",
+    "text-on-status",
+    "text-on-dark",
+    "text-on-dark-muted",
+    "text-on-info",
+    "text-on-line",
     "icon-default",
     "icon-muted",
     "icon-inverse",
@@ -33,34 +33,34 @@ export const twMergeColors = {
     "status-outofscope"
   ],
   "bg": [
-    "base",
-    "raised",
-    "selected",
-    "inverse",
-    "secondary",
-    "accent",
-    "accent-subtle",
-    "accent-fold",
-    "dark",
-    "dark-raised",
-    "on-dark",
-    "info",
-    "info-strong",
-    "line",
+    "surface-base",
+    "surface-raised",
+    "surface-selected",
+    "surface-inverse",
+    "surface-secondary",
+    "surface-accent",
+    "surface-accent-subtle",
+    "surface-accent-fold",
+    "surface-dark",
+    "surface-dark-raised",
+    "surface-on-dark",
+    "surface-info",
+    "surface-info-strong",
+    "surface-line",
     "status-incorrect",
     "status-correct",
     "status-opinion",
     "status-outofscope",
-    "scrim"
+    "overlay-scrim"
   ],
   "border": [
-    "subtle",
-    "control",
-    "strong",
-    "accent",
-    "inverse",
-    "on-dark",
-    "on-dark-strong"
+    "border-subtle",
+    "border-control",
+    "border-strong",
+    "border-accent",
+    "border-inverse",
+    "border-on-dark",
+    "border-on-dark-strong"
   ]
 }
 
@@ -101,7 +101,7 @@ export const designTokens = {
     {
       "name": "text-primary",
       "classes": [
-        "text-primary"
+        "text-text-primary"
       ],
       "light": "#111827",
       "dark": "#f3f4f6",
@@ -110,7 +110,7 @@ export const designTokens = {
     {
       "name": "text-secondary",
       "classes": [
-        "text-secondary"
+        "text-text-secondary"
       ],
       "light": "#374151",
       "dark": "#d1d5db",
@@ -119,7 +119,7 @@ export const designTokens = {
     {
       "name": "text-tertiary",
       "classes": [
-        "text-tertiary"
+        "text-text-tertiary"
       ],
       "light": "#6b7280",
       "dark": "#9ca3af",
@@ -128,7 +128,7 @@ export const designTokens = {
     {
       "name": "text-disabled",
       "classes": [
-        "text-disabled"
+        "text-text-disabled"
       ],
       "light": "#9ca3af",
       "dark": "#4b5563",
@@ -137,7 +137,7 @@ export const designTokens = {
     {
       "name": "text-inverse",
       "classes": [
-        "text-inverse"
+        "text-text-inverse"
       ],
       "light": "#ffffff",
       "dark": "#111827",
@@ -146,7 +146,7 @@ export const designTokens = {
     {
       "name": "text-link",
       "classes": [
-        "text-link"
+        "text-text-link"
       ],
       "light": "#1673d1",
       "dark": "#42a0ff",
@@ -155,7 +155,7 @@ export const designTokens = {
     {
       "name": "text-on-accent",
       "classes": [
-        "text-on-accent"
+        "text-text-on-accent"
       ],
       "light": "#111827",
       "dark": "#111827",
@@ -164,7 +164,7 @@ export const designTokens = {
     {
       "name": "text-on-secondary",
       "classes": [
-        "text-on-secondary"
+        "text-text-on-secondary"
       ],
       "light": "#ffffff",
       "dark": "#f3f4f6",
@@ -173,7 +173,7 @@ export const designTokens = {
     {
       "name": "text-on-status",
       "classes": [
-        "text-on-status"
+        "text-text-on-status"
       ],
       "light": "#ffffff",
       "dark": "#111827",
@@ -182,7 +182,7 @@ export const designTokens = {
     {
       "name": "text-on-dark",
       "classes": [
-        "text-on-dark"
+        "text-text-on-dark"
       ],
       "light": "#f3f4f6",
       "dark": "#f3f4f6",
@@ -191,7 +191,7 @@ export const designTokens = {
     {
       "name": "text-on-dark-muted",
       "classes": [
-        "text-on-dark-muted"
+        "text-text-on-dark-muted"
       ],
       "light": "#9ca3af",
       "dark": "#9ca3af",
@@ -200,7 +200,7 @@ export const designTokens = {
     {
       "name": "text-on-info",
       "classes": [
-        "text-on-info"
+        "text-text-on-info"
       ],
       "light": "#111827",
       "dark": "#111827",
@@ -209,7 +209,7 @@ export const designTokens = {
     {
       "name": "text-on-line",
       "classes": [
-        "text-on-line"
+        "text-text-on-line"
       ],
       "light": "#ffffff",
       "dark": "#ffffff",
@@ -218,7 +218,7 @@ export const designTokens = {
     {
       "name": "surface-base",
       "classes": [
-        "bg-base"
+        "bg-surface-base"
       ],
       "light": "#ffffff",
       "dark": "#111827",
@@ -227,7 +227,7 @@ export const designTokens = {
     {
       "name": "surface-raised",
       "classes": [
-        "bg-raised"
+        "bg-surface-raised"
       ],
       "light": "#f3f4f6",
       "dark": "#1f2937",
@@ -236,7 +236,7 @@ export const designTokens = {
     {
       "name": "surface-selected",
       "classes": [
-        "bg-selected"
+        "bg-surface-selected"
       ],
       "light": "#e5e7eb",
       "dark": "#374151",
@@ -245,7 +245,7 @@ export const designTokens = {
     {
       "name": "surface-inverse",
       "classes": [
-        "bg-inverse"
+        "bg-surface-inverse"
       ],
       "light": "#1f2937",
       "dark": "#f3f4f6",
@@ -254,7 +254,7 @@ export const designTokens = {
     {
       "name": "surface-secondary",
       "classes": [
-        "bg-secondary"
+        "bg-surface-secondary"
       ],
       "light": "#1f2937",
       "dark": "#374151",
@@ -263,7 +263,7 @@ export const designTokens = {
     {
       "name": "surface-accent",
       "classes": [
-        "bg-accent"
+        "bg-surface-accent"
       ],
       "light": "#ffb600",
       "dark": "#ffb600",
@@ -272,7 +272,7 @@ export const designTokens = {
     {
       "name": "surface-accent-subtle",
       "classes": [
-        "bg-accent-subtle"
+        "bg-surface-accent-subtle"
       ],
       "light": "#ffeaba",
       "dark": "#e9a802",
@@ -281,7 +281,7 @@ export const designTokens = {
     {
       "name": "surface-accent-fold",
       "classes": [
-        "bg-accent-fold"
+        "bg-surface-accent-fold"
       ],
       "light": "#ff9200",
       "dark": "#ff9200",
@@ -290,7 +290,7 @@ export const designTokens = {
     {
       "name": "surface-dark",
       "classes": [
-        "bg-dark"
+        "bg-surface-dark"
       ],
       "light": "#111827",
       "dark": "#111827",
@@ -299,7 +299,7 @@ export const designTokens = {
     {
       "name": "surface-dark-raised",
       "classes": [
-        "bg-dark-raised"
+        "bg-surface-dark-raised"
       ],
       "light": "#1f2937",
       "dark": "#1f2937",
@@ -308,7 +308,7 @@ export const designTokens = {
     {
       "name": "surface-on-dark",
       "classes": [
-        "bg-on-dark"
+        "bg-surface-on-dark"
       ],
       "light": "#ffffff",
       "dark": "#ffffff",
@@ -317,7 +317,7 @@ export const designTokens = {
     {
       "name": "surface-info",
       "classes": [
-        "bg-info"
+        "bg-surface-info"
       ],
       "light": "#1789fc",
       "dark": "#1789fc",
@@ -326,7 +326,7 @@ export const designTokens = {
     {
       "name": "surface-info-strong",
       "classes": [
-        "bg-info-strong"
+        "bg-surface-info-strong"
       ],
       "light": "#1673d1",
       "dark": "#1673d1",
@@ -335,7 +335,7 @@ export const designTokens = {
     {
       "name": "surface-line",
       "classes": [
-        "bg-line"
+        "bg-surface-line"
       ],
       "light": "#06c755",
       "dark": "#06c755",
@@ -344,7 +344,7 @@ export const designTokens = {
     {
       "name": "border-subtle",
       "classes": [
-        "border-subtle"
+        "border-border-subtle"
       ],
       "light": "#d1d5db",
       "dark": "#374151",
@@ -353,7 +353,7 @@ export const designTokens = {
     {
       "name": "border-control",
       "classes": [
-        "border-control"
+        "border-border-control"
       ],
       "light": "#6b7280",
       "dark": "#9ca3af",
@@ -362,7 +362,7 @@ export const designTokens = {
     {
       "name": "border-strong",
       "classes": [
-        "border-strong"
+        "border-border-strong"
       ],
       "light": "#111827",
       "dark": "#f3f4f6",
@@ -371,7 +371,7 @@ export const designTokens = {
     {
       "name": "border-accent",
       "classes": [
-        "border-accent"
+        "border-border-accent"
       ],
       "light": "#ffb600",
       "dark": "#ffb600",
@@ -380,7 +380,7 @@ export const designTokens = {
     {
       "name": "border-inverse",
       "classes": [
-        "border-inverse"
+        "border-border-inverse"
       ],
       "light": "#ffffff",
       "dark": "#111827",
@@ -403,7 +403,7 @@ export const designTokens = {
     {
       "name": "border-on-dark",
       "classes": [
-        "border-on-dark"
+        "border-border-on-dark"
       ],
       "light": "#374151",
       "dark": "#374151",
@@ -412,7 +412,7 @@ export const designTokens = {
     {
       "name": "border-on-dark-strong",
       "classes": [
-        "border-on-dark-strong"
+        "border-border-on-dark-strong"
       ],
       "light": "#f3f4f6",
       "dark": "#f3f4f6",
@@ -547,7 +547,7 @@ export const designTokens = {
     {
       "name": "overlay-scrim",
       "classes": [
-        "bg-scrim"
+        "bg-overlay-scrim"
       ],
       "light": "#11182780",
       "dark": "#11182780",
