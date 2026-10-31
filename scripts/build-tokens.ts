@@ -8,10 +8,10 @@
  *   - src/styles/tokens.css            CSS variables (light / dark) + Tailwind @theme
  *   - src/styles/tokens.generated.ts   twMergeTheme for cn(), token lists for Storybook
  *
- * Naming rule: a color class is the Tailwind utility plus the Penpot token name, unchanged.
- *   surface-raised → bg-surface-raised, text-secondary → text-text-secondary,
- *   border-control → border-border-control, icon-muted → text-icon-muted,
- *   status-incorrect → text-status-incorrect / bg-status-incorrect.
+ * Naming rule: every semantic color token is registered as a Tailwind color with the Penpot token
+ * name unchanged, so any color utility takes any token:
+ *   surface-raised → bg-surface-raised, text-primary → text-text-primary,
+ *   border-control → border-border-control, status-incorrect → text-/bg-/border-status-incorrect.
  * Typography, spacing and radius use Tailwind's own scales instead:
  *   type-body-m → text-body-m, spacing-16 → p-16 (1 unit = 1px), RADIUS-5 → rounded-5.
  */
@@ -88,43 +88,6 @@ const num = (token: string, value: unknown): number => {
 }
 
 // ---- Semantic colors → Tailwind namespaces -------------------------------------------------
-
-type Utility = { namespace: string; className: string }
-
-/** Penpot role prefix → the Tailwind utility prefixes its color tokens are registered under. */
-const UTILITY_PREFIXES: Record<string, Array<string>> = {
-  surface: ['bg'],
-  overlay: ['bg'],
-  text: ['text'],
-  icon: ['text'],
-  status: ['text', 'bg'],
-  border: ['border'],
-  // Data colors: read var(--chart-series-N) in chart code, never a UI utility.
-  chart: [],
-}
-const NAMESPACES: Record<string, string> = {
-  bg: '--background-color',
-  text: '--text-color',
-  border: '--border-color',
-}
-
-/**
- * Which Tailwind utilities a semantic color token becomes. The class is the utility prefix plus
- * the Penpot token name, unchanged: surface-raised → bg-raised becomes bg-surface-raised.
- * Empty = CSS variable only.
- */
-function utilitiesFor(name: string): Array<Utility> {
-  const [prefix = ''] = name.split('-')
-  const utilityPrefixes = UTILITY_PREFIXES[prefix]
-  if (!utilityPrefixes)
-    throw new Error(`Unknown semantic token prefix: ${name}`)
-  // The focus ring colors are used only by the global :focus-visible rule.
-  if (name === 'border-focus' || name === 'border-focus-outer') return []
-  return utilityPrefixes.map((u) => ({
-    namespace: `${NAMESPACES[u]}-${name}`,
-    className: `${u}-${name}`,
-  }))
-}
 
 const semanticNames = Object.keys(Light)
 for (const name of semanticNames) {
@@ -216,11 +179,10 @@ const fallbackLines = (theme: TokenSet, indent: string) =>
     )
     .join('\n')
 
-const themeLines: Array<string> = []
-for (const name of semanticNames) {
-  for (const u of utilitiesFor(name))
-    themeLines.push(`  ${u.namespace}: var(--${name}); /* ${u.className} */`)
-}
+/** Every semantic token is a Tailwind color named exactly like the Penpot token. */
+const themeLines = semanticNames.map(
+  (name) => `  --color-${name}: var(--${name});`,
+)
 
 const css = `${header}
 
@@ -273,7 +235,6 @@ ${fallbackLines(Dark, '    ')}
   --text-*: initial;
   --radius-*: initial;
   --shadow-*: initial;
-  --font-*: initial;
 
   /* 1 spacing unit = 1px, so spacing-16 → p-16 and a 343px width → w-343. */
   --spacing: 0.0625rem;
@@ -299,18 +260,8 @@ ${shadows.map((s) => `  --shadow-${s.key}: ${s.css};`).join('\n')}
 
 // ---- tokens.generated.ts -------------------------------------------------------------------
 
-/** Color class names per utility prefix: `{ text: ['primary', …], bg: [...], border: [...] }`. */
-const colorClasses: Record<string, Array<string>> = {}
-for (const name of semanticNames) {
-  for (const { className } of utilitiesFor(name)) {
-    const [, prefix = '', suffix = ''] = /^([a-z]+)-(.+)$/.exec(className) ?? []
-    ;(colorClasses[prefix] ??= []).push(suffix)
-  }
-}
-
 const semanticColors = semanticNames.map((name) => ({
   name,
-  classes: utilitiesFor(name).map((u) => u.className),
   light: resolveHex(String(get(Light, name).$value)),
   dark: resolveHex(String(get(Dark, name).$value)),
   fixed: isFixed(name),
@@ -318,14 +269,10 @@ const semanticColors = semanticNames.map((name) => ({
 
 const ts = `// ⚙️ Generated from ${SOURCE} by scripts/build-tokens.ts — do not edit. Run \`pnpm tokens\`.
 
-/**
- * Custom class names for tailwind-merge, so cn() merges Cofacts utilities correctly.
- * Colors are listed per prefix: \`bg-base\` is a color, \`text-base\` is not.
- */
-export const twMergeColors = ${JSON.stringify(colorClasses, null, 2)}
-
+/** Custom theme values for tailwind-merge, so cn() merges Cofacts utilities correctly. */
 export const twMergeTheme = ${JSON.stringify(
   {
+    color: semanticNames,
     text: typography.map((t) => t.className.slice(5)),
     radius: radius.map((r) => r.key),
     shadow: shadows.map((s) => s.key),

@@ -42,7 +42,7 @@ export const Colors: Story = {
                   <div className="flex min-w-0 flex-col gap-4">
                     <code className="text-ui-s-bold">{c.name}</code>
                     <span className="text-caption text-text-secondary">
-                      {c.classes.join(' ') || `var(--${c.name})`}
+                      {`var(--${c.name})`}
                     </span>
                     <span className="text-caption text-text-tertiary">
                       {c.fixed

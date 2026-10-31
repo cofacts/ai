@@ -28,7 +28,7 @@ this skill is the current, executable form of it.
 
 ## Hard rules
 
-- **Tokens only.** Color class = Tailwind utility + the Penpot token name, unchanged (`surface-raised` →
+- **Tokens only.** Color class = any Tailwind color utility + the Penpot token name, unchanged (`surface-raised` →
   `bg-surface-raised`, `text-primary` → `text-text-primary`); typography `type-body-m` → `text-body-m`; the full list with each class is in the generated
   `src/styles/tokens.css` (comments name the class), and Storybook's Foundations/Tokens shows them. No arbitrary colors (`[#…]`,
   `style={{ color }}`), no primitive colors (`neutral-900`), no `dark:` variants (tokens flip by
