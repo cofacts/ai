@@ -3,6 +3,7 @@ import { createRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 
 import { routeTree } from './routeTree.gen'
+import { PageError } from './components/PageError'
 import { handleAuthExpired, isAuthExpiredError } from './lib/authExpired'
 
 export const getRouter = () => {
@@ -27,6 +28,11 @@ export const getRouter = () => {
 
   const router = createRouter({
     routeTree,
+    // Loaders reach the per-request QueryClient through the router context, so they can
+    // fill the cache that components read with useSuspenseQuery.
+    context: { queryClient },
+    // A failed loader renders this inside the site nav, and SSR responds 500.
+    defaultErrorComponent: PageError,
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
   })

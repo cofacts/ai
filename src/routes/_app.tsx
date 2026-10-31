@@ -1,12 +1,15 @@
 import { Outlet, createFileRoute } from '@tanstack/react-router'
 import { useCallback, useState } from 'react'
 import { Sidebar } from '@/components/Sidebar'
-import { Header } from '@/components/Header'
 import { Button } from '@/components/ui/button'
 import { LoggedOutLanding } from '@/components/LoggedOutLanding'
 import { useAuth } from '@/lib/auth'
 
 export const Route = createFileRoute('/_app')({
+  // The AI screens share the global nav (Penpot uses the same Nav there). The chat scrolls
+  // inside its side panels, so the page is pinned to the viewport, and a footer below it could
+  // never be scrolled to.
+  staticData: { fillViewport: true, hideGlobalFooter: true },
   component: AppLayout,
 })
 
@@ -17,10 +20,7 @@ function AppLayout() {
   const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), [])
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      {/* Header */}
-      <Header />
-
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Mobile: the session sidebar is opened from here; the site menu is in the nav. */}
       {user && (
         <div className="flex items-center border-b border-border-subtle bg-surface-base px-spacing-20 py-spacing-8 md:hidden">

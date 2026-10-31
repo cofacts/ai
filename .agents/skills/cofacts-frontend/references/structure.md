@@ -11,11 +11,20 @@
 | page   | `src/routes/`                       | Route components, plus components only that route uses in its `-components/` folder                                                                                     |
 
 **`-components/`:** TanStack Router ignores files and folders starting with `-`, so
-`routes/_site/article.$id/-components/Transcript.tsx` doesn't become a route. Put page-only
+`routes/article.$id/-components/Transcript.tsx` doesn't become a route. Put page-only
 components there (never as loose `-Foo.tsx` files), so everything else under `routes/` is a route.
 A `-components/` folder serves the routes in its directory. **Never import another directory's
 `-components/`.** When a second place needs a component, move it to `src/components/` and give it
 a story and `parameters.penpot`.
+
+**Site shell:** `__root.tsx` renders the global nav and footer around every page; routes sit
+directly under `routes/` (no `_site` layout). Pages scroll the document (keep it that way: scroll
+restoration, `#anchors`, printing and the mobile URL bar depend on it). A route that draws its own
+nav or footer, or wants none, sets `staticData: { hideGlobalNav: true }` / `{ hideGlobalFooter: true }`.
+A screen that scrolls inside its own panels (the AI chat) sets `{ fillViewport: true }` to be pinned
+to the viewport height; this doesn't hide the footer, so set `hideGlobalFooter` too when a footer
+couldn't be reached. A flag on a parent route covers its children. Pages that only need to share `-components/` can use
+a route group folder such as `(lists)/`, which doesn't change the URL.
 
 Colocate per component: `Foo.tsx`, `Foo.stories.tsx`, `Foo.module.css` (only when needed),
 `Foo.test.tsx` (when it has logic).

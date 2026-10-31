@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
  * each to its local path when its route lands (kb doc §2.2).
  */
 export const NAV_LINKS = {
-  articles: { label: '可疑訊息', href: 'https://cofacts.tw/articles' },
+  articles: { label: '可疑訊息', href: '/articles' },
   replies: { label: '最新查核', href: 'https://cofacts.tw/replies' },
   hoaxForYou: { label: '等你來答', href: 'https://cofacts.tw/hoax-for-you' },
   ai: { label: '問問 AI', href: '/' },

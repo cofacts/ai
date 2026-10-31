@@ -11,7 +11,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { parse } from 'graphql'
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core'
 
-import { cofactsExec } from '@/lib/cofactsExec'
+import { cofactsExec } from '@/server/cofacts.server'
 
 interface GetArticleAttachmentResult {
   GetArticle: { attachmentUrl: string | null } | null
