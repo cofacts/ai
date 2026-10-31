@@ -1,9 +1,8 @@
-import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 /**
- * Penpot Base/Input, Type = Field-*: a title above the control. Pair `FieldLabel htmlFor` with the
- * control's `id`.
+ * Penpot Base/Input, Type = Field-*: a title above the control. Use `Label htmlFor` for the title,
+ * pointing at the control's `id`.
  */
 function Field({ className, ...props }: React.ComponentProps<'div'>) {
   return (
@@ -11,19 +10,6 @@ function Field({ className, ...props }: React.ComponentProps<'div'>) {
       role="group"
       data-slot="field"
       className={cn('flex w-full flex-col gap-spacing-4', className)}
-      {...props}
-    />
-  )
-}
-
-function FieldLabel({
-  className,
-  ...props
-}: React.ComponentProps<typeof Label>) {
-  return (
-    <Label
-      data-slot="field-label"
-      className={cn('w-fit', className)}
       {...props}
     />
   )
@@ -77,4 +63,4 @@ function FieldLegend({
   )
 }
 
-export { Field, FieldLabel, FieldError, FieldSet, FieldLegend }
+export { Field, FieldError, FieldSet, FieldLegend }
