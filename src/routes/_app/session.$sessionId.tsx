@@ -10,6 +10,7 @@ import { ChatArea } from '@/components/ChatArea'
 import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
 import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
+import { Icon } from '@/components/ui/icon'
 
 export const Route = createFileRoute('/_app/session/$sessionId')({
   component: SessionPage,
@@ -87,7 +88,7 @@ function SessionPage() {
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {error && (
           <div className="bg-surface-raised border-b border-border-control px-spacing-16 py-spacing-8 text-type-body-s text-status-incorrect flex items-center gap-spacing-8">
-            <span className="material-symbols-outlined text-[16px]">error</span>
+            <Icon name="error" size={24} />
             <span>連線錯誤: {error}</span>
             <button
               onClick={() => window.location.reload()}

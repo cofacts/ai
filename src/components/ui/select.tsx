@@ -47,7 +47,7 @@ function SelectTrigger({
       {children}
       <SelectPrimitive.Icon
         render={
-          <Icon name="keyboard-arrow-down" className="text-icon-default" />
+          <Icon name="keyboard_arrow_down" className="text-icon-default" />
         }
       />
     </SelectPrimitive.Trigger>
@@ -175,7 +175,7 @@ function SelectScrollUpButton({
       )}
       {...props}
     >
-      <Icon name="keyboard-arrow-up" />
+      <Icon name="keyboard_arrow_up" />
     </SelectPrimitive.ScrollUpArrow>
   )
 }
@@ -193,7 +193,7 @@ function SelectScrollDownButton({
       )}
       {...props}
     >
-      <Icon name="keyboard-arrow-down" />
+      <Icon name="keyboard_arrow_down" />
     </SelectPrimitive.ScrollDownArrow>
   )
 }

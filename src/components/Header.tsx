@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Icon } from '@/components/ui/icon'
 
 interface HeaderProps {
   onToggleSidebar: () => void
@@ -24,7 +25,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           onClick={onToggleSidebar}
           className="p-spacing-8 -ml-spacing-8 text-text-secondary hover:text-text-primary md:hidden"
         >
-          <span className="material-symbols-outlined">menu</span>
+          <Icon name="menu" size={24} />
         </button>
 
         {/* Logo */}
@@ -56,9 +57,11 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       {/* Desktop search bar */}
       <div className="flex-1 max-w-xl mx-spacing-32 hidden lg:block">
         <div className="relative group">
-          <span className="material-symbols-outlined absolute left-spacing-12 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary">
-            search
-          </span>
+          <Icon
+            name="search"
+            size={24}
+            className="absolute left-spacing-12 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary"
+          />
           <input
             className="w-full bg-surface-raised border-none rounded-full py-spacing-8 pl-[40px] pr-spacing-16 text-type-body-s focus:bg-surface-base transition-all"
             placeholder="搜尋可疑訊息或查核報告..."
@@ -70,13 +73,11 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       {/* Right actions */}
       <div className="flex items-center gap-spacing-12 md:gap-spacing-16">
         <button className="p-spacing-8 hover:bg-surface-raised rounded-full text-text-secondary relative hidden md:block">
-          <span className="material-symbols-outlined">notifications</span>
+          <Icon name="notifications" size={24} />
         </button>
         {isLoading ? (
           <div className="w-spacing-32 h-spacing-32 md:w-[36px] md:h-[36px] rounded-full bg-surface-selected overflow-hidden border border-border-subtle flex items-center justify-center">
-            <span className="material-symbols-outlined text-text-tertiary">
-              person
-            </span>
+            <Icon name="person" size={24} className="text-text-tertiary" />
           </div>
         ) : user ? (
           <DropdownMenu>

@@ -1,37 +1,98 @@
-import { iconPaths } from './icon-paths'
-import type { IconName } from './icon-paths'
-import type { SVGProps } from 'react'
+import { brandIconPaths } from './brand-icon-paths'
+import { MATERIAL_SYMBOLS } from './material-symbols'
+import type { BrandIconName } from './brand-icon-paths'
+import type { MaterialSymbol } from './material-symbols'
+import type { CSSProperties, HTMLAttributes } from 'react'
 
 import { cn } from '@/lib/utils'
 
-export type { IconName }
+export type IconName = MaterialSymbol | BrandIconName
 
-type IconProps = Omit<SVGProps<SVGSVGElement>, 'children'> & {
+type IconProps = Omit<HTMLAttributes<HTMLElement>, 'children'> & {
   name: IconName
-  /** Rendered size in px. Penpot icons are 20px. */
+  /** The solid version (Material Symbols fill 1), e.g. a pressed bookmark. */
+  filled?: boolean
+  /** Box size in px. Penpot icons are 20px. */
   size?: number
 }
 
+/** Glyphs that Penpot draws larger than the font does, scaled up inside the same box. */
+const GLYPH_SCALE: Partial<Record<IconName, number>> = { arrow_drop_down: 1.6 }
+
 /**
- * Penpot Base/Icon. Decorative by default (`aria-hidden`): put the meaning on the surrounding
- * button or text. Colors come from `currentColor`, so use `text-icon-*` on the icon or a parent.
+ * Not Google's `.material-symbols-rounded` class: that stylesheet is outside Tailwind's layers,
+ * so it would override utilities such as `hidden` on the icon.
  */
-export function Icon({ name, size = 20, className, ...props }: IconProps) {
-  const [w, h, d] = iconPaths[name]
+const glyphStyle: CSSProperties = {
+  fontFamily: "'Material Symbols Rounded'",
+  fontWeight: 'normal',
+  fontStyle: 'normal',
+  lineHeight: 1,
+  letterSpacing: 'normal',
+  textTransform: 'none',
+  whiteSpace: 'nowrap',
+  direction: 'ltr',
+  fontFeatureSettings: "'liga'",
+}
+
+const isBrand = (name: IconName): name is BrandIconName =>
+  name in brandIconPaths
+
+/**
+ * Penpot Base/Icon: a Material Symbol (Rounded, see `material-symbols.ts`) by its name, or a
+ * brand mark. Decorative by default (`aria-hidden`): put the meaning on the surrounding button or
+ * text. Colors come from `currentColor`, so use `text-icon-*` on the icon or a parent.
+ */
+export function Icon({
+  name,
+  filled = false,
+  size = 20,
+  className,
+  style,
+  ...props
+}: IconProps) {
+  if (isBrand(name)) {
+    const [w, h, d] = brandIconPaths[name]
+    return (
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        width={size}
+        height={size}
+        fill="currentColor"
+        aria-hidden="true"
+        focusable="false"
+        className={cn('shrink-0', className)}
+        style={style}
+        {...(props as React.SVGProps<SVGSVGElement>)}
+      >
+        <path d={d} />
+      </svg>
+    )
+  }
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      width={size}
-      height={size}
-      fill="currentColor"
+    <span
       aria-hidden="true"
-      focusable="false"
-      className={cn('shrink-0', className)}
+      translate="no"
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center overflow-visible select-none',
+        className,
+      )}
+      style={{
+        ...glyphStyle,
+        width: size,
+        height: size,
+        fontSize: size * (GLYPH_SCALE[name] ?? 1),
+        fontVariationSettings: `'FILL' ${filled ? 1 : 0}`,
+        ...style,
+      }}
       {...props}
     >
-      <path d={d} />
-    </svg>
+      {name}
+    </span>
   )
 }
 
-export const iconNames = Object.keys(iconPaths) as Array<IconName>
+export const iconNames: Array<IconName> = [
+  ...MATERIAL_SYMBOLS,
+  ...(Object.keys(brandIconPaths) as Array<BrandIconName>),
+]

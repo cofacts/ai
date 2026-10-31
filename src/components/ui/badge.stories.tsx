@@ -24,8 +24,8 @@ export const Chips: Story = {
       <Chip onPressedChange={fn()}># 標籤</Chip>
       <Chip defaultPressed># 已選取</Chip>
       <Chip disabled># 停用</Chip>
-      <Chip icon="filter-list">還未有效查核</Chip>
-      <Chip icon="filter-list" defaultPressed>
+      <Chip icon="filter_list">還未有效查核</Chip>
+      <Chip icon="filter_list" defaultPressed>
         還未有效查核
       </Chip>
     </div>

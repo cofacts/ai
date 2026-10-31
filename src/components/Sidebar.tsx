@@ -7,6 +7,7 @@ import { chatCacheKey } from '@/lib/chatCache'
 import { useSessions } from '@/hooks/useSessions'
 import { updateSessionTitle } from '@/lib/chatSessions.functions'
 import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
+import { Icon } from '@/components/ui/icon'
 
 interface SidebarProps {
   isOpen: boolean
@@ -149,9 +150,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
           onClick={handleStartEdit}
           className="absolute right-spacing-8 top-spacing-12 p-spacing-4 opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-text-primary transition-opacity"
         >
-          <span className="material-symbols-outlined text-type-body-s">
-            edit
-          </span>
+          <Icon name="edit" size={24} />
         </button>
       )}
     </div>
@@ -191,9 +190,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             onClick={onClose}
             className="w-full flex items-center justify-center gap-spacing-8 bg-surface-base hover:bg-surface-accent-subtle text-text-primary hover:text-text-on-accent py-[10px] px-spacing-16 rounded-radius-10 transition-colors border border-border-accent"
           >
-            <span className="material-symbols-outlined text-type-body-s">
-              add
-            </span>
+            <Icon name="add" size={24} />
             <span>新查核任務</span>
           </Link>
         </div>
@@ -234,7 +231,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Footer */}
         <div className="p-spacing-16 border-t border-border-subtle bg-surface-raised">
           <div className="flex items-center gap-spacing-12 text-type-body-s text-text-secondary hover:text-text-primary cursor-pointer">
-            <span className="material-symbols-outlined">help</span>
+            <Icon name="help" size={24} />
             <span>使用教學與支援</span>
           </div>
         </div>

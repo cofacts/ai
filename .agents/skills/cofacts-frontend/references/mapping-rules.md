@@ -59,7 +59,10 @@ until the designer defines breakpoints; content max width 1040 centered).
 ## 6. Text, icons, notes
 
 - `characters` is placeholder copy; real text comes from data or existing copy (lingui).
-- `Base/Icon` `Name` value → snake_case for `<Icon name>` (`Open-In-New` → `open_in_new`).
+- `Base/Icon` `Name` value → the Material Symbol name, snake_case (`Open-In-New` →
+  `open_in_new`). The exceptions are in the `ui/Icon` Penpot story: `rss` → `rss_feed`, `plus` →
+  `add`, `flag` → `flag_2` filled, `report` → `flag_check` filled, `Bookmark-fill` → `bookmark`
+  filled, and Build / Thumb Up / Thumb Down are `filled`.
   Status and brand icons (`line`, `fb`) are custom SVGs.
 - State boards (`A-…`, `B-1-…`, `…-未登入`) each become a story.
 - Boards named 備註: "開發 Note" is a requirement (implement it or explain in the PR);
