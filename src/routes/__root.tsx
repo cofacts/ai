@@ -10,6 +10,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import appCss from '../styles/global.css?url'
 import type { QueryClient } from '@tanstack/react-query'
 import { GlobalNav } from '@/components/GlobalNav'
+import { cn } from '@/lib/utils'
 import { AuthProvider } from '@/lib/auth'
 import { getCurrentUserServerFn } from '@/server/me.functions'
 import { materialSymbolsHref } from '@/components/icons/material-symbols'
@@ -93,8 +94,14 @@ declare module '@tanstack/react-router' {
   interface StaticDataRouteOption {
     /** Set when the route draws its own nav (or none). */
     hideGlobalNav?: boolean
-    /** Set on screens with a side panel, or that draw their own footer. */
+    /** Set when the route draws its own footer (or none). */
     hideGlobalFooter?: boolean
+    /**
+     * Pin the page to the viewport height (`h-dvh`) so it scrolls inside its own panels (the AI
+     * chat with its side panels). Without it the document scrolls and the nav sticks to the top.
+     * Independent of the footer: a route that also wants no footer sets hideGlobalFooter.
+     */
+    fillViewport?: boolean
   }
 }
 
@@ -103,26 +110,25 @@ declare module '@tanstack/react-router' {
  * A route opts out with staticData; a flag set on a parent route also covers its children.
  */
 function RootComponent() {
-  const { hideGlobalNav, hideGlobalFooter } = useMatches({
+  const { hideGlobalNav, fillViewport } = useMatches({
     select: (matches) => ({
       hideGlobalNav: matches.some((m) => m.staticData.hideGlobalNav),
-      hideGlobalFooter: matches.some((m) => m.staticData.hideGlobalFooter),
+      fillViewport: matches.some((m) => m.staticData.fillViewport),
     }),
     structuralSharing: true,
   })
-  // Pages scroll with a footer at the end. Screens without a footer (side panels) are pinned to
-  // the viewport height instead, and scroll inside their panels.
-  // The footer (Penpot Layout/Footer) is not built yet; it goes after <Outlet /> behind
-  // hideGlobalFooter.
+  // Pages normally scroll the document: back/forward scroll restoration, #anchors, printing and
+  // the collapsing mobile URL bar all depend on it. fillViewport screens are exactly the viewport
+  // height instead; min-h-0 on their content lets the inner panels shrink and scroll.
+  // The footer (Penpot Layout/Footer) is not built yet; when it is, select hideGlobalFooter
+  // here and render it after <Outlet /> unless that flag is set.
   return (
-    <div
-      className={
-        hideGlobalFooter
-          ? 'flex h-dvh flex-col overflow-hidden'
-          : 'flex min-h-dvh flex-col'
-      }
-    >
-      {!hideGlobalNav && <GlobalNav />}
+    <div className={cn('flex flex-col', fillViewport ? 'h-dvh' : 'min-h-dvh')}>
+      {!hideGlobalNav && (
+        <div className={cn('shrink-0', !fillViewport && 'sticky top-0 z-30')}>
+          <GlobalNav />
+        </div>
+      )}
       <Outlet />
     </div>
   )

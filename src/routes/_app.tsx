@@ -6,9 +6,10 @@ import { LoggedOutLanding } from '@/components/LoggedOutLanding'
 import { useAuth } from '@/lib/auth'
 
 export const Route = createFileRoute('/_app')({
-  // The AI screens share the global nav (Penpot uses the same Nav there) but have a side
-  // panel, so no footer and a full-height layout.
-  staticData: { hideGlobalFooter: true },
+  // The AI screens share the global nav (Penpot uses the same Nav there). The chat scrolls
+  // inside its side panels, so the page is pinned to the viewport, and a footer below it could
+  // never be scrolled to.
+  staticData: { fillViewport: true, hideGlobalFooter: true },
   component: AppLayout,
 })
 

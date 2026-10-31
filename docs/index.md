@@ -133,9 +133,11 @@ is only the overview.
   `src/routes/(lists)/articles.tsx` is the working example; `src/server/cofacts.server.ts`
   (`cofactsExec`) is server-only and enforced by import protection.
 - **Site shell:** `__root.tsx` renders the global nav (and later the footer) around every
-  page. A route opts out with `staticData: { hideGlobalNav, hideGlobalFooter }`. The Cofacts AI
-  layout `_app` sets `hideGlobalFooter`: it has a side panel, so it is pinned to the viewport
-  height with no footer.
+  page, and the document scrolls with the nav stuck to the top. A route opts out of the nav or
+  footer with `staticData: { hideGlobalNav, hideGlobalFooter }`; `fillViewport` pins it to the
+  viewport height (`h-dvh`) so it scrolls inside its own panels. The flags are independent. The
+  Cofacts AI layout `_app` sets `fillViewport` and `hideGlobalFooter`: the chat scrolls inside its
+  side panels, so a footer below it could never be reached.
 
 Design record: the kb doc
 [Phase 3 網站遷移與前端架構](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Phase%203%20網站遷移與前端架構.md).
