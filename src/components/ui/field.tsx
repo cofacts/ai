@@ -6,7 +6,6 @@ import type { VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/utils'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 
 function FieldSet({ className, ...props }: React.ComponentProps<'fieldset'>) {
   return (
@@ -141,36 +140,6 @@ function FieldDescription({ className, ...props }: React.ComponentProps<'p'>) {
   )
 }
 
-function FieldSeparator({
-  children,
-  className,
-  ...props
-}: React.ComponentProps<'div'> & {
-  children?: React.ReactNode
-}) {
-  return (
-    <div
-      data-slot="field-separator"
-      data-content={!!children}
-      className={cn(
-        '-my-spacing-8 h-spacing-20 text-type-body-s group-data-[variant=outline]/field-group:-mb-spacing-8 relative',
-        className,
-      )}
-      {...props}
-    >
-      <Separator className="absolute inset-0 top-1/2" />
-      {children && (
-        <span
-          className="text-text-secondary px-spacing-8 bg-surface-raised relative mx-auto block w-fit"
-          data-slot="field-separator-content"
-        >
-          {children}
-        </span>
-      )}
-    </div>
-  )
-}
-
 function FieldError({
   className,
   children,
@@ -229,7 +198,6 @@ export {
   FieldError,
   FieldGroup,
   FieldLegend,
-  FieldSeparator,
   FieldSet,
   FieldContent,
   FieldTitle,
