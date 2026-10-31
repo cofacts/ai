@@ -9,19 +9,17 @@
 .drawerMobile {
   view-transition-name: right-drawer-mobile;
 }
-@media (prefers-reduced-motion: no-preference) {
-  ::view-transition-old(right-drawer) {
-    animation: right-drawer-out-right 0.3s ease both;
-  }
-  ::view-transition-new(right-drawer) {
-    animation: right-drawer-in-right 0.3s ease both;
-  }
-  ::view-transition-old(right-drawer-mobile) {
-    animation: right-drawer-out-bottom 0.3s ease both;
-  }
-  ::view-transition-new(right-drawer-mobile) {
-    animation: right-drawer-in-bottom 0.3s ease both;
-  }
+::view-transition-old(right-drawer) {
+  animation: right-drawer-out-right 0.3s ease both;
+}
+::view-transition-new(right-drawer) {
+  animation: right-drawer-in-right 0.3s ease both;
+}
+::view-transition-old(right-drawer-mobile) {
+  animation: right-drawer-out-bottom 0.3s ease both;
+}
+::view-transition-new(right-drawer-mobile) {
+  animation: right-drawer-in-bottom 0.3s ease both;
 }
 @keyframes right-drawer-out-right {
   to {
