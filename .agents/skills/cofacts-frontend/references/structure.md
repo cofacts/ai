@@ -33,7 +33,6 @@ Colocate per component: `Foo.tsx`, `Foo.stories.tsx`, `Foo.module.css` (only whe
   When a component should reuse a query's type, take a subtype of the codegen result type.
 - One responsive component replaces Penpot's desktop / `-Mobile` pairs.
 - Icons: one `<Icon name>` component with SVG imports (Material Symbols names), `aria-hidden`.
-- Animations respect `prefers-reduced-motion`.
 
 ## Themes
 

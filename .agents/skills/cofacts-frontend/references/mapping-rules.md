@@ -61,6 +61,7 @@ until the designer defines breakpoints; content max width 1040 centered).
 - `characters` is placeholder copy; real text comes from data or existing copy (lingui).
 - `Base/Icon` `Name` value → snake_case for `<Icon name>` (`Open-In-New` → `open_in_new`).
   Status and brand icons (`line`, `fb`) are custom SVGs.
-- State boards (`A-…`, `B-1-…`, `…-未登入`) each become a story.
+- State boards (`A-…`, `B-1-…`, `…-未登入`) are states to implement and review on the PR preview,
+  not just the default state. Pages have no stories.
 - Boards named 備註: "開發 Note" is a requirement (implement it or explain in the PR);
   "頁面層級標記" names the page/route. Never render them as UI.
