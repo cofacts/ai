@@ -60,7 +60,9 @@ this skill is the current, executable form of it.
 3. **Build.** Map Penpot to classes with `references/mapping-rules.md`. Data per
    `references/data-layer.md`.
 4. **Stories.** One story per Penpot state board. Pages render a pure `XxxPageView` with
-   fixtures; callbacks use `fn()`.
+   fixtures; callbacks use `fn()`. Put interaction and a11y checks (accessible names, what a
+   click or key does) in the story's `play` function: `pnpm test` renders every story in
+   Chromium and fails on a story that throws or a `play` whose `expect` fails.
 5. **Verify** (all required):
    - `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test`, `pnpm tokens:check`, `pnpm build`
    - Storybook at 375 and 1440, in light **and** dark, compared with Penpot `export_shape`

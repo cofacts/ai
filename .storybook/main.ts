@@ -2,6 +2,9 @@ import type { StorybookConfig } from '@storybook/tanstack-react'
 
 const config: StorybookConfig = {
   stories: ['../src/**/*.stories.@(ts|tsx)'],
+  // Runs every story (and its play function) as a Vitest test: the `storybook` project in
+  // vite.config.ts.
+  addons: ['@storybook/addon-vitest'],
   framework: {
     name: '@storybook/tanstack-react',
     options: {},
