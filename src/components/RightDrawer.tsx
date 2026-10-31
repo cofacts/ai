@@ -5,7 +5,8 @@ import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
-import './RightDrawer.css'
+import { cn } from '@/lib/utils'
+import styles from './RightDrawer.module.css'
 
 interface RightDrawerProps {
   isOpen: boolean
@@ -18,7 +19,12 @@ export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
     <>
       {/* Desktop drawer */}
       {isOpen && (
-        <aside className="hidden md:flex flex-1 min-w-0 bg-base border-l border-subtle flex-col shadow-btn z-10 overflow-hidden [view-transition-name:right-drawer]">
+        <aside
+          className={cn(
+            'hidden md:flex flex-1 min-w-0 bg-base border-l border-subtle flex-col shadow-btn z-10 overflow-hidden',
+            styles.drawer,
+          )}
+        >
           <DrawerHeader invocation={invocation} onClose={onClose} />
           <DrawerContent invocation={invocation} />
         </aside>
@@ -847,7 +853,10 @@ function MobileBottomSheet({
         onClick={onClose}
       />
       <div
-        className="absolute bottom-0 left-0 w-full flex flex-col bg-raised rounded-t-10 shadow-btn transition-[height] duration-100 [view-transition-name:right-drawer-mobile]"
+        className={cn(
+          'absolute bottom-0 left-0 w-full flex flex-col bg-raised rounded-t-10 shadow-btn transition-[height] duration-100',
+          styles.drawerMobile,
+        )}
         style={{ height: `${sheetHeight}vh` }}
       >
         <div
