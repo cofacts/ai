@@ -64,8 +64,6 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
         <div className="flex gap-spacing-12">
           <PopoverTrigger
             onClick={() => handleFeedback(1)}
-            aria-label="有幫助"
-            aria-pressed={feedbackGiven === 1}
             className={`p-spacing-4 rounded-radius-5 transition-colors ${
               feedbackGiven === 1
                 ? 'bg-surface-accent-subtle text-text-on-accent'
@@ -76,8 +74,6 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
           </PopoverTrigger>
           <PopoverTrigger
             onClick={() => handleFeedback(-1)}
-            aria-label="沒有幫助"
-            aria-pressed={feedbackGiven === -1}
             className={`p-spacing-4 rounded-radius-5 hover:bg-surface-raised transition-colors ${
               feedbackGiven === -1
                 ? 'text-status-incorrect'
