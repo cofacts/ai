@@ -28,6 +28,8 @@ const preview: Preview = {
     },
   },
   initialGlobals: { theme: 'light' },
+  // Autodocs: every component gets a Docs page that renders all its stories together.
+  tags: ['autodocs'],
   decorators: [withTheme],
   parameters: {
     controls: {

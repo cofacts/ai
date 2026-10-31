@@ -39,52 +39,21 @@ export const WithIcons: Story = {
 }
 export const Disabled: Story = { args: { disabled: true } }
 
-/** Penpot Size × Style × Icon, side by side. */
-export const Matrix: Story = {
-  render: () => (
-    <div className="flex flex-col gap-24">
-      {(['primary', 'outline', 'secondary'] as const).map((variant) => (
-        <div key={variant} className="flex flex-wrap items-center gap-16">
-          {(['lg', 'md', 'sm'] as const).map((size) => (
-            <Button key={size} variant={variant} size={size}>
-              查核闢謠
-            </Button>
-          ))}
-          <Button variant={variant} iconStart="edit-document">
-            查核闢謠
-          </Button>
-          <Button variant={variant} iconEnd="arrow-forward">
-            查核闢謠
-          </Button>
-          <Button variant={variant} iconStart="search" aria-label="搜尋" />
-          <Button
-            variant={variant}
-            size="sm"
-            iconStart="close"
-            aria-label="關閉"
-          />
-          <Button variant={variant} disabled>
-            停用
-          </Button>
-        </div>
-      ))}
-      <div
-        data-surface="dark"
-        className="flex items-center gap-16 bg-dark p-16"
-      >
-        <Button
-          variant="on-dark"
-          size="icon-touch"
-          iconStart="menu"
-          aria-label="選單"
-        />
-        <Button
-          variant="on-dark"
-          size="icon-touch"
-          iconStart="close"
-          aria-label="關閉"
-        />
-      </div>
+export const IconOnly: Story = {
+  args: { iconStart: 'search', children: undefined, 'aria-label': '搜尋' },
+}
+
+/** `icon-touch` is the 32px icon button used in the dark app bar. */
+export const OnDark: Story = {
+  args: {
+    variant: 'on-dark',
+    iconStart: 'menu',
+    children: undefined,
+    'aria-label': '選單',
+  },
+  render: (args) => (
+    <div data-surface="dark" className="flex items-center gap-16 bg-dark p-16">
+      <Button {...args} size="icon-touch" />
     </div>
   ),
 }
