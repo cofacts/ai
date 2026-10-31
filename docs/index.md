@@ -116,8 +116,8 @@ is only the overview.
 - **Tokens:** `design/tokens.json` (exported from Penpot) is the source. `pnpm tokens` generates
   `src/styles/tokens.css` (CSS variables + Tailwind `@theme`), `src/styles/tokens.generated.ts`
   (names for `cn()`'s tailwind-merge, lists for Storybook).
-  CI runs `pnpm tokens:check`. Class = token name without its role prefix
-  (`surface-raised` → `bg-raised`, `type-body-m` → `text-body-m`); spacing is 1px per unit;
+  CI runs `pnpm tokens:check`. Color class = Tailwind utility + token name
+  (`surface-raised` → `bg-surface-raised`); typography is `type-body-m` → `text-body-m`; spacing is 1px per unit;
   Tailwind's default palette and sizes are switched off.
 - **Themes:** each semantic token is `light-dark(light, dark)`; `color-scheme` follows
   `prefers-color-scheme` unless `<html data-theme>` forces one. Components never use `dark:`.

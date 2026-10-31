@@ -16,10 +16,10 @@ No match: decide whether it should be a new shared component instead of page cod
 
 | `shape.tokens` property        | Shape             | Class                                                                   |
 | ------------------------------ | ----------------- | ----------------------------------------------------------------------- |
-| `fill`                         | board / rect      | `bg-{drop surface-}` (`overlay-scrim` → `bg-scrim`)                     |
-| `fill`                         | text              | `text-{drop text-}`, or `text-status-*`                                 |
+| `fill`                         | board / rect      | `bg-{token}`: `bg-surface-raised`, `bg-overlay-scrim`                   |
+| `fill`                         | text              | `text-{token}`: `text-text-primary`, or `text-status-*`                 |
 | `fill`                         | path / svg (icon) | `text-icon-*` (icons use `currentColor`)                                |
-| `strokeColor`                  | any               | `border-{drop border-}`                                                 |
+| `strokeColor`                  | any               | `border-{token}`: `border-border-control`                               |
 | `strokeWidth`                  | any               | `border` (1), `border-2`, `border-3`, `border-4`, `border-[0.5px]`      |
 | `paddingTop/Right/Bottom/Left` | flex/grid board   | `pt-N`…; merge equal sides into `p-N` / `px-N` / `py-N`                 |
 | `rowGap` / `columnGap`         | flex board        | `gap-N` along the main axis; grid: `gap-x-N` / `gap-y-N`                |
@@ -33,7 +33,7 @@ token is the source. Weights are only 400 and 700.
 ## 3. Unbound values
 
 - **Color:** hex → primitive → the semantic token of the right role that points to it in the
-  current theme (text → `text-*`). Use it only if it's the **only** candidate, and list it in the
+  current theme (text → `text-text-*`). Use it only if it's the **only** candidate, and list it in the
   PR's "unbound values" for the designer. Zero or several candidates: stop and ask. Never write
   `bg-[#xxxxxx]`.
 - **Spacing:** use the token if equal; otherwise round to the nearest step
