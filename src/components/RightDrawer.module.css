@@ -1,9 +1,14 @@
 /*
- * Slide animations for the drawer's view transitions (view-transition-name right-drawer and
- * right-drawer-mobile, set on the drawer elements). The pseudo-elements are document-level, so
- * this is plain CSS imported for its side effect: Vite tree-shakes a CSS Module whose exports
- * nobody reads, which dropped these rules from the production build.
+ * Slide animations for the drawer's view transitions. The ::view-transition-* pseudo-elements
+ * are document-level, so they live here next to the classes that set the transition names.
+ * RightDrawer.tsx reads these classes, which is what keeps this file in the production build.
  */
+.drawer {
+  view-transition-name: right-drawer;
+}
+.drawerMobile {
+  view-transition-name: right-drawer-mobile;
+}
 @media (prefers-reduced-motion: no-preference) {
   ::view-transition-old(right-drawer) {
     animation: right-drawer-out-right 0.3s ease both;

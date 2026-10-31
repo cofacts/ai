@@ -39,6 +39,16 @@ describe('cn', () => {
     )
   })
 
+  it('merges any token under any color utility', () => {
+    expect(cn('border-border-subtle', 'border-status-incorrect')).toBe(
+      'border-status-incorrect',
+    )
+    expect(cn('bg-surface-raised', 'bg-border-accent')).toBe('bg-border-accent')
+    expect(cn('text-type-body-m', 'text-status-correct')).toBe(
+      'text-type-body-m text-status-correct',
+    )
+  })
+
   it('keeps text-base a font size, not a color', () => {
     expect(cn('text-base', 'text-text-primary')).toBe(
       'text-base text-text-primary',
