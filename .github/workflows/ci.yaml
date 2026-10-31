@@ -118,7 +118,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run tokens:check
 
-      - name: Unit tests (Vitest)
+      # The `storybook` Vitest project renders every story in Chromium.
+      - name: Install Chromium for Storybook tests
+        if: ${{ !cancelled() }}
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Tests (Vitest unit tests and Storybook stories)
         if: ${{ !cancelled() }}
         run: pnpm test --coverage
 
