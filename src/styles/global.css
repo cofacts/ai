@@ -12,7 +12,7 @@
 
 @layer base {
   html {
-    @apply bg-surface-base font-sans text-text-primary;
+    @apply bg-surface-base font-noto text-text-primary;
   }
 
   /*
@@ -22,7 +22,7 @@
    *
    * The gap and outer ring are box-shadows. They also go into Tailwind's ring variables:
    * a shadow-* utility (utilities layer) replaces box-shadow but composes these variables,
-   * so the ring stacks with shadow-btn instead of disappearing.
+   * so the ring stacks with shadow-btn-shadow instead of disappearing.
    */
   :focus-visible {
     --tw-ring-offset-shadow: 0 0 0 2px var(--surface-base);

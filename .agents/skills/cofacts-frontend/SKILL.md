@@ -29,11 +29,12 @@ this skill is the current, executable form of it.
 ## Hard rules
 
 - **Tokens only.** Color class = any Tailwind color utility + the Penpot token name, unchanged (`surface-raised` →
-  `bg-surface-raised`, `text-primary` → `text-text-primary`); typography `type-body-m` → `text-body-m`; the full list with each class is in the generated
+  `bg-surface-raised`, `text-primary` → `text-text-primary`); typography `type-body-m` → `text-type-body-m`; the full list with each class is in the generated
   `src/styles/tokens.css` (comments name the class), and Storybook's Foundations/Tokens shows them. No arbitrary colors (`[#…]`,
   `style={{ color }}`), no primitive colors (`neutral-900`), no `dark:` variants (tokens flip by
   themselves), no bare font sizes (`text-16`) or `leading-*` / `font-semibold` — use a typography
-  class (`text-body-m`, `text-ui-s-bold`…). Spacing is 1px per unit: `p-16` is 16px.
+  class (`text-type-body-m`, `text-type-ui-s-bold`…). Spacing and radius tokens keep their names too:
+  `spacing-16` → `p-spacing-16`, `RADIUS-5` → `rounded-radius-5`.
 - **Brand yellow is a background, never text** (R2). `bg-surface-accent` pairs with `text-text-on-accent`.
 - **Pair by name** (R4): `bg-surface-dark` → `text-text-on-dark`, `bg-surface-secondary` → `text-text-on-secondary`,
   `bg-surface-inverse` → `text-text-inverse`. A name that doesn't match is a bug.

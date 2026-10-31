@@ -4,7 +4,7 @@ import type { ClassValue } from 'clsx'
 
 import { twMergeTheme } from '@/styles/tokens.generated'
 
-// tailwind-merge doesn't read our @theme. Without these names it treats `text-body-m` as a
+// tailwind-merge doesn't read our @theme. Without these names it treats `text-type-body-m` as a
 // text color and drops it when merged with `text-text-primary`.
 const twMerge = extendTailwindMerge({ extend: { theme: twMergeTheme } })
 

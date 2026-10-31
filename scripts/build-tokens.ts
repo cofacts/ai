@@ -8,12 +8,11 @@
  *   - src/styles/tokens.css            CSS variables (light / dark) + Tailwind @theme
  *   - src/styles/tokens.generated.ts   twMergeTheme for cn(), token lists for Storybook
  *
- * Naming rule: every semantic color token is registered as a Tailwind color with the Penpot token
- * name unchanged, so any color utility takes any token:
+ * Naming rule: every token keeps its Penpot name; the class is the Tailwind utility + that name.
  *   surface-raised → bg-surface-raised, text-primary → text-text-primary,
- *   border-control → border-border-control, status-incorrect → text-/bg-/border-status-incorrect.
- * Typography, spacing and radius use Tailwind's own scales instead:
- *   type-body-m → text-body-m, spacing-16 → p-16 (1 unit = 1px), RADIUS-5 → rounded-5.
+ *   border-control → border-border-control (any color utility takes any color token),
+ *   type-body-m → text-type-body-m, spacing-16 → p-spacing-16, RADIUS-5 → rounded-radius-5,
+ *   btn-shadow → shadow-btn-shadow, noto → font-noto.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -115,7 +114,7 @@ const typography = byType('typography').map(([name, t]) => {
   const lineHeightPx = ratio === 1 ? null : Math.round(size * ratio)
   return {
     name,
-    className: `text-${name.replace(/^type-/, '')}`,
+    className: `text-${name}`,
     size,
     weight,
     lineHeight: lineHeightPx === null ? '1' : px(lineHeightPx),
@@ -126,18 +125,20 @@ const typography = byType('typography').map(([name, t]) => {
 const spacing = byType('spacing').map(([name, t]) => ({
   name,
   value: num(name, t.$value),
+  className: `p-${name}`,
 }))
 spacing.sort((a, b) => a.value - b.value)
 
 const radius = byType('borderRadius').map(([name, t]) => {
   const value = num(name, t.$value)
-  const key = value >= 100 ? 'full' : String(value)
+  // Tailwind theme keys are lowercase: RADIUS-5 → rounded-radius-5.
+  const key = name.toLowerCase()
   return { name, key, value, className: `rounded-${key}` }
 })
 radius.sort((a, b) => a.value - b.value)
 
 const shadows = byType('shadow').map(([name, t]) => {
-  const key = name.replace(/-shadow$/, '')
+  const key = name
   const css = (t.$value as Array<Shadow>)
     .map(
       (s) =>
@@ -147,12 +148,14 @@ const shadows = byType('shadow').map(([name, t]) => {
   return { name, key, css, className: `shadow-${key}` }
 })
 
-const fontFamilies = byType('fontFamilies')[0]?.[1].$value
-const fontFamily = Array.isArray(fontFamilies) ? fontFamilies[0] : fontFamilies
-if (typeof fontFamily !== 'string' || !fontFamily)
-  throw new Error(
-    `fontFamilies: expected a font name, got ${JSON.stringify(fontFamilies)}`,
-  )
+const fonts = byType('fontFamilies').map(([name, t]) => {
+  const family = Array.isArray(t.$value) ? t.$value[0] : t.$value
+  if (typeof family !== 'string' || !family)
+    throw new Error(
+      `${name}: expected a font name, got ${JSON.stringify(t.$value)}`,
+    )
+  return { name, family }
+})
 
 const primitives = byType('color')
 
@@ -236,10 +239,12 @@ ${fallbackLines(Dark, '    ')}
   --radius-*: initial;
   --shadow-*: initial;
 
-  /* 1 spacing unit = 1px, so spacing-16 → p-16 and a 343px width → w-343. */
+  /* 1 spacing unit = 1px, so a 343px width → w-343. */
   --spacing: 0.0625rem;
 
-  --font-sans: '${fontFamily}', system-ui, sans-serif;
+${fonts.map((f) => `  --font-${f.name}: '${f.family}', system-ui, sans-serif;`).join('\n')}
+
+${spacing.map((sp) => `  --spacing-${sp.name}: ${px(sp.value)};`).join('\n')}
 
 ${themeLines.join('\n')}
 
@@ -252,7 +257,7 @@ ${typography
   )
   .join('\n')}
 
-${radius.map((r) => `  --radius-${r.key}: ${r.key === 'full' ? '9999px' : `${r.value}px`};`).join('\n')}
+${radius.map((r) => `  --radius-${r.key}: ${r.value}px;`).join('\n')}
 
 ${shadows.map((s) => `  --shadow-${s.key}: ${s.css};`).join('\n')}
 }
@@ -275,6 +280,8 @@ export const twMergeTheme = ${JSON.stringify(
     color: semanticNames,
     text: typography.map((t) => t.className.slice(5)),
     radius: radius.map((r) => r.key),
+    spacing: spacing.map((sp) => sp.name),
+    font: fonts.map((f) => f.name),
     shadow: shadows.map((s) => s.key),
   },
   null,
