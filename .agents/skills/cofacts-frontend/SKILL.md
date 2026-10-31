@@ -37,10 +37,6 @@ this skill is the current, executable form of it.
 - **Brand yellow is a background, never text** (R2). `bg-accent` pairs with `text-on-accent`.
 - **Pair by name** (R4): `bg-dark` → `text-on-dark`, `bg-secondary` → `text-on-secondary`,
   `bg-inverse` → `text-inverse`. A name that doesn't match is a bug.
-- **Status colors** (`text-status-*`, `bg-status-*`, `border-status-*`) only in
-  `ReplyTypeLabel` / `StatusIcon`, `VerdictPicker` and status badges, always with text and a shape
-  icon (R1). Exception: errors and destructive actions use `status-incorrect` (Input Invalid,
-  FieldError, delete buttons), always with text.
 - **Disabled = default look + `opacity-50`**, plus `disabled` or `aria-disabled="true"` (R5).
 - **Focus is global.** Never add `focus-visible:ring-*` or per-component focus styles. Put
   `data-surface="dark"` on fixed-dark containers.
