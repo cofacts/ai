@@ -1,10 +1,13 @@
+import type { MaterialSymbol as AnyMaterialSymbol } from 'material-symbols'
+
 /**
  * The Material Symbols this app uses, and the Google Fonts request that loads them.
  *
  * **To use an icon that isn't here, add its name to this list.** The request asks only for
  * these glyphs (`icon_names`): a 9 KB font instead of about 550 KB for every icon. A name that
  * isn't listed fails the type check of `<MaterialIcon name>`, and would render as plain text.
- * Names are on https://fonts.google.com/icons.
+ * Names are on https://fonts.google.com/icons; `satisfies` checks each one against every Material
+ * Symbol name (the `material-symbols` package's type), so a typo fails the type check here.
  *
  * The designer's settings (Penpot page "UI system", board "Icons"): style Rounded, fill 0,
  * weight 400, grade 0, optical size 20. Fill also loads 1, for solid icons
@@ -63,7 +66,7 @@ export const MATERIAL_SYMBOLS = [
   'trending_up',
   'upload_file',
   'warning',
-] as const
+] as const satisfies ReadonlyArray<AnyMaterialSymbol>
 
 export type MaterialSymbol = (typeof MATERIAL_SYMBOLS)[number]
 
