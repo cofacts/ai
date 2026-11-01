@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { getCookie } from '@tanstack/react-start/server'
+import { deleteCookie, getCookie } from '@tanstack/react-start/server'
 import { cofactsExec } from '../cofacts.server'
 import { getApiBase } from '@/server/api-base'
 import { graphql } from '@/server/gql'
 
 vi.mock('@tanstack/react-start/server', () => ({
   getCookie: vi.fn(),
+  deleteCookie: vi.fn(),
 }))
 
 const mockedGetCookie = vi.mocked(getCookie)
@@ -149,6 +150,10 @@ describe('cofactsExec', () => {
     expect(fn).toHaveBeenCalledTimes(2)
     const [, retry] = fn.mock.calls[1] as [string, RequestInit]
     expect(retry.headers).not.toHaveProperty('Authorization')
+    expect(deleteCookie).toHaveBeenCalledWith(
+      'cofacts_session',
+      expect.objectContaining({ maxAge: 0 }),
+    )
   })
 
   test('does not retry other server errors', async () => {
@@ -160,6 +165,7 @@ describe('cofactsExec', () => {
     })
     await expect(cofactsExec(TestQuery)).rejects.toThrow(/500/)
     expect(fn).toHaveBeenCalledTimes(1)
+    expect(deleteCookie).not.toHaveBeenCalled()
   })
 
   test('forwards variables in the POST body', async () => {

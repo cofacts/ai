@@ -2,12 +2,15 @@
 // client. Reads the HttpOnly cofacts_session cookie via h3's getCookie and
 // dispatches the GetUser GraphQL query through cofactsExec.
 //
-// When GetUser throws but the session cookie is a valid JWT, returns a
-// minimal user populated from the JWT sub so AuthProvider's `['me']` query
+// When GetUser throws (rumors-api down, timing out, rate-limited) but the session
+// cookie is a valid JWT, returns a minimal user populated from the JWT sub so AuthProvider's `['me']` query
 // (initialData + staleTime: Infinity) stays truthy and _ai.tsx's `!user`
 // gate keeps rendering the authenticated shell. name/avatar remain null
 // until cache invalidation or a subsequent successful fetch. Returns null
 // only when no valid session cookie exists.
+//
+// A token that rumors-api explicitly rejects is not this case: cofactsExec clears the
+// cookie and retries anonymously, so GetUser resolves to null (logged out) here.
 
 import { createServerFn } from '@tanstack/react-start'
 import { getCookie } from '@tanstack/react-start/server'

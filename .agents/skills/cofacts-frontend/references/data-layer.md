@@ -136,3 +136,7 @@ Writes reach components as callbacks (`onSubmit`, `onLoadMore`). Stories feed fi
 Server functions read the session cookie, so SSR renders the logged-in page. The CDN must not
 cache responses that carry `cofacts_session`, and those responses send `Cache-Control: private,
 no-store`.
+
+If rumors-api rejects the session token, `cofactsExec` clears the cookie and retries anonymously, so
+the page renders logged out instead of failing
+([decision](../../../../docs/decisions/20261101-ssr-rejected-session-token.md)).

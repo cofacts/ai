@@ -3,7 +3,11 @@ import type { CodegenConfig } from '@graphql-codegen/cli'
 const config: CodegenConfig = {
   schema: 'https://api.cofacts.tw/graphql',
   // Anywhere a server function may live: route files, *.functions.ts, *.server.ts.
-  documents: ['src/**/*.{ts,tsx}', '!src/server/gql/**'],
+  documents: [
+    'src/**/*.{ts,tsx}',
+    '!src/server/gql/**',
+    '!src/**/__tests__/**',
+  ],
   generates: {
     './src/server/gql/': {
       preset: 'client',

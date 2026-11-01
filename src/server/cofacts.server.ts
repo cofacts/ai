@@ -4,8 +4,11 @@
 // queries work — and forwards the JWT as Bearer auth.
 //
 // rumors-api rejects the whole request (HTTP 500, before any resolver runs) when the
-// Bearer token is invalid or expired, even for public queries. Then this retries once
-// without the token, so public pages keep working with a stale cookie.
+// Bearer token is invalid or expired, even for public queries. That session is dead, so
+// this clears the session cookie and retries once without the token: the page renders
+// logged out instead of failing, and later requests no longer carry the rejected token.
+// Other failures (network, 5xx, rate limit) are not treated as a dead session. See
+// docs/decisions/20261101-ssr-rejected-session-token.md.
 //
 // On network error, non-2xx response, or GraphQL `errors` array, this throws.
 // Callers that want a soft-fail wrap the call in try/catch and handle null /
@@ -14,12 +17,15 @@
 // Server-only (the .server.ts suffix makes TanStack Start's import protection
 // enforce it): use it only inside createServerFn handlers.
 
-import { getCookie } from '@tanstack/react-start/server'
+import { deleteCookie, getCookie } from '@tanstack/react-start/server'
 import { print } from 'graphql'
 import type { TypedDocumentNode } from '@graphql-typed-document-node/core'
 
 import { getApiBase } from '@/server/api-base'
-import { SESSION_COOKIE_NAME } from '@/server/sessionCookie'
+import {
+  SESSION_COOKIE_NAME,
+  buildClearSessionCookieAttrs,
+} from '@/server/sessionCookie'
 
 interface GraphQLResponse<TResult> {
   data?: TResult | null
@@ -47,6 +53,7 @@ export async function cofactsExec<TResult, TVariables>(
 
   let res = await post(true)
   if (!res.ok && token && (await rejectsToken(res))) {
+    deleteCookie(SESSION_COOKIE_NAME, buildClearSessionCookieAttrs())
     res = await post(false)
   }
 
