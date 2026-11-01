@@ -4,6 +4,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
 import styles from './RightDrawer.module.css'
+import { FactCheckReplyCard } from './cofacts/FactCheckReplyCard'
+import { SuspiciousMessageCard } from './cofacts/SuspiciousMessageCard'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
 import type { MaterialSymbol } from '@/components/icons/material-symbols'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
@@ -511,60 +513,6 @@ function DraftFactcheckContent({
 
 // ── Cofacts Article ──────────────────────────────────────────────
 
-type CofactsArticle = NonNullable<
-  AllTools['get_single_cofacts_article']['resp']['article']
->
-type RelatedArticleNode =
-  CofactsArticle['relatedArticles']['edges'][number]['node']
-
-const REPLY_TYPE_INFO: Record<string, { label: string; className: string }> = {
-  RUMOR: {
-    label: '含有不實訊息',
-    className:
-      'bg-surface-raised text-status-incorrect border border-border-control',
-  },
-  NOT_RUMOR: {
-    label: '不含不實訊息',
-    className:
-      'bg-surface-raised text-status-correct border border-border-subtle',
-  },
-  OPINIONATED: {
-    label: '含有個人意見',
-    className: 'bg-surface-raised text-text-link border border-border-subtle',
-  },
-  NOT_ARTICLE: {
-    label: '不是可查核的內容',
-    className:
-      'bg-surface-accent-subtle text-text-on-accent border border-border-accent',
-  },
-}
-
-function RelatedArticleCard({ article }: { article: RelatedArticleNode }) {
-  return (
-    <a
-      href={`https://cofacts.tw/article/${article.id}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="shrink-0 w-[210px] rounded-radius-10 border border-border-subtle bg-surface-raised p-spacing-12 hover:bg-surface-selected transition-colors flex flex-col gap-spacing-8"
-    >
-      <p className="text-type-caption text-text-secondary line-clamp-4 flex-1">
-        {article.text || `[${article.articleType}]`}
-      </p>
-      <div>
-        {article.factCheckCount > 0 ? (
-          <span className="text-[10px] bg-surface-raised text-status-correct border border-border-subtle rounded-radius-5 px-[6px] py-spacing-2">
-            {article.factCheckCount} 則查核
-          </span>
-        ) : (
-          <span className="text-[10px] bg-surface-raised text-text-tertiary rounded-radius-5 px-[6px] py-spacing-2">
-            待查核
-          </span>
-        )}
-      </div>
-    </a>
-  )
-}
-
 // Fetches a browser-loadable, freshly signed attachment URL for the article
 // (the tool result only carries a non-loadable gs:// URI). Kept as its own
 // component so the useQuery hook is unconditional — CofactsArticleContent
@@ -702,44 +650,17 @@ function CofactsArticleContent({
           <p className="text-type-body-s text-text-tertiary">尚無查核回應</p>
         ) : (
           <div className="space-y-spacing-12">
-            {article.factCheckResponses.map((ar, i) => {
-              const typeInfo = REPLY_TYPE_INFO[ar.reply.type] ?? {
-                label: ar.reply.type,
-                className:
-                  'bg-surface-raised text-text-secondary border border-border-subtle',
-              }
-              return (
-                <div
-                  key={i}
-                  className="rounded-radius-10 border border-border-subtle bg-surface-raised p-spacing-12 space-y-spacing-8"
-                >
-                  <span
-                    className={`inline-block text-[10px] font-bold rounded-radius-5 px-[6px] py-spacing-2 ${typeInfo.className}`}
-                  >
-                    {typeInfo.label}
-                  </span>
-                  <p className="text-type-body-s text-text-primary whitespace-pre-wrap">
-                    {ar.reply.text}
-                  </p>
-                  {ar.reply.reference && (
-                    <p className="text-type-caption text-text-tertiary whitespace-pre-wrap">
-                      {ar.reply.reference}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-spacing-8 text-type-caption text-text-tertiary">
-                    <span>{ar.reply.user.name}</span>
-                    <span className="flex items-center gap-spacing-2">
-                      <MaterialIcon name="thumb_up" size={24} />
-                      {ar.helpfulCount}
-                    </span>
-                    <span className="flex items-center gap-spacing-2">
-                      <MaterialIcon name="thumb_down" size={24} />
-                      {ar.unhelpfulCount}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
+            {article.factCheckResponses.map((ar, i) => (
+              <FactCheckReplyCard
+                key={i}
+                type={ar.reply.type}
+                text={ar.reply.text}
+                reference={ar.reply.reference}
+                authorName={ar.reply.user.name}
+                helpfulCount={ar.helpfulCount}
+                unhelpfulCount={ar.unhelpfulCount}
+              />
+            ))}
           </div>
         )}
       </section>
@@ -752,7 +673,13 @@ function CofactsArticleContent({
           </SectionLabel>
           <div className="flex gap-spacing-12 overflow-x-auto pb-spacing-8 -mx-spacing-16 px-spacing-16">
             {relatedEdges.map(({ node }) => (
-              <RelatedArticleCard key={node.id} article={node} />
+              <SuspiciousMessageCard
+                key={node.id}
+                text={node.text}
+                articleType={node.articleType}
+                factCheckCount={node.factCheckCount}
+                href={`https://cofacts.tw/article/${node.id}`}
+              />
             ))}
           </div>
         </section>

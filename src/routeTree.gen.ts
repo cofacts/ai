@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ReportRouteImport } from './routes/report'
 import { Route as AiRouteImport } from './routes/_ai'
 import { Route as AiIndexRouteImport } from './routes/_ai/index'
 import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
@@ -17,6 +18,11 @@ import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as AiSessionSessionIdRouteImport } from './routes/_ai/session.$sessionId'
 import { Route as AiSessionSessionIdToolToolCallIdRouteImport } from './routes/_ai/session.$sessionId.tool.$toolCallId'
 
+const ReportRoute = ReportRouteImport.update({
+  id: '/report',
+  path: '/report',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AiRoute = AiRouteImport.update({
   id: '/_ai',
   getParentRoute: () => rootRouteImport,
@@ -55,6 +61,7 @@ const AiSessionSessionIdToolToolCallIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AiIndexRoute
+  '/report': typeof ReportRoute
   '/articles': typeof listsArticlesRoute
   '/api/run-sse': typeof ApiRunSseRoute
   '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
@@ -62,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesByTo {
+  '/report': typeof ReportRoute
   '/articles': typeof listsArticlesRoute
   '/api/run-sse': typeof ApiRunSseRoute
   '/': typeof AiIndexRoute
@@ -72,6 +80,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_ai': typeof AiRouteWithChildren
+  '/report': typeof ReportRoute
   '/(lists)/articles': typeof listsArticlesRoute
   '/api/run-sse': typeof ApiRunSseRoute
   '/_ai/': typeof AiIndexRoute
@@ -83,6 +92,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/report'
     | '/articles'
     | '/api/run-sse'
     | '/session/$sessionId'
@@ -90,6 +100,7 @@ export interface FileRouteTypes {
     | '/session/$sessionId/tool/$toolCallId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/report'
     | '/articles'
     | '/api/run-sse'
     | '/'
@@ -99,6 +110,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_ai'
+    | '/report'
     | '/(lists)/articles'
     | '/api/run-sse'
     | '/_ai/'
@@ -109,6 +121,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AiRoute: typeof AiRouteWithChildren
+  ReportRoute: typeof ReportRoute
   listsArticlesRoute: typeof listsArticlesRoute
   ApiRunSseRoute: typeof ApiRunSseRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
@@ -116,6 +129,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/report': {
+      id: '/report'
+      path: '/report'
+      fullPath: '/report'
+      preLoaderRoute: typeof ReportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_ai': {
       id: '/_ai'
       path: ''
@@ -193,6 +213,7 @@ const AiRouteWithChildren = AiRoute._addFileChildren(AiRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AiRoute: AiRouteWithChildren,
+  ReportRoute: ReportRoute,
   listsArticlesRoute: listsArticlesRoute,
   ApiRunSseRoute: ApiRunSseRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
