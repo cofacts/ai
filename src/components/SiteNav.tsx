@@ -109,7 +109,7 @@ export function SiteNav({
       <div
         data-surface={menuOpen ? 'dark' : undefined}
         className={cn(
-          'flex min-h-[60px] items-center gap-spacing-32 border-b px-spacing-20 py-spacing-12 lg:h-spacing-64 lg:px-spacing-48 lg:py-0',
+          'flex h-[60px] items-center gap-spacing-32 border-b px-spacing-20 lg:h-spacing-64 lg:px-spacing-48',
           menuOpen
             ? 'border-border-on-dark bg-surface-dark'
             : 'border-border-subtle bg-surface-base',
