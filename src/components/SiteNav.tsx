@@ -253,7 +253,7 @@ export function SiteNav({
               <BrandIcon name="line" size={22} />
               {NAV_LINKS.line.label}
             </a>
-            {user ? (
+            {user === undefined ? null : user ? (
               <Button
                 variant="on-dark"
                 size="lg"

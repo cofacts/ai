@@ -145,14 +145,21 @@ function RootNav() {
   )
 }
 
-/** The nav item whose local href is a prefix of the path. */
+/**
+ * The nav item whose local href is the path or a parent segment of it, so detail pages such as
+ * /articles/:id still mark their section as current.
+ */
 function currentNavKey(pathname: string): SiteNavProps['current'] {
   // Cofacts AI still lives at / and /session/* until Track 5 moves it to /ai.
   if (pathname === '/' || pathname.startsWith('/session/')) return 'ai'
   return (Object.keys(NAV_LINKS) as Array<keyof typeof NAV_LINKS>).find(
     (key) => {
       const { href } = NAV_LINKS[key]
-      return href.startsWith('/') && href !== '/' && pathname.startsWith(href)
+      return (
+        href.startsWith('/') &&
+        href !== '/' &&
+        (pathname === href || pathname.startsWith(`${href}/`))
+      )
     },
   ) as SiteNavProps['current']
 }
