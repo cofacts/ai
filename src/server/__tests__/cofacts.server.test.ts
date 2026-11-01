@@ -40,7 +40,7 @@ function mockFetchOnce(response: {
   const fn = vi.fn().mockResolvedValueOnce({
     ok: response.ok ?? true,
     status: response.status ?? 200,
-    json: async () => response.jsonValue,
+    json: () => Promise.resolve(response.jsonValue),
   } as unknown as Response)
   vi.stubGlobal('fetch', fn)
   return fn
