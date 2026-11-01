@@ -6,7 +6,7 @@ import { ChatInput } from '@/components/ChatInput'
 import { WelcomeHero } from '@/components/WelcomeHero'
 import { isAuthExpiredError } from '@/lib/authExpired'
 
-export const Route = createFileRoute('/_app/')({
+export const Route = createFileRoute('/_ai/')({
   component: LandingPage,
 })
 

@@ -9,21 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AppRouteImport } from './routes/_app'
-import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AiRouteImport } from './routes/_ai'
+import { Route as AiIndexRouteImport } from './routes/_ai/index'
 import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
-import { Route as AppSessionSessionIdRouteImport } from './routes/_app/session.$sessionId'
-import { Route as AppSessionSessionIdToolToolCallIdRouteImport } from './routes/_app/session.$sessionId.tool.$toolCallId'
+import { Route as AiSessionSessionIdRouteImport } from './routes/_ai/session.$sessionId'
+import { Route as AiSessionSessionIdToolToolCallIdRouteImport } from './routes/_ai/session.$sessionId.tool.$toolCallId'
 
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
+const AiRoute = AiRouteImport.update({
+  id: '/_ai',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppIndexRoute = AppIndexRouteImport.update({
+const AiIndexRoute = AiIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => AiRoute,
 } as any)
 const ApiRunSseRoute = ApiRunSseRouteImport.update({
   id: '/api/run-sse',
@@ -35,40 +35,40 @@ const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   path: '/api/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppSessionSessionIdRoute = AppSessionSessionIdRouteImport.update({
+const AiSessionSessionIdRoute = AiSessionSessionIdRouteImport.update({
   id: '/session/$sessionId',
   path: '/session/$sessionId',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => AiRoute,
 } as any)
-const AppSessionSessionIdToolToolCallIdRoute =
-  AppSessionSessionIdToolToolCallIdRouteImport.update({
+const AiSessionSessionIdToolToolCallIdRoute =
+  AiSessionSessionIdToolToolCallIdRouteImport.update({
     id: '/tool/$toolCallId',
     path: '/tool/$toolCallId',
-    getParentRoute: () => AppSessionSessionIdRoute,
+    getParentRoute: () => AiSessionSessionIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppIndexRoute
+  '/': typeof AiIndexRoute
   '/api/run-sse': typeof ApiRunSseRoute
-  '/session/$sessionId': typeof AppSessionSessionIdRouteWithChildren
+  '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
-  '/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
+  '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesByTo {
   '/api/run-sse': typeof ApiRunSseRoute
-  '/': typeof AppIndexRoute
-  '/session/$sessionId': typeof AppSessionSessionIdRouteWithChildren
+  '/': typeof AiIndexRoute
+  '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
-  '/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
+  '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/_app': typeof AppRouteWithChildren
+  '/_ai': typeof AiRouteWithChildren
   '/api/run-sse': typeof ApiRunSseRoute
-  '/_app/': typeof AppIndexRoute
-  '/_app/session/$sessionId': typeof AppSessionSessionIdRouteWithChildren
+  '/_ai/': typeof AiIndexRoute
+  '/_ai/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
-  '/_app/session/$sessionId/tool/$toolCallId': typeof AppSessionSessionIdToolToolCallIdRoute
+  '/_ai/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -87,35 +87,35 @@ export interface FileRouteTypes {
     | '/session/$sessionId/tool/$toolCallId'
   id:
     | '__root__'
-    | '/_app'
+    | '/_ai'
     | '/api/run-sse'
-    | '/_app/'
-    | '/_app/session/$sessionId'
+    | '/_ai/'
+    | '/_ai/session/$sessionId'
     | '/api/auth/callback'
-    | '/_app/session/$sessionId/tool/$toolCallId'
+    | '/_ai/session/$sessionId/tool/$toolCallId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AppRoute: typeof AppRouteWithChildren
+  AiRoute: typeof AiRouteWithChildren
   ApiRunSseRoute: typeof ApiRunSseRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/_app': {
-      id: '/_app'
+    '/_ai': {
+      id: '/_ai'
       path: ''
       fullPath: '/'
-      preLoaderRoute: typeof AppRouteImport
+      preLoaderRoute: typeof AiRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/': {
-      id: '/_app/'
+    '/_ai/': {
+      id: '/_ai/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
+      preLoaderRoute: typeof AiIndexRouteImport
+      parentRoute: typeof AiRoute
     }
     '/api/run-sse': {
       id: '/api/run-sse'
@@ -131,49 +131,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/session/$sessionId': {
-      id: '/_app/session/$sessionId'
+    '/_ai/session/$sessionId': {
+      id: '/_ai/session/$sessionId'
       path: '/session/$sessionId'
       fullPath: '/session/$sessionId'
-      preLoaderRoute: typeof AppSessionSessionIdRouteImport
-      parentRoute: typeof AppRoute
+      preLoaderRoute: typeof AiSessionSessionIdRouteImport
+      parentRoute: typeof AiRoute
     }
-    '/_app/session/$sessionId/tool/$toolCallId': {
-      id: '/_app/session/$sessionId/tool/$toolCallId'
+    '/_ai/session/$sessionId/tool/$toolCallId': {
+      id: '/_ai/session/$sessionId/tool/$toolCallId'
       path: '/tool/$toolCallId'
       fullPath: '/session/$sessionId/tool/$toolCallId'
-      preLoaderRoute: typeof AppSessionSessionIdToolToolCallIdRouteImport
-      parentRoute: typeof AppSessionSessionIdRoute
+      preLoaderRoute: typeof AiSessionSessionIdToolToolCallIdRouteImport
+      parentRoute: typeof AiSessionSessionIdRoute
     }
   }
 }
 
-interface AppSessionSessionIdRouteChildren {
-  AppSessionSessionIdToolToolCallIdRoute: typeof AppSessionSessionIdToolToolCallIdRoute
+interface AiSessionSessionIdRouteChildren {
+  AiSessionSessionIdToolToolCallIdRoute: typeof AiSessionSessionIdToolToolCallIdRoute
 }
 
-const AppSessionSessionIdRouteChildren: AppSessionSessionIdRouteChildren = {
-  AppSessionSessionIdToolToolCallIdRoute:
-    AppSessionSessionIdToolToolCallIdRoute,
+const AiSessionSessionIdRouteChildren: AiSessionSessionIdRouteChildren = {
+  AiSessionSessionIdToolToolCallIdRoute: AiSessionSessionIdToolToolCallIdRoute,
 }
 
-const AppSessionSessionIdRouteWithChildren =
-  AppSessionSessionIdRoute._addFileChildren(AppSessionSessionIdRouteChildren)
+const AiSessionSessionIdRouteWithChildren =
+  AiSessionSessionIdRoute._addFileChildren(AiSessionSessionIdRouteChildren)
 
-interface AppRouteChildren {
-  AppIndexRoute: typeof AppIndexRoute
-  AppSessionSessionIdRoute: typeof AppSessionSessionIdRouteWithChildren
+interface AiRouteChildren {
+  AiIndexRoute: typeof AiIndexRoute
+  AiSessionSessionIdRoute: typeof AiSessionSessionIdRouteWithChildren
 }
 
-const AppRouteChildren: AppRouteChildren = {
-  AppIndexRoute: AppIndexRoute,
-  AppSessionSessionIdRoute: AppSessionSessionIdRouteWithChildren,
+const AiRouteChildren: AiRouteChildren = {
+  AiIndexRoute: AiIndexRoute,
+  AiSessionSessionIdRoute: AiSessionSessionIdRouteWithChildren,
 }
 
-const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+const AiRouteWithChildren = AiRoute._addFileChildren(AiRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  AppRoute: AppRouteWithChildren,
+  AiRoute: AiRouteWithChildren,
   ApiRunSseRoute: ApiRunSseRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
 }

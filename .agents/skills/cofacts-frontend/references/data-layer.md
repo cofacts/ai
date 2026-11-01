@@ -60,7 +60,7 @@ Route setup (once): `createRouter({ context: { queryClient } })` and
 ## Example
 
 ```tsx
-// src/routes/_site/article.$id/index.tsx
+// src/routes/article.$id/index.tsx
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { queryOptions, useSuspenseQuery } from '@tanstack/react-query'
@@ -100,7 +100,7 @@ const articleQuery = (id: string) =>
     staleTime: 60_000,
   })
 
-export const Route = createFileRoute('/_site/article/$id/')({
+export const Route = createFileRoute('/article/$id/')({
   // head() needs the title and the route decides 404, so this route has a loader.
   loader: async ({ context, params }) => {
     const { GetArticle: article } = await context.queryClient.ensureQueryData(

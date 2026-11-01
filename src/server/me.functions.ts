@@ -4,7 +4,7 @@
 //
 // When GetUser throws but the session cookie is a valid JWT, returns a
 // minimal user populated from the JWT sub so AuthProvider's `['me']` query
-// (initialData + staleTime: Infinity) stays truthy and _app.tsx's `!user`
+// (initialData + staleTime: Infinity) stays truthy and _ai.tsx's `!user`
 // gate keeps rendering the authenticated shell. name/avatar remain null
 // until cache invalidation or a subsequent successful fetch. Returns null
 // only when no valid session cookie exists.
