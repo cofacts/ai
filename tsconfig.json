@@ -5,7 +5,8 @@
     "eslint.config.js",
     "prettier.config.js",
     "vite.config.ts",
-    ".storybook/**/*.ts"
+    ".storybook/**/*.ts",
+    ".storybook/**/*.tsx"
   ],
 
   "compilerOptions": {
