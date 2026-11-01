@@ -16,7 +16,7 @@ import { graphql } from './gql'
 import { verifySessionToken } from './jwt'
 import { SESSION_COOKIE_NAME } from './sessionCookie'
 import type { GetCurrentUserQuery } from './gql/graphql'
-import { cofactsExec } from '@/lib/cofactsExec'
+import { cofactsExec } from '@/server/cofacts.server'
 
 export type CofactsUser = NonNullable<GetCurrentUserQuery['GetUser']>
 
