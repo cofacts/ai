@@ -458,15 +458,17 @@ function DraftFactcheckContent({
           return (
             <div
               key={cat.key}
-              className={`
-                flex-1 min-w-[80px] whitespace-nowrap py-spacing-8 text-[10px] font-bold text-center rounded-radius-5
-                flex flex-col items-center justify-center gap-spacing-2
-                ${
-                  isActive
-                    ? `bg-surface-base shadow-btn-shadow border border-border-subtle ${cat.activeClass}`
-                    : 'text-text-tertiary'
-                }
-              `}
+              className={cn(
+                'flex-1 min-w-[80px] whitespace-nowrap py-spacing-8 text-[10px] font-bold text-center rounded-radius-5',
+                'flex flex-col items-center justify-center gap-spacing-2',
+                // cn() drops the base bg / border colors that activeClass replaces.
+                isActive
+                  ? [
+                      'bg-surface-base shadow-btn-shadow border border-border-subtle',
+                      cat.activeClass,
+                    ]
+                  : 'text-text-tertiary',
+              )}
             >
               <MaterialIcon
                 name={cat.icon}
