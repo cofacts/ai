@@ -45,14 +45,10 @@ function SelectTrigger({
       {...props}
     >
       {children}
-      <SelectPrimitive.Icon
-        render={
-          <MaterialIcon
-            name="keyboard_arrow_down"
-            className="text-icon-default"
-          />
-        }
-      />
+      {/* Children replace Base UI's default ▼ glyph. */}
+      <SelectPrimitive.Icon className="flex text-icon-default">
+        <MaterialIcon name="keyboard_arrow_down" />
+      </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
 }
