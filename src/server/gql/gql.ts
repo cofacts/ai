@@ -14,9 +14,12 @@ import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
+  '\n      query ListArticles {\n        ListArticles(first: 10, orderBy: [{ lastRequestedAt: DESC }]) {\n          totalCount\n          edges {\n            node {\n              id\n              text\n              articleType\n              createdAt\n              replyRequestCount\n              articleReplies(status: NORMAL) {\n                replyType\n              }\n            }\n          }\n        }\n      }\n    ': typeof types.ListArticlesDocument
   '\n  query GetCurrentUser {\n    GetUser {\n      id\n      name\n      avatarUrl\n      avatarType\n      avatarData\n    }\n  }\n': typeof types.GetCurrentUserDocument
 }
 const documents: Documents = {
+  '\n      query ListArticles {\n        ListArticles(first: 10, orderBy: [{ lastRequestedAt: DESC }]) {\n          totalCount\n          edges {\n            node {\n              id\n              text\n              articleType\n              createdAt\n              replyRequestCount\n              articleReplies(status: NORMAL) {\n                replyType\n              }\n            }\n          }\n        }\n      }\n    ':
+    types.ListArticlesDocument,
   '\n  query GetCurrentUser {\n    GetUser {\n      id\n      name\n      avatarUrl\n      avatarType\n      avatarData\n    }\n  }\n':
     types.GetCurrentUserDocument,
 }
@@ -35,6 +38,12 @@ const documents: Documents = {
  */
 export function graphql(source: string): unknown
 
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: '\n      query ListArticles {\n        ListArticles(first: 10, orderBy: [{ lastRequestedAt: DESC }]) {\n          totalCount\n          edges {\n            node {\n              id\n              text\n              articleType\n              createdAt\n              replyRequestCount\n              articleReplies(status: NORMAL) {\n                replyType\n              }\n            }\n          }\n        }\n      }\n    ',
+): (typeof documents)['\n      query ListArticles {\n        ListArticles(first: 10, orderBy: [{ lastRequestedAt: DESC }]) {\n          totalCount\n          edges {\n            node {\n              id\n              text\n              articleType\n              createdAt\n              replyRequestCount\n              articleReplies(status: NORMAL) {\n                replyType\n              }\n            }\n          }\n        }\n      }\n    ']
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

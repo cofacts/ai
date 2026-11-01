@@ -26,7 +26,8 @@ restoration, `#anchors`, printing and the mobile URL bar depend on it). A route 
 nav or footer, or wants none, sets `staticData: { hideGlobalNav: true }` / `{ hideGlobalFooter: true }`.
 A screen that scrolls inside its own panels (the AI chat) sets `{ fillViewport: true }` to be pinned
 to the viewport height; this doesn't hide the footer, so set `hideGlobalFooter` too when a footer
-couldn't be reached. A flag on a parent route covers its children.
+couldn't be reached. A flag on a parent route covers its children. Pages that only need to share
+`-components/` can use a route group folder such as `(lists)/`, which doesn't change the URL.
 
 Colocate per component: `Foo.tsx`, `Foo.stories.tsx`, `Foo.module.css` (only when needed),
 `Foo.test.tsx` (when it has logic).

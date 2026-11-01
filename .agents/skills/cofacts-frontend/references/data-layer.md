@@ -39,11 +39,14 @@ through TanStack Start server functions and the TanStack Query cache.
    `QueryClient` per request (`getRouter()`).
 2. **Needed in the SSR HTML → `useSuspenseQuery`.** Client-only (AI session list, "my feedback")
    → `useQuery`. `useEffect` and plain `useQuery` never run during SSR.
-3. **Write a loader only when `head()` needs data or the route decides whether the page exists**
-   (`notFound()`, `redirect()`). In it, `await context.queryClient.ensureQueryData(...)` and
-   **return only the fields `head()` needs** — loader data is serialized too, so returning the
-   whole result duplicates the cache. Page content always reads the cache, never
-   `useLoaderData()`. Deciding 404 in the loader gives SSR the right status code.
+3. **Every route awaits the queries its SSR HTML needs in its loader**
+   (`await context.queryClient.ensureQueryData(...)`), even when `head()` needs nothing. A
+   failure then reaches the router: HTTP 500 and the error component, inside the site nav.
+   With only `useSuspenseQuery`, a failed SSR query falls back to the root Suspense boundary
+   and the response is **HTTP 200 with an empty `<body>`**. The loader returns only what
+   `head()` needs (often nothing): loader data is serialized too, so returning the whole result
+   duplicates the cache. Page content always reads the cache, never `useLoaderData()`. Throw
+   `notFound()` / `redirect()` from the loader to get the right status code.
 4. **Writes:** `useMutation` calling a server function, then `invalidateQueries` on the key.
 5. **`queryKey = [GraphQL operation name, variables]`**: `['GetArticle', id]`; objects for several
    params: `['ListArticles', filter]`. Operation names are unique (codegen enforces it), so
@@ -51,8 +54,9 @@ through TanStack Start server functions and the TanStack Query cache.
    bundles key + `queryFn` and works for both `ensureQueryData` and the hooks; it is **the** way
    to share data access. Per-user queries are removed from the cache on logout.
 6. **Set `staleTime` per query**, greater than 0 (otherwise the browser refetches right after SSR).
-7. (Optional) To start a deeply nested `useSuspenseQuery` earlier, call `ensureQueryData` in the
-   loader without `await`.
+7. Data the page can render without (a sidebar widget, below-the-fold extras) uses `useQuery`
+   or a nested Suspense boundary instead, so its failure doesn't fail the page. To start it
+   early, call `ensureQueryData` in the loader without `await`.
 
 Route setup (once): `createRouter({ context: { queryClient } })` and
 `createRootRouteWithContext<{ queryClient: QueryClient }>()`.
@@ -101,7 +105,7 @@ const articleQuery = (id: string) =>
   })
 
 export const Route = createFileRoute('/article/$id/')({
-  // head() needs the title and the route decides 404, so this route has a loader.
+  // Await what the SSR HTML needs; return only what head() needs.
   loader: async ({ context, params }) => {
     const { GetArticle: article } = await context.queryClient.ensureQueryData(
       articleQuery(params.id),
