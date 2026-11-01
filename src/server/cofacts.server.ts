@@ -32,6 +32,12 @@ interface GraphQLResponse<TResult> {
   errors?: ReadonlyArray<{ message: string }>
 }
 
+// Must match the message rumors-api throws when a Bearer token fails JWT verification:
+// `throw new Error('Invalid or expired Bearer token')` in cofacts/rumors-api
+// src/contextFactory.ts (covered by src/__tests__/contextFactory-bearer.test.js there).
+// It arrives wrapped, e.g. "Context creation failed: Invalid or expired Bearer token". If the
+// text changes there, update this regex, or a dead session stops being detected and pages
+// fail again.
 const INVALID_TOKEN = /Invalid or expired Bearer token/
 
 export async function cofactsExec<TResult, TVariables>(
