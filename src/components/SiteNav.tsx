@@ -164,13 +164,12 @@ export function SiteNav({
                 <MaterialIcon name="flag_2" filled />
                 {NAV_LINKS.report.label}
               </a>
-              <div className="hidden lg:block">
-                <AccountControl
-                  user={user}
-                  onLogin={onLogin}
-                  onLogout={onLogout}
-                />
-              </div>
+              <AccountControl
+                user={user}
+                onLogin={onLogin}
+                onLogout={onLogout}
+                className="hidden lg:flex"
+              />
               <Button
                 variant={menuOpen ? 'on-dark' : 'outline'}
                 size="icon-touch"
@@ -319,11 +318,17 @@ function AccountControl({
   user,
   onLogin,
   onLogout,
-}: Pick<SiteNavProps, 'user' | 'onLogin' | 'onLogout'>) {
+  className,
+}: Pick<SiteNavProps, 'user' | 'onLogin' | 'onLogout'> & {
+  className?: string
+}) {
   if (user === undefined) {
     return (
       <span
-        className="block size-[40px] rounded-full bg-surface-raised"
+        className={cn(
+          'block size-[40px] rounded-full bg-surface-raised',
+          className,
+        )}
         aria-hidden="true"
       />
     )
@@ -333,7 +338,7 @@ function AccountControl({
       <Button
         variant="secondary"
         iconStart="account_circle"
-        className="min-h-[40px]"
+        className={cn('min-h-[40px]', className)}
         onClick={onLogin}
       >
         登入
@@ -347,7 +352,7 @@ function AccountControl({
           <button
             type="button"
             aria-label={`${user.name ?? ''} 的帳號選單`}
-            className="rounded-full"
+            className={cn('flex rounded-full', className)}
           />
         }
       >
