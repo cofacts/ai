@@ -39,14 +39,18 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        'flex w-fit items-center justify-between gap-spacing-4 rounded-radius-5 border border-border-control bg-surface-base text-type-ui-m whitespace-nowrap text-text-primary data-placeholder:text-text-tertiary data-[size=default]:min-h-[36px] data-[size=default]:px-spacing-16 data-[size=default]:py-spacing-8 data-[size=sm]:min-h-[28px] data-[size=sm]:px-spacing-12 data-[size=sm]:py-spacing-4 *:data-[slot=select-value]:line-clamp-1 aria-invalid:border-status-incorrect disabled:pointer-events-none disabled:opacity-50',
+        'flex w-fit items-center justify-between gap-spacing-4 rounded-radius-5 border border-border-control bg-surface-base text-type-ui-m whitespace-nowrap text-text-primary data-placeholder:text-text-tertiary data-[size=default]:h-[36px] data-[size=default]:px-spacing-16 data-[size=sm]:h-[28px] data-[size=sm]:px-spacing-12 *:data-[slot=select-value]:line-clamp-1 aria-invalid:border-status-incorrect disabled:pointer-events-none disabled:opacity-50',
         className,
       )}
       {...props}
     >
       {children}
-      {/* Children replace Base UI's default ▼ glyph. */}
-      <SelectPrimitive.Icon className="flex text-icon-default">
+      {/*
+        Children replace Base UI's default ▼ glyph. The chevron is ~9px wide in its 20px box, so
+        -4px pulls the box into the padding to keep the visible gap at the edge close to the
+        padding; 1px down centers it on CJK text, whose glyphs sit low in the line box.
+      */}
+      <SelectPrimitive.Icon className="-mr-[4px] flex translate-y-[1px] text-icon-default">
         <MaterialIcon name="keyboard_arrow_down" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
