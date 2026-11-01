@@ -38,7 +38,7 @@ const user = {
 /** The nav's avatar menu. The play function opens it. */
 export const AvatarMenu: Story = {
   render: () => (
-    <div className="flex min-h-[200px] justify-end">
+    <div className="flex min-h-[200px] items-start justify-end">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
