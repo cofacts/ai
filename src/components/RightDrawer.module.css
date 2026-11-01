@@ -1,0 +1,43 @@
+/*
+ * Slide animations for the drawer's view transitions. The ::view-transition-* pseudo-elements
+ * are document-level, so they live here next to the classes that set the transition names.
+ * RightDrawer.tsx reads these classes, which is what keeps this file in the production build.
+ */
+.drawer {
+  view-transition-name: right-drawer;
+}
+.drawerMobile {
+  view-transition-name: right-drawer-mobile;
+}
+::view-transition-old(right-drawer) {
+  animation: right-drawer-out-right 0.3s ease both;
+}
+::view-transition-new(right-drawer) {
+  animation: right-drawer-in-right 0.3s ease both;
+}
+::view-transition-old(right-drawer-mobile) {
+  animation: right-drawer-out-bottom 0.3s ease both;
+}
+::view-transition-new(right-drawer-mobile) {
+  animation: right-drawer-in-bottom 0.3s ease both;
+}
+@keyframes right-drawer-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes right-drawer-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes right-drawer-out-bottom {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes right-drawer-in-bottom {
+  from {
+    transform: translateY(100%);
+  }
+}
