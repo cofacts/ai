@@ -10,6 +10,7 @@ this format is itself a record — the 2026-07-23 entry below.
 | 2026-10-21 | [Run the writer on Claude Haiku 5.5 as a text-only orchestrator](20261021-writer-on-claude-haiku.md)     |
 | 2026-10-14 | [Serve Storybook from the frontend image](20261014-serve-storybook-from-frontend-image.md)               |
 | 2026-08-28 | [Run url-resolver as a Cloud Run sidecar](20260828-url-resolver-sidecar-browser-backend.md)              |
+| 2026-08-23 | [Receptionist root agent, so cofacts.ai can take reports](20260823-receptionist-root-agent.md)           |
 | 2026-07-30 | [Map Gemini token usage ourselves in the ADK plugin](20260730-langfuse-usage-mapping.md)                 |
 | 2026-07-23 | [Use Markdown Any Decision Records (MADR)](20260723-use-markdown-any-decision-records.md)                |
 | 2026-07-22 | [Footnote citations for stateless sub-agent calls](20260722-subagent-context-citations.md)               |

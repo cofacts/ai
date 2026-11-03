@@ -1,5 +1,6 @@
 import { LogOutIcon } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
+import { COFACTS_SITE_URL } from '@/lib/cofactsSite'
 import { UserAvatar } from '@/components/UserAvatar'
 import {
   DropdownMenu,
@@ -41,14 +42,14 @@ export function Header({ onToggleSidebar }: HeaderProps) {
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-text-muted">
           <a
             className="hover:text-primary transition-colors"
-            href="https://cofacts.tw"
+            href={COFACTS_SITE_URL}
             target="_blank"
             rel="noopener noreferrer"
           >
-            查核資料庫
+            Fact-check database
           </a>
           <a className="hover:text-primary transition-colors" href="/">
-            協作區
+            Workspace
           </a>
         </nav>
       </div>
@@ -61,7 +62,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           </span>
           <input
             className="w-full bg-gray-100 border-none rounded-full py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary focus:bg-white transition-all"
-            placeholder="搜尋可疑訊息或查核報告..."
+            placeholder="Search suspicious messages or verification reports..."
             type="text"
           />
         </div>
@@ -103,7 +104,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => logout()}>
                 <LogOutIcon />
-                登出
+                Log out
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -113,7 +114,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             onClick={() => login()}
             className="px-4 py-1.5 rounded-full bg-primary text-white text-sm font-medium hover:bg-primary/90 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
           >
-            登入 / 註冊
+            Sign in / Sign up
           </button>
         )}
       </div>

@@ -7,11 +7,12 @@ import {
   GoogleIcon,
 } from '@/components/icons/ProviderIcons'
 import { login } from '@/server/auth.functions'
+import { COFACTS_SITE_URL } from '@/lib/cofactsSite'
 
 const LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
 const EDITOR_FACEBOOK_GROUP =
   'https://www.facebook.com/groups/cofacts/permalink/1959641497601003/'
-const TERMS_URL = 'https://cofacts.tw/terms'
+const TERMS_URL = `${COFACTS_SITE_URL}/terms`
 
 interface ProviderConfig {
   id: 'facebook' | 'github' | 'google'
@@ -67,7 +68,7 @@ export function LoginModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle className="text-center">登入 / 註冊</DialogTitle>
+        <DialogTitle className="text-center">Sign in / Sign up</DialogTitle>
         <div className="flex flex-col gap-2 pt-2">
           {PROVIDERS.map((p) => {
             const Icon = p.icon
@@ -92,34 +93,34 @@ export function LoginModal({
           })}
         </div>
         <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
-          登入即代表您同意{' '}
+          By signing in, you agree to the{' '}
           <a
             href={TERMS_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-foreground"
           >
-            使用者條款
+            Terms of Use
           </a>
-          ，並您的貢獻將以{' '}
+          , and your contributions will be published under{' '}
           <a
             href={LICENSE_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-foreground"
           >
-            創用 CC 姓名標示-相同方式分享 4.0
-          </a>
-          ，由{' '}
+            Creative Commons Attribution-ShareAlike 4.0
+          </a>{' '}
+          by the{' '}
           <a
             href={EDITOR_FACEBOOK_GROUP}
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-foreground"
           >
-            Cofacts 真的假的訊息回報機器人與查證協作社群
-          </a>{' '}
-          發布。
+            Cofacts Fact-Checking Bot and Verification Community
+          </a>
+          .
         </p>
       </DialogContent>
     </Dialog>

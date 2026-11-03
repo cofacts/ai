@@ -1,3 +1,4 @@
+AI_RECEPTIONIST_NAME = "receptionist"
 AI_WRITER_NAME = "writer"
 AI_INVESTIGATOR_NAME = "investigator"
 AI_VERIFIER_NAME = "verifier"
