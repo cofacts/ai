@@ -10,6 +10,7 @@ through TanStack Start server functions and the TanStack Query cache.
 | -------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
 | Server-only utilities: `cofactsExec`, the secret, JWT handling | `*.server.ts`                                                       | Only inside server-function handlers |
 | GraphQL document                                               | Inline in the handler (`graphql()`), moves with its server function | Only inside handlers                 |
+| Handler logic that needs unit tests, with its GraphQL          | `*.server.ts` next to the code that uses it (rule 7)                | Only inside server-function handlers |
 | Server function (`createServerFn`)                             | Inline in the route file, at module top level                       | Anyone                               |
 | Types, constants                                               | plain `.ts`                                                         | Anyone                               |
 
@@ -31,6 +32,16 @@ through TanStack Start server functions and the TanStack Query cache.
 6. Type every server-function input with `.inputValidator`, and check there whatever a caller
    could get wrong (an allowed value, a range), throwing on bad input. Return only fields the
    UI needs: the result is serialized into the HTML.
+7. **Logic worth a unit test moves to a `*.server.ts`, with its GraphQL documents.** A server
+   function can't be called from Vitest (it needs the Start runtime), so a handler whose behavior
+   matters on its own (variables derived from the input, a search threshold, an auth check before
+   a write, cleaning what gets stored) calls an exported plain function in a `*.server.ts`, and the
+   test mocks `cofactsExec` and checks the variables it receives. The `graphql()` documents move
+   with that function, not stay in the route. The `createServerFn` itself, its `.inputValidator`
+   and its `queryOptions` stay in the route (rule 1) or a `*.functions.ts` (rule 2); the handler
+   only calls the function. Rule 4 still applies: import it only inside handlers. Example:
+   `src/server/report.server.ts`, used by `src/routes/report.tsx`. A handler that only passes
+   its input to one query needs no such file.
 
 ## Reading data: TanStack Query
 

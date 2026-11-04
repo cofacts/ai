@@ -5,7 +5,8 @@
 // wrappers are the only importers; their handler bodies are stripped from the
 // client bundle, which drops the import with them. Kept apart from the route,
 // and exported, so these can be unit-tested — a server function itself needs
-// the Start runtime and cannot be called from vitest.
+// the Start runtime and cannot be called from vitest. This is rule 7 of the
+// cofacts-frontend skill's references/data-layer.md.
 //
 // All of them go through cofactsExec, which attaches the reporter's own JWT from
 // the HttpOnly session cookie and the RUMORS_SITE app id — so what lands in

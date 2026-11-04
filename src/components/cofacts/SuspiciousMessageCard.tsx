@@ -40,7 +40,7 @@ export function SuspiciousMessageCard({
 }: SuspiciousMessageCardProps) {
   const body = (
     <>
-      <p className="flex-1 text-left text-type-caption line-clamp-4 whitespace-pre-wrap text-text-secondary">
+      <p className="flex-1 text-left text-type-caption line-clamp-4 whitespace-pre-wrap wrap-anywhere text-text-secondary">
         {text || `[${articleType}]`}
       </p>
       <div className="flex items-center gap-spacing-8">

@@ -42,11 +42,11 @@ export function FactCheckReplyCard({
       ) : (
         <p className="text-type-ui-m-bold text-text-secondary">{type}</p>
       )}
-      <p className="text-type-body-s whitespace-pre-wrap text-text-primary">
+      <p className="text-type-body-s whitespace-pre-wrap wrap-anywhere text-text-primary">
         {text}
       </p>
       {reference && (
-        <p className="text-type-caption whitespace-pre-wrap text-text-tertiary">
+        <p className="text-type-caption whitespace-pre-wrap wrap-anywhere text-text-tertiary">
           {reference}
         </p>
       )}
