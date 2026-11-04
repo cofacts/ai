@@ -29,6 +29,11 @@ describe('cn', () => {
     expect(cn('shadow-btn-shadow', 'shadow-none')).toBe('shadow-none')
   })
 
+  it('merges spacing tokens', () => {
+    expect(cn('p-spacing-16', 'p-spacing-8')).toBe('p-spacing-8')
+    expect(cn('p-spacing-16', 'p-0')).toBe('p-0')
+  })
+
   it('merges surface colors', () => {
     expect(cn('bg-surface-raised', 'bg-surface-base')).toBe('bg-surface-base')
   })

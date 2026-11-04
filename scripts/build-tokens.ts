@@ -82,6 +82,40 @@ const num = (token: string, value: unknown): number => {
   return n
 }
 
+// ---- Every token type is handled or skipped on purpose ---------------------------------------
+
+/** Types that become CSS variables or twMergeTheme entries below. */
+const HANDLED_TYPES = new Set([
+  'color',
+  'typography',
+  'spacing',
+  'borderRadius',
+  'shadow',
+  'fontFamilies',
+])
+/** Types that are read but produce nothing of their own, or that have no output yet. */
+const SKIPPED_TYPES: Record<string, string> = {
+  fontSizes: 'only read through the typography tokens that reference them',
+  borderWidth:
+    'not generated: border widths are written as border-[0.5px] etc. for now',
+}
+for (const [setName, set] of Object.entries({ Global, Light, Dark })) {
+  for (const [name, token] of Object.entries(set)) {
+    if (!HANDLED_TYPES.has(token.$type) && !(token.$type in SKIPPED_TYPES))
+      throw new Error(
+        `${setName}.${name}: token type "${token.$type}" has no output. Handle it in build-tokens.ts, or list it in SKIPPED_TYPES with the reason.`,
+      )
+  }
+}
+for (const [setName, set] of Object.entries({ Light, Dark })) {
+  for (const [name, token] of Object.entries(set)) {
+    if (token.$type !== 'color')
+      throw new Error(
+        `${setName}.${name}: semantic tokens must be colors, got "${token.$type}"`,
+      )
+  }
+}
+
 // ---- Semantic colors → Tailwind namespaces -------------------------------------------------
 
 const semanticNames = Object.keys(Light)
