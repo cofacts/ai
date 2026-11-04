@@ -96,8 +96,15 @@ const HANDLED_TYPES = new Set([
 /** Types that are read but produce nothing of their own, or that have no output yet. */
 const SKIPPED_TYPES: Record<string, string> = {
   fontSizes: 'only read through the typography tokens that reference them',
-  borderWidth:
-    'not generated: border widths are written as border-[0.5px] etc. for now',
+  // Penpot's stroke width tokens (`1`, `2`, `3`, `4`, `s-05`). Deliberately not generated yet:
+  // - Their names are bare numbers, unlike the prefixed spacing-* / type-* tokens, so keeping
+  //   the Penpot name in the class would give border-1 / border-s-05, which says nothing about
+  //   what it is (and border-1 / border-2 already mean 1px / 2px in Tailwind).
+  // - Penpot doesn't use them everywhere: the focus rings' 4px and 2px strokes are plain
+  //   numbers, as are some Button variants.
+  // Revisit once the naming is settled with the designer. Until then, border widths are
+  // Tailwind's own (border, border-2) or arbitrary values (border-[0.5px]).
+  borderWidth: 'no output yet: token naming to be confirmed with the designer',
 }
 for (const [setName, set] of Object.entries({ Global, Light, Dark })) {
   for (const [name, token] of Object.entries(set)) {
