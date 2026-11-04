@@ -2,12 +2,13 @@
 
 ## Component layers
 
-| Layer  | Where                               | What                                                                                                                                                                    |
-| ------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| tokens | `src/styles/tokens.css` (generated) | CSS variables + Tailwind `@theme`                                                                                                                                       |
-| ui     | `src/components/ui/`                | shadcn / Base UI primitives (Button, Input, Select, Dialog, Tabs…), rewritten to Cofacts tokens                                                                         |
-| shared | `src/components/` (flat)            | Components used in two or more places: composites built from ui (`ReplyTypeLabel`, `FactCheckReply`, `ArticleCard`) and repeated large pieces (`SiteNav`, `SiteFooter`) |
-| page   | `src/routes/`                       | Route components, plus components only that route uses in its `-components/` folder                                                                                     |
+| Layer  | Where                               | What                                                                                                                                                                         |
+| ------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tokens | `src/styles/tokens.css` (generated) | CSS variables + Tailwind `@theme`                                                                                                                                            |
+| icons  | `src/components/icons/`             | `MaterialIcon`, `BrandIcon`, `StatusIcon` (Penpot Base/Icon); used by ui and shared components                                                                               |
+| ui     | `src/components/ui/`                | shadcn / Base UI primitives (Button, Input, Select, Dialog, Tabs…), rewritten to Cofacts tokens                                                                              |
+| shared | `src/components/` (flat)            | Components used in two or more places: composites built from ui (`FactCheckReplyTitle`, `FactCheckReply`, `ArticleCard`) and repeated large pieces (`SiteNav`, `SiteFooter`) |
+| page   | `src/routes/`                       | Route components, plus components only that route uses in its `-components/` folder                                                                                          |
 
 **`-components/`:** TanStack Router ignores files and folders starting with `-`, so
 `routes/_site/article.$id/-components/Transcript.tsx` doesn't become a route. Put page-only
@@ -15,6 +16,9 @@ components there (never as loose `-Foo.tsx` files), so everything else under `ro
 A `-components/` folder serves the routes in its directory. **Never import another directory's
 `-components/`.** When a second place needs a component, move it to `src/components/` and give it
 a story and `parameters.penpot`.
+A component the app uses that has no Penpot design still gets a story: tag it `not-in-penpot` and
+say in `parameters.docs.description.component` where the app uses it, so the designer can find it
+and decide whether to keep it or add it to Penpot.
 
 Colocate per component: `Foo.tsx`, `Foo.stories.tsx`, `Foo.module.css` (only when needed),
 `Foo.test.tsx` (when it has logic).
@@ -32,7 +36,16 @@ Colocate per component: `Foo.tsx`, `Foo.stories.tsx`, `Foo.module.css` (only whe
 - Props: plain TypeScript types describing the fields a component needs. No GraphQL fragments.
   When a component should reuse a query's type, take a subtype of the codegen result type.
 - One responsive component replaces Penpot's desktop / `-Mobile` pairs.
-- Icons: one `<Icon name>` component with SVG imports (Material Symbols names), `aria-hidden`.
+- Icons live in `src/components/icons/`, as three components (all `aria-hidden`, colored by
+  `currentColor`):
+  - `MaterialIcon`: a Material Symbol (Rounded, the designer's settings) by name, `filled` for
+    the solid version. The font request only has the names in
+    `src/components/icons/material-symbols.ts`: **to use a new icon, add its name there**
+    (the type check fails otherwise). Loading every icon instead would be about 550 KB, not 9 KB.
+  - `BrandIcon`: brand marks that aren't Material Symbols (`facebook`, `line`), as SVG paths.
+  - `StatusIcon`: the four fact-check result shapes.
+
+  The `components/Icons` Penpot story lists every icon on Penpot's Base/Icon with the code for it.
 
 ## Themes
 

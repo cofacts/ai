@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker } from '@tanstack/react-router'
+import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
 // Map of draft messages by sessionId
 const drafts = new Map<string, string>()
@@ -144,20 +145,22 @@ export function ChatInput({
   }, [value, files, disabled, onSend, sessionId])
 
   return (
-    <div className="px-3 md:px-4 pb-3 md:pb-4 pt-2 bg-white shrink-0 z-10">
+    <div className="px-spacing-12 md:px-spacing-16 pb-spacing-12 md:pb-spacing-16 pt-spacing-8 bg-surface-base shrink-0 z-10">
       <div
-        className={`relative rounded-xl shadow-sm border bg-white focus-within:ring-2 focus-within:ring-primary focus-within:border-primary transition-all ${isDragging && !disabled && !isStreaming ? 'border-primary ring-2 ring-primary' : 'border-gray-300'}`}
+        className={`relative rounded-radius-10 shadow-btn-shadow border bg-surface-base focus-within:border-border-accent transition-all ${isDragging && !disabled && !isStreaming ? 'border-border-accent' : 'border-border-subtle'}`}
         onDragOver={handleDragOver}
         onDragEnter={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {isDragging && !disabled && !isStreaming && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl bg-white/90 pointer-events-none">
-            <span className="material-symbols-outlined text-3xl text-primary">
-              upload_file
-            </span>
-            <span className="text-sm text-primary font-medium">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-spacing-4 rounded-radius-10 bg-surface-base pointer-events-none">
+            <MaterialIcon
+              name="upload_file"
+              size={24}
+              className="text-text-primary"
+            />
+            <span className="text-type-body-s text-text-primary">
               放開以附加檔案
             </span>
           </div>
@@ -179,12 +182,12 @@ export function ChatInput({
             }
           }}
           disabled={disabled || isStreaming}
-          className="w-full bg-transparent border-none focus:ring-0 p-3 min-h-[50px] max-h-32 resize-none text-sm rounded-xl"
+          className="w-full bg-transparent border-none p-spacing-12 min-h-[50px] max-h-[128px] resize-none text-type-body-s rounded-radius-10"
           placeholder={placeholder}
         />
 
         {/* Row 2: upload button · attached-file pills · send button */}
-        <div className="flex items-center gap-2 px-2 pb-2">
+        <div className="flex items-center gap-spacing-8 px-spacing-8 pb-spacing-8">
           <input
             ref={fileInputRef}
             type="file"
@@ -198,30 +201,26 @@ export function ChatInput({
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isStreaming}
             title="附加檔案"
-            className="shrink-0 p-1.5 text-gray-500 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+            className="shrink-0 p-[6px] text-text-tertiary rounded-radius-10 hover:bg-surface-raised transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <span className="material-symbols-outlined text-xl">
-              attach_file
-            </span>
+            <MaterialIcon name="attach_file" size={24} />
           </button>
 
-          <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-0">
+          <div className="flex flex-1 flex-wrap items-center gap-[6px] min-w-0">
             {files.map((file, i) => (
               <span
                 key={`${file.name}-${i}`}
                 title={file.name}
-                className="inline-flex items-center gap-1 max-w-[12rem] rounded-full bg-gray-100 border border-gray-200 pl-2 pr-1 py-0.5 text-xs text-text-main"
+                className="inline-flex items-center gap-spacing-4 max-w-[12rem] rounded-full bg-surface-raised border border-border-subtle pl-spacing-8 pr-spacing-4 py-spacing-2 text-type-caption text-text-primary"
               >
                 <span className="truncate">{file.name}</span>
                 <button
                   type="button"
                   onClick={() => removeFile(i)}
                   aria-label={`移除 ${file.name}`}
-                  className="shrink-0 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
+                  className="shrink-0 flex items-center justify-center rounded-full hover:bg-surface-selected transition-colors"
                 >
-                  <span className="material-symbols-outlined text-sm leading-none">
-                    close
-                  </span>
+                  <MaterialIcon name="close" size={24} />
                 </button>
               </span>
             ))}
@@ -230,16 +229,14 @@ export function ChatInput({
           <button
             onClick={isStreaming ? onStop : handleSubmit}
             disabled={(!isStreaming && !canSend) || disabled}
-            className="shrink-0 p-1.5 bg-primary text-black rounded-lg hover:bg-primary-hover transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+            className="shrink-0 p-[6px] bg-surface-accent text-text-on-accent rounded-radius-10 hover:bg-surface-accent-subtle transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <span className="material-symbols-outlined text-sm">
-              {isStreaming ? 'stop' : 'send'}
-            </span>
+            <MaterialIcon name={isStreaming ? 'stop' : 'send'} size={24} />
           </button>
         </div>
       </div>
-      <div className="text-center mt-2">
-        <span className="text-[10px] text-gray-400">
+      <div className="text-center mt-spacing-8">
+        <span className="text-[10px] text-text-tertiary">
           AI 可能會犯錯，請務必查核事實。
         </span>
       </div>

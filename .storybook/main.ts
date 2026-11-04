@@ -1,7 +1,9 @@
+import { materialSymbolsHref } from '../src/components/icons/material-symbols'
 import type { StorybookConfig } from '@storybook/tanstack-react'
 
 const config: StorybookConfig = {
   stories: ['../src/**/*.stories.@(ts|tsx)'],
+  addons: ['@storybook/addon-docs'],
   framework: {
     name: '@storybook/tanstack-react',
     options: {},
@@ -9,6 +11,9 @@ const config: StorybookConfig = {
   // The deploy builds into public/storybook, inside Vite's default publicDir;
   // without this the app's public/ files are copied into the catalog.
   viteFinal: (viteConfig) => ({ ...viteConfig, publicDir: false }),
+  // The same Material Symbols request as __root.tsx; the other fonts are in preview-head.html.
+  previewHead: (head) =>
+    `${head}\n<link rel="stylesheet" href="${materialSymbolsHref}" />`,
   // Deploys serve the catalog at /storybook/. Storybook loads its assets by
   // relative path, so /storybook (no slash) would render blank; send it to /storybook/.
   managerHead: (head, { configType }) =>

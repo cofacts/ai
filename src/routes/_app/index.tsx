@@ -53,7 +53,7 @@ function LandingPage() {
         placeholder="貼上想查核的訊息，或輸入 Cofacts 文章連結 (https://cofacts.tw/article/...)..."
       />
       {inlineError && (
-        <div className="mt-2 text-sm text-red-500 text-center">
+        <div className="mt-spacing-8 text-type-body-s text-status-incorrect text-center">
           {inlineError}
         </div>
       )}
