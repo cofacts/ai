@@ -45,7 +45,10 @@ export function AgentMessage({
         {message.parts?.map((part, i) => {
           if (part.text) {
             return (
-              <div key={i} className="prose prose-sm max-w-none prose-p:my-8">
+              <div
+                key={i}
+                className="prose prose-sm max-w-none prose-p:my-spacing-8"
+              >
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {part.text}
                 </ReactMarkdown>

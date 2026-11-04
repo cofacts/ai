@@ -174,7 +174,7 @@ function ToolErrorSection({ message }: { message: string }) {
 
 function MarkdownSection({ content }: { content: string }) {
   return (
-    <div className="prose prose-sm max-w-none prose-p:my-6 text-type-body-s text-text-primary">
+    <div className="prose prose-sm max-w-none prose-p:my-[6px] text-type-body-s text-text-primary">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
     </div>
   )
