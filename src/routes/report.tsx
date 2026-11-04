@@ -96,7 +96,7 @@ export const Route = createFileRoute('/report')({
 
 /** What the reporter ends up looking at. */
 type Outcome =
-  | { kind: 'created'; articleUrl: string; repliesUrl: string }
+  | { kind: 'created'; articleUrl: string }
   | {
       kind: 'matched'
       articleUrl: string
@@ -127,10 +127,10 @@ function ReportPage() {
   const fileNew = useMutation({
     mutationFn: (submitted: string) =>
       createArticleReport({ data: { url: submitted, reason } }),
-    onSuccess: ({ articleUrl, repliesUrl }) => {
+    onSuccess: ({ articleUrl }) => {
       // /articles caches its list for a minute; a new article should show there.
       void queryClient.invalidateQueries({ queryKey: ['ListArticles'] })
-      setOutcome({ kind: 'created', articleUrl, repliesUrl })
+      setOutcome({ kind: 'created', articleUrl })
     },
   })
 
@@ -213,7 +213,13 @@ function ReportPage() {
     mutations.forEach((m) => m.reset())
   }
 
+  // A fresh form, not the last report's. Left filled, a second link pasted
+  // into the field lands after the first, and findFirstUrl files the first
+  // one again.
   function startOver() {
+    setUrl('')
+    setReason('')
+    setNoLink(false)
     setCandidates(null)
     setOutcome(null)
     clearMutations()
@@ -452,8 +458,8 @@ function OutcomeView({
         subtitle="資料庫裡沒有相符的紀錄，這則訊息已經收進來，等待查核。"
         onDiscuss={onDiscuss}
         busy={busy}
-        secondaryHref={outcome.repliesUrl}
-        secondaryLabel="看看最新查核"
+        secondaryHref={outcome.articleUrl}
+        secondaryLabel="檢視回報的訊息"
         onStartOver={onStartOver}
       />
     )

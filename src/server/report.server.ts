@@ -16,7 +16,7 @@
 // Search does not require a session (looking is free); the two writes do, and
 // resolveAdkUserIdOrThrow rejects them before any request reaches rumors-api.
 
-import { getArticleUrl, getRepliesUrl } from './cofactsSite'
+import { getArticleUrl } from './cofactsSite'
 import { graphql } from './gql'
 import { resolveAdkUserIdOrThrow } from './adkUser'
 import type {
@@ -184,7 +184,7 @@ export type CreateArticleReportInput = Pick<
 
 export async function fileArticleReport(
   input: CreateArticleReportInput,
-): Promise<{ articleUrl: string; repliesUrl: string }> {
+): Promise<{ articleUrl: string }> {
   await resolveAdkUserIdOrThrow()
   const result = await cofactsExec(CreateArticleReportDocument, {
     // The URL is the article body and the reference alike — one value, so the
@@ -199,11 +199,5 @@ export async function fileArticleReport(
   })
   const articleId = result.CreateArticle?.id
   if (!articleId) throw new Error('Cofacts did not return an article id')
-  // repliesUrl comes from here rather than being sliced back out of
-  // articleUrl on the client: getSiteBase() is server-only, and one derivation
-  // beats two that can disagree.
-  return {
-    articleUrl: getArticleUrl(articleId),
-    repliesUrl: getRepliesUrl(),
-  }
+  return { articleUrl: getArticleUrl(articleId) }
 }
