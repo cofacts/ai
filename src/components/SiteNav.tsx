@@ -73,18 +73,54 @@ export function SiteNav({
   const [menuOpen, setMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const menuId = useId()
+  const headerRef = useRef<HTMLElement>(null)
+  const menuRef = useRef<HTMLElement>(null)
   const hamburgerRef = useRef<HTMLButtonElement>(null)
   const searchButtonRef = useRef<HTMLButtonElement>(null)
   const firstItemRef = useRef<HTMLAnchorElement>(null)
 
-  // Mobile menu: focus the first item on open; Esc closes and returns focus (a11y guide 06).
+  // Mobile menu: it overlays the page, so while it is open it behaves like a modal. Focus moves
+  // to the first item and cycles between the close button and the menu items, the page under
+  // it is inert (no focus, not read out), Esc closes and returns focus (a11y guide 06).
   useEffect(() => {
     if (!menuOpen) return
     firstItemRef.current?.focus()
+
+    const header = headerRef.current
+    const rest = Array.from(header?.parentElement?.children ?? []).filter(
+      (el): el is HTMLElement => el instanceof HTMLElement && el !== header,
+    )
+    const wasInert = rest.map((el) => el.inert)
+    rest.forEach((el) => (el.inert = true))
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      setMenuOpen(false)
-      hamburgerRef.current?.focus()
+      if (e.key === 'Escape') {
+        setMenuOpen(false)
+        hamburgerRef.current?.focus()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const items = [
+        hamburgerRef.current,
+        ...(menuRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled])',
+        ) ?? []),
+      ].filter((el): el is HTMLElement => el !== null)
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      const wrapTo =
+        active instanceof HTMLElement && items.includes(active)
+          ? e.shiftKey
+            ? active === first && last
+            : active === last && first
+          : e.shiftKey
+            ? last
+            : first
+      if (wrapTo) {
+        e.preventDefault()
+        wrapTo.focus()
+      }
     }
     window.addEventListener('keydown', onKey)
     // The menu exists only below lg; widening the window (or rotating a tablet) closes it,
@@ -95,6 +131,7 @@ export function SiteNav({
     return () => {
       window.removeEventListener('keydown', onKey)
       desktop.removeEventListener('change', onWiden)
+      rest.forEach((el, i) => (el.inert = wasInert[i] ?? false))
     }
   }, [menuOpen])
 
@@ -105,21 +142,7 @@ export function SiteNav({
   }
 
   return (
-    <header
-      className="relative z-30 shrink-0"
-      // The mobile menu overlays the page. Tabbing past its last item would otherwise put focus
-      // on content hidden under the menu (WCAG 2.4.11), so the menu closes once focus moves to
-      // an element outside the header. A null relatedTarget (a click on non-focusable space,
-      // Safari not focusing buttons on click) leaves it open.
-      onBlur={(e) => {
-        if (
-          menuOpen &&
-          e.relatedTarget instanceof Node &&
-          !e.currentTarget.contains(e.relatedTarget)
-        )
-          setMenuOpen(false)
-      }}
-    >
+    <header ref={headerRef} className="relative z-30 shrink-0">
       <div
         data-surface={menuOpen ? 'dark' : undefined}
         className={cn(
@@ -132,6 +155,8 @@ export function SiteNav({
         <a
           href="/"
           className="flex shrink-0 items-center"
+          // Out of the open menu's tab cycle; it stays clickable.
+          tabIndex={menuOpen ? -1 : undefined}
           aria-label="Cofacts 真的假的 首頁"
         >
           <Logo onDark={menuOpen} />
@@ -190,6 +215,7 @@ export function SiteNav({
                 iconStart="search"
                 aria-label="搜尋"
                 className="border-transparent"
+                tabIndex={menuOpen ? -1 : undefined}
                 ref={searchButtonRef}
                 onClick={() => {
                   setMenuOpen(false)
@@ -214,6 +240,7 @@ export function SiteNav({
 
       {menuOpen && (
         <nav
+          ref={menuRef}
           id={menuId}
           aria-label="主選單"
           data-surface="dark"

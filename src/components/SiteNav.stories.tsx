@@ -45,8 +45,11 @@ export const MobileMenuOpen: Story = {
   },
 }
 
-/** Tabbing out of the open menu closes it, so focus never lands on content the menu covers. */
-export const MobileMenuClosesWhenFocusLeaves: Story = {
+/**
+ * While the mobile menu is open, focus cycles between the close button and the menu items; the
+ * page under the menu is inert, so Tab never lands on content the menu covers.
+ */
+export const MobileMenuTrapsFocus: Story = {
   ...Mobile,
   render: (args) => (
     <>
@@ -58,32 +61,41 @@ export const MobileMenuClosesWhenFocusLeaves: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    const header = canvas.getByRole('banner')
-    await userEvent.click(canvas.getByRole('button', { name: '開啟選單' }))
-    await expect(
-      canvas.getByRole('button', { name: '關閉選單' }),
-    ).toHaveAttribute('aria-expanded', 'true')
-    // Stay inside the header for a few tabs: the menu stays open.
-    await userEvent.tab()
-    await expect(header).toContainElement(
-      canvasElement.ownerDocument.activeElement as HTMLElement,
-    )
-    await expect(
-      canvas.getByRole('button', { name: '關閉選單' }),
-    ).toHaveAttribute('aria-expanded', 'true')
-    // Tab on until focus leaves the header.
-    for (
-      let i = 0;
-      i < 20 && header.contains(canvasElement.ownerDocument.activeElement);
-      i++
-    )
+    const doc = canvasElement.ownerDocument
+    const main = canvas.getByRole('main')
+    const menu = canvas.getByRole('button', { name: '開啟選單' })
+    await userEvent.click(menu)
+    const close = canvas.getByRole('button', { name: '關閉選單' })
+    await expect(main).toHaveAttribute('inert')
+
+    // Tab through the whole cycle twice; focus never leaves the close button + menu items.
+    const items = within(
+      canvas.getByRole('navigation', { name: '主選單' }),
+    ).getAllByRole('link').length
+    const seen: Array<Element | null> = []
+    for (let i = 0; i < 2 * (items + 4); i++) {
       await userEvent.tab()
-    await expect(
+      seen.push(doc.activeElement)
+    }
+    await expect(seen).not.toContain(
       canvas.getByRole('link', { name: 'Content under the menu' }),
-    ).toHaveFocus()
+    )
+    await expect(seen).toContain(close)
+    // After the last item, Tab wraps to the close button; Shift+Tab from it wraps back.
+    close.focus()
+    await userEvent.tab({ shift: true })
+    const last = doc.activeElement as HTMLElement
     await expect(
-      canvas.getByRole('button', { name: '開啟選單' }),
-    ).toHaveAttribute('aria-expanded', 'false')
+      canvas.getByRole('navigation', { name: '主選單' }),
+    ).toContainElement(last)
+    await userEvent.tab()
+    await expect(close).toHaveFocus()
+
+    // Esc closes the menu, returns focus to its button and un-inerts the page.
+    await userEvent.keyboard('{Escape}')
+    await expect(menu).toHaveAttribute('aria-expanded', 'false')
+    await expect(menu).toHaveFocus()
+    await expect(main).not.toHaveAttribute('inert')
   },
 }
 
