@@ -74,14 +74,15 @@ export function SiteNav({
   const [searchOpen, setSearchOpen] = useState(false)
   const menuId = useId()
   const headerRef = useRef<HTMLElement>(null)
-  const menuRef = useRef<HTMLElement>(null)
   const hamburgerRef = useRef<HTMLButtonElement>(null)
   const searchButtonRef = useRef<HTMLButtonElement>(null)
   const firstItemRef = useRef<HTMLAnchorElement>(null)
 
-  // Mobile menu: it overlays the page, so while it is open it behaves like a modal. Focus moves
-  // to the first item and cycles between the close button and the menu items, the page under
-  // it is inert (no focus, not read out), Esc closes and returns focus (a11y guide 06).
+  // Mobile menu: it overlays the page, so while it is open nothing else can take focus: the
+  // page under it is inert (not focusable, not read out), as are the logo and search button in
+  // the bar. Focus starts on the first item; Esc closes and returns focus (a11y guide 06).
+  // Like a native modal, Tab past the last item goes to the browser UI and comes back to the
+  // close button, so no Tab handler is needed.
   useEffect(() => {
     if (!menuOpen) return
     firstItemRef.current?.focus()
@@ -94,33 +95,9 @@ export function SiteNav({
     rest.forEach((el) => (el.inert = true))
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setMenuOpen(false)
-        hamburgerRef.current?.focus()
-        return
-      }
-      if (e.key !== 'Tab') return
-      const items = [
-        hamburgerRef.current,
-        ...(menuRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled])',
-        ) ?? []),
-      ].filter((el): el is HTMLElement => el !== null)
-      const first = items[0]
-      const last = items[items.length - 1]
-      const active = document.activeElement
-      const wrapTo =
-        active instanceof HTMLElement && items.includes(active)
-          ? e.shiftKey
-            ? active === first && last
-            : active === last && first
-          : e.shiftKey
-            ? last
-            : first
-      if (wrapTo) {
-        e.preventDefault()
-        wrapTo.focus()
-      }
+      if (e.key !== 'Escape') return
+      setMenuOpen(false)
+      hamburgerRef.current?.focus()
     }
     window.addEventListener('keydown', onKey)
     // The menu exists only below lg; widening the window (or rotating a tablet) closes it,
@@ -155,8 +132,7 @@ export function SiteNav({
         <a
           href="/"
           className="flex shrink-0 items-center"
-          // Out of the open menu's tab cycle; it stays clickable.
-          tabIndex={menuOpen ? -1 : undefined}
+          inert={menuOpen}
           aria-label="Cofacts 真的假的 首頁"
         >
           <Logo onDark={menuOpen} />
@@ -215,7 +191,7 @@ export function SiteNav({
                 iconStart="search"
                 aria-label="搜尋"
                 className="border-transparent"
-                tabIndex={menuOpen ? -1 : undefined}
+                inert={menuOpen}
                 ref={searchButtonRef}
                 onClick={() => {
                   setMenuOpen(false)
@@ -240,7 +216,6 @@ export function SiteNav({
 
       {menuOpen && (
         <nav
-          ref={menuRef}
           id={menuId}
           aria-label="主選單"
           data-surface="dark"
