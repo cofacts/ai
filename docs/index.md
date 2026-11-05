@@ -130,6 +130,13 @@ is only the overview.
   `FactCheckReplyTitle` live in `src/components/`. Each has a story with `parameters.penpot`.
 - **Data:** the browser never calls rumors-api; route files define server functions, and data
   flows through the TanStack Query cache (see the skill's `references/data-layer.md`).
+- **Site shell:** `__root.tsx` renders the nav (`SiteNav`, and later the footer) around every
+  page, and the document scrolls with the nav stuck to the top. A route opts out of the nav or
+  footer with `staticData: { hideGlobalNav, hideGlobalFooter }`; `fillViewport` pins it to the
+  viewport height (`h-dvh`) so it scrolls inside its own panels. The flags are independent. The
+  Cofacts AI layout `_ai` sets `fillViewport` and `hideGlobalFooter`: the chat scrolls inside its
+  side panels, so a footer below it could never be reached. `_ai` is pathless so the AI pages
+  stay at `/` and `/session/*` for now; Track 5 moves it to `routes/ai/` (`/ai/*`).
 
 Design record: the kb doc
 [Phase 3 網站遷移與前端架構](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Phase%203%20網站遷移與前端架構.md).

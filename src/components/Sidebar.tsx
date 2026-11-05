@@ -10,6 +10,8 @@ import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
 interface SidebarProps {
+  /** On the `<aside>`, so the mobile toggle button can point `aria-controls` at it. */
+  id?: string
   isOpen: boolean
   onClose: () => void
 }
@@ -157,7 +159,7 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
   )
 }
 
-export function Sidebar({ isOpen, onClose }: SidebarProps) {
+export function Sidebar({ id, isOpen, onClose }: SidebarProps) {
   const params = useParams({ strict: false })
   const currentSessionId = (params as Record<string, string | undefined>)
     .sessionId
@@ -176,6 +178,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar */}
       <aside
+        id={id}
         className={`
           w-[256px] bg-surface-base border-r border-border-subtle flex flex-col shrink-0 z-50
           fixed inset-y-0 left-0 transform transition-transform duration-200 ease-in-out

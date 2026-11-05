@@ -12,12 +12,12 @@ import { markSessionOpened } from '@/lib/chatSessions.functions'
 import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
-export const Route = createFileRoute('/_app/session/$sessionId')({
+export const Route = createFileRoute('/_ai/session/$sessionId')({
   component: SessionPage,
 })
 
 function SessionPage() {
-  const { sessionId } = useParams({ from: '/_app/session/$sessionId' })
+  const { sessionId } = useParams({ from: '/_ai/session/$sessionId' })
   const { toolCallId } = useParams({ strict: false })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
