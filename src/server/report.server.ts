@@ -101,7 +101,13 @@ const CreateArticleReportDocument = graphql(`
 
 export type SearchCandidate = NonNullable<
   NonNullable<SearchSuspiciousMessagesQuery['ListArticles']>['edges']
->[number]
+>[number] & {
+  /**
+   * Where a human reads this article. Computed here because the site base is
+   * server-only. Lets the reporter look before picking: picking is a +1.
+   */
+  articleUrl: string
+}
 
 export type ReportOutcomeArticle = NonNullable<
   ReportOutcomeArticleQuery['GetArticle']
@@ -137,7 +143,10 @@ export async function findSimilarReports(
     first: CANDIDATE_LIMIT,
     minimumShouldMatch: BARE_LINK_MIN_SHOULD_MATCH,
   })
-  return data.ListArticles?.edges ?? []
+  return (data.ListArticles?.edges ?? []).map((edge) => ({
+    ...edge,
+    articleUrl: getArticleUrl(edge.node.id),
+  }))
 }
 
 export async function fetchReportOutcome(

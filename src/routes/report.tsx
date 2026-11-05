@@ -412,16 +412,17 @@ function CandidateView({
           有人回報過類似的訊息
         </h2>
         <p className="text-type-body-s text-text-secondary">
-          哪一則是剛才看到的訊息？選錯了會多出一筆重複紀錄，所以看清楚再挑。
+          可以先點「查看這則訊息」確認內容。選了「就是這則」之後，如果還沒有人回應，會幫你一起請求查核。
         </p>
       </div>
-      {candidates.map(({ node }) => (
+      {candidates.map(({ node, articleUrl }) => (
         <SuspiciousMessageCard
           key={node.id}
           text={node.text}
           articleType={node.articleType}
           factCheckCount={node.replyCount}
           communityDemandCount={node.replyRequestCount}
+          viewHref={articleUrl}
           onSelect={() => onPick(node.id)}
           // A second tap would race the first: a second +1, or a +1 landing
           // on one article while 都不是 files another.

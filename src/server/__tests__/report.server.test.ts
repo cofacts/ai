@@ -70,6 +70,17 @@ describe('findSimilarReports', () => {
     expect(candidates.map((e) => e.node.id)).toEqual(['a1', 'a2'])
   })
 
+  test('gives each candidate the page where a human can read it', async () => {
+    // Picking a candidate is a +1, so the reporter has to be able to look first.
+    mockedExec.mockResolvedValueOnce({
+      ListArticles: { edges: [{ node: { id: 'a1', text: 'foo' } }] },
+    })
+
+    const [candidate] = await findSimilarReports('foo')
+
+    expect(candidate?.articleUrl).toBe('https://dev.cofacts.tw/article/a1')
+  })
+
   test('survives an empty or null connection', async () => {
     mockedExec.mockResolvedValueOnce({ ListArticles: null })
     expect(await findSimilarReports('foo')).toEqual([])

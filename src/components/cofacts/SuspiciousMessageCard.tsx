@@ -1,3 +1,4 @@
+import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 /**
@@ -5,8 +6,10 @@ import { cn } from '@/lib/utils'
  * anyone has answered it yet.
  *
  * Two callers, two behaviours. RightDrawer's "similar messages" carousel links
- * out to cofacts.tw (`href`); the report form asks "is this the one you saw?"
- * and needs a button (`onSelect`). Exactly one of the two is given.
+ * out to cofacts.tw (`href`: the whole card is a link). The report form asks
+ * "is this the one you saw?" and picking has a side effect (a +1 when nobody has
+ * answered yet), so the card is not itself a button: it offers a link to read the
+ * article (`viewHref`) next to an explicit pick button (`onSelect`).
  */
 type SuspiciousMessageCardProps = {
   text: string | null
@@ -17,11 +20,12 @@ type SuspiciousMessageCardProps = {
   communityDemandCount?: number | null
   className?: string
 } & (
-  | { href: string; onSelect?: never; selected?: never; disabled?: never }
+  | { href: string; viewHref?: never; onSelect?: never; disabled?: never }
   | {
       href?: never
+      /** Where to read the article, opened in a new tab. */
+      viewHref: string
       onSelect: () => void
-      selected?: boolean
       /** While the caller is busy acting on a pick, so it cannot be repeated. */
       disabled?: boolean
     }
@@ -34,8 +38,8 @@ export function SuspiciousMessageCard({
   communityDemandCount,
   className,
   href,
+  viewHref,
   onSelect,
-  selected,
   disabled,
 }: SuspiciousMessageCardProps) {
   const body = (
@@ -83,19 +87,21 @@ export function SuspiciousMessageCard({
   }
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      disabled={disabled}
-      aria-pressed={selected}
-      className={cn(
-        shared,
-        'w-full text-left hover:bg-surface-selected disabled:pointer-events-none disabled:opacity-50',
-        selected && 'border-border-accent bg-surface-base',
-        className,
-      )}
-    >
+    <div className={cn(shared, className)}>
       {body}
-    </button>
+      <div className="flex flex-wrap items-center gap-spacing-8">
+        <a
+          href={viewHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        >
+          查看這則訊息
+        </a>
+        <Button size="sm" onClick={onSelect} disabled={disabled}>
+          就是這則
+        </Button>
+      </div>
+    </div>
   )
 }
