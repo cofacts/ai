@@ -24,6 +24,26 @@ const config = defineConfig({
   ],
   test: {
     setupFiles: ['./vitest.setup.ts'],
+    // Enabled with `pnpm test --coverage`. cobertura.xml feeds the changed-lines
+    // report in CI.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**'],
+      exclude: [
+        // Generated: TanStack Router, graphql-codegen, openapi-typescript, `pnpm tokens`.
+        'src/routeTree.gen.ts',
+        'src/server/gql/**',
+        'src/**/*.d.ts',
+        'src/styles/tokens.generated.ts',
+        // shadcn primitives, and story files.
+        'src/components/ui/**',
+        'src/**/*.stories.tsx',
+        'src/**/__tests__/**',
+        // Router entrypoint.
+        'src/router.tsx',
+      ],
+      reporter: ['text-summary', 'cobertura'],
+    },
   },
 })
 
