@@ -1,5 +1,5 @@
 import { Outlet, createFileRoute } from '@tanstack/react-router'
-import { useCallback, useState } from 'react'
+import { useCallback, useId, useState } from 'react'
 import { Sidebar } from '@/components/Sidebar'
 import { Button } from '@/components/ui/button'
 import { LoggedOutLanding } from '@/components/LoggedOutLanding'
@@ -22,6 +22,7 @@ export const Route = createFileRoute('/_ai')({
 
 function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const sidebarId = useId()
   const { user } = useAuth()
 
   const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), [])
@@ -37,6 +38,7 @@ function AppLayout() {
             iconStart="side_navigation"
             aria-label="開啟對話列表"
             aria-expanded={sidebarOpen}
+            aria-controls={sidebarId}
             onClick={toggleSidebar}
           />
         </div>
@@ -50,6 +52,7 @@ function AppLayout() {
           <>
             {/* Sidebar - Desktop: always visible, Mobile: overlay */}
             <Sidebar
+              id={sidebarId}
               isOpen={sidebarOpen}
               onClose={() => setSidebarOpen(false)}
             />

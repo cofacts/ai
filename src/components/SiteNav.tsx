@@ -105,7 +105,21 @@ export function SiteNav({
   }
 
   return (
-    <header className="relative z-30 shrink-0">
+    <header
+      className="relative z-30 shrink-0"
+      // The mobile menu overlays the page. Tabbing past its last item would otherwise put focus
+      // on content hidden under the menu (WCAG 2.4.11), so the menu closes once focus moves to
+      // an element outside the header. A null relatedTarget (a click on non-focusable space,
+      // Safari not focusing buttons on click) leaves it open.
+      onBlur={(e) => {
+        if (
+          menuOpen &&
+          e.relatedTarget instanceof Node &&
+          !e.currentTarget.contains(e.relatedTarget)
+        )
+          setMenuOpen(false)
+      }}
+    >
       <div
         data-surface={menuOpen ? 'dark' : undefined}
         className={cn(

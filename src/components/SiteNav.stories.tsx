@@ -45,6 +45,48 @@ export const MobileMenuOpen: Story = {
   },
 }
 
+/** Tabbing out of the open menu closes it, so focus never lands on content the menu covers. */
+export const MobileMenuClosesWhenFocusLeaves: Story = {
+  ...Mobile,
+  render: (args) => (
+    <>
+      <SiteNav {...args} />
+      <main className="p-spacing-20">
+        <a href="#after-nav">Content under the menu</a>
+      </main>
+    </>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const header = canvas.getByRole('banner')
+    await userEvent.click(canvas.getByRole('button', { name: '開啟選單' }))
+    await expect(
+      canvas.getByRole('button', { name: '關閉選單' }),
+    ).toHaveAttribute('aria-expanded', 'true')
+    // Stay inside the header for a few tabs: the menu stays open.
+    await userEvent.tab()
+    await expect(header).toContainElement(
+      canvasElement.ownerDocument.activeElement as HTMLElement,
+    )
+    await expect(
+      canvas.getByRole('button', { name: '關閉選單' }),
+    ).toHaveAttribute('aria-expanded', 'true')
+    // Tab on until focus leaves the header.
+    for (
+      let i = 0;
+      i < 20 && header.contains(canvasElement.ownerDocument.activeElement);
+      i++
+    )
+      await userEvent.tab()
+    await expect(
+      canvas.getByRole('link', { name: 'Content under the menu' }),
+    ).toHaveFocus()
+    await expect(
+      canvas.getByRole('button', { name: '開啟選單' }),
+    ).toHaveAttribute('aria-expanded', 'false')
+  },
+}
+
 /** Penpot Type = search. */
 export const Search: Story = {
   play: async ({ canvasElement }) => {
