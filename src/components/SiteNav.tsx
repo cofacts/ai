@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { Link } from '@tanstack/react-router'
+import type { ComponentProps } from 'react'
 
 import type { CofactsUser } from '@/lib/auth'
 import { Logo } from '@/components/Logo'
@@ -20,7 +22,7 @@ import { cn } from '@/lib/utils'
  * each to its local path when its route lands (kb doc §2.2).
  */
 export const NAV_LINKS = {
-  articles: { label: '可疑訊息', href: 'https://cofacts.tw/articles' },
+  articles: { label: '可疑訊息', href: '/articles' },
   replies: { label: '最新查核', href: 'https://cofacts.tw/replies' },
   hoaxForYou: { label: '等你來答', href: 'https://cofacts.tw/hoax-for-you' },
   ai: { label: '問問 AI', href: '/' },
@@ -40,6 +42,20 @@ const MAIN_ITEMS: ReadonlyArray<NavKey> = [
   'ai',
   'tutorial',
 ]
+
+/**
+ * `<Link>` for paths served by this app (client-side navigation keeps the Query cache and
+ * skips a full document reload); a plain `<a>` for cofacts.tw, mailto: and other external hrefs.
+ */
+function NavAnchor({
+  href,
+  ...props
+}: Omit<ComponentProps<'a'>, 'href'> & { href: string }) {
+  if (href.startsWith('/')) {
+    return <Link to={href} {...props} />
+  }
+  return <a href={href} {...props} />
+}
 
 export type SiteNavUser = Pick<
   CofactsUser,
@@ -129,14 +145,14 @@ export function SiteNav({
             : 'border-border-subtle bg-surface-base',
         )}
       >
-        <a
+        <NavAnchor
           href="/"
           className="flex shrink-0 items-center"
           inert={menuOpen}
           aria-label="Cofacts 真的假的 首頁"
         >
           <Logo onDark={menuOpen} />
-        </a>
+        </NavAnchor>
 
         {searchOpen ? (
           <SearchForm onClose={closeSearch} />
@@ -234,14 +250,14 @@ export function SiteNav({
               ] as const
             ).map((key, i) => (
               <li key={key}>
-                <a
+                <NavAnchor
                   ref={i === 0 ? firstItemRef : undefined}
                   href={NAV_LINKS[key].href}
                   aria-current={current === key ? 'page' : undefined}
                   className="text-type-ui-m text-text-on-dark hover:underline aria-[current=page]:underline"
                 >
                   {NAV_LINKS[key].label}
-                </a>
+                </NavAnchor>
               </li>
             ))}
             <li className="text-type-ui-m text-text-on-dark">LINE:@cofacts</li>
@@ -308,7 +324,7 @@ function NavItem({
   const { label, href } = NAV_LINKS[navKey]
   const shown = count && count > 0 ? (count > 99 ? '99+' : String(count)) : null
   return (
-    <a
+    <NavAnchor
       href={href}
       aria-current={current ? 'page' : undefined}
       className="group flex flex-col gap-spacing-2 text-type-ui-l whitespace-nowrap text-text-primary no-underline"
@@ -325,7 +341,7 @@ function NavItem({
         )}
       </span>
       <span className="h-spacing-2 w-full bg-transparent group-hover:bg-surface-accent group-aria-[current=page]:bg-surface-accent" />
-    </a>
+    </NavAnchor>
   )
 }
 

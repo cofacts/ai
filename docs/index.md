@@ -130,6 +130,8 @@ is only the overview.
   `FactCheckReplyTitle` live in `src/components/`. Each has a story with `parameters.penpot`.
 - **Data:** the browser never calls rumors-api; route files define server functions, and data
   flows through the TanStack Query cache (see the skill's `references/data-layer.md`).
+  `src/routes/(lists)/articles.tsx` is the working example; `src/server/cofacts.server.ts`
+  (`cofactsExec`) is server-only and enforced by import protection.
 - **Site shell:** `__root.tsx` renders the nav (`SiteNav`, and later the footer) around every
   page, and the document scrolls with the nav stuck to the top. A route opts out of the nav or
   footer with `staticData: { hideGlobalNav, hideGlobalFooter }`; `fillViewport` pins it to the
