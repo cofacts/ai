@@ -41,6 +41,13 @@ export type ReactionGroupProps = {
 const segment =
   'flex-1 rounded-none md:flex-none first:rounded-l-radius-5 last:rounded-r-radius-5'
 
+/**
+ * A vote Toggle. Penpot's Thumb Up / Thumb Down icons are the solid glyphs in every state
+ * (mapping-rules), so the icon goes in as a child: Toggle's `icon` prop would show the outline
+ * glyph until pressed. The classes are the ones Toggle adds with `icon`.
+ */
+const voteSegment = cn(segment, 'min-h-[36px] pl-spacing-8')
+
 /** The last segment (看理由 or the flag) is a plain button with Base/Toggle's box. */
 const lastSegment = cn(
   segment,
@@ -75,22 +82,22 @@ export function ReactionGroup({
       className={cn('flex w-full md:w-auto', className)}
     >
       <Toggle
-        icon="thumb_up"
         pressed={ownVote === 'UPVOTE'}
         onPressedChange={vote('UPVOTE')}
         disabled={voteDisabled}
-        className={segment}
+        className={voteSegment}
       >
+        <MaterialIcon name="thumb_up" filled />
         <span className="sr-only">有幫助</span>
         {positiveCount}
       </Toggle>
       <Toggle
-        icon="thumb_down"
         pressed={ownVote === 'DOWNVOTE'}
         onPressedChange={vote('DOWNVOTE')}
         disabled={voteDisabled}
-        className={segment}
+        className={voteSegment}
       >
+        <MaterialIcon name="thumb_down" filled />
         <span className="sr-only">沒幫助</span>
         {negativeCount}
       </Toggle>
