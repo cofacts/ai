@@ -1,11 +1,11 @@
 ---
 status: 'accepted'
-date: 2026-09-05
+date: 2026-11-06
 decision-makers: mrorz
 consulted: Cofacts working group, Cofacts designer
 ---
 
-# Report a suspicious message through a form, not a conversation
+# Report a suspicious message through a URL-only form
 
 ## Context and Problem Statement
 
@@ -25,65 +25,103 @@ The blocker was `ai_writer`. As the root agent its prompt opens with "Users shou
 provide a Cofacts suspicious message URL", so pasting a Threads link got the user told to go
 find an article on cofacts.tw first.
 
-Scope: frontend + BFF only (`src/`). No agent (`adk/`) change — see below for why that turns
-out to be the point rather than an omission.
+Scope: frontend + BFF only (`src/`). No agent (`adk/`) change.
+
+### How the design got here
+
+The shape of this decision changed twice, and most of the concerns that shaped the early
+proposals no longer apply to what shipped. In order:
+
+1. **Chat, any text.** The first proposal
+   ([cofacts/kb#16](https://github.com/cofacts/kb/pull/16), reviewed in the
+   [2026-08-18 meeting](https://github.com/cofacts/kb/blob/main/src/meetings/2026/20260818.md))
+   put a receptionist agent in front of the writer, so that a user could paste _any text_ — a
+   link or not — into the existing chat. [#130](https://github.com/cofacts/ai/pull/130)
+   implemented it.
+2. **Form, any text.** Cofacts' designer found that sending the reporter into an AI chat invites
+   distraction, and designed a standalone flow instead — in effect the LINE bot's flow as a web
+   page ([2026-09-10 meeting](https://github.com/cofacts/kb/blob/main/src/meetings/2026/20260910.md)).
+   Even in chat, a search-result list and a confirm-before-submit step would have needed their
+   own UI, so the form costs little extra and is steadier than steering an LLM through the same
+   steps. The designer's flow, like the LINE bot's, took the pasted message as text.
+3. **Form, URL only.** The message field was narrowed to a single URL before any version of the
+   page was committed, so no code or PR history of the text-area form exists — the reasons are
+   in [Decision Outcome](#the-form-takes-a-url-and-only-a-url).
+
+Options A and B below are steps 1 and 2; C is what shipped.
 
 ## Decision Drivers
 
-- Everything filed through this path becomes a public database record, and the mailbox shows
-  who walks into an open text box: refund requests, fraud victims, takedown demands — traffic
-  that arrives carrying names, phone numbers and order numbers.
-- Do not degrade the fact-checking quality already achieved in `ai_writer`.
 - A reported message has to be findable, or reporting it makes the database worse rather than
   better.
-- Whatever sits in front of every message is paid for on every message.
+- The article's `reference` has to be true. `ArticleReferenceInput` only offers `LINE | URL`.
+- Someone other than the reporter should be able to confirm the message is really circulating,
+  so nothing can be conjured into the database from memory.
+- Cover where messages actually circulate in Taiwan today. Facebook and Threads carry most of
+  what the working group sees, and both are reachable by link.
+- Everything filed through this path becomes a public database record, so the less free-form
+  content a write can carry, the less there is to screen.
+- Do not degrade the fact-checking quality already achieved in `ai_writer`, and do not pay for a
+  model in front of every message.
 
 ## Considered Options
 
-- **A. A receptionist agent in front of the writer**, running the search / pick / +1 flow in
-  chat (implemented in [#130](https://github.com/cofacts/ai/pull/130)).
-- **B. A standalone mechanical form page**, with a button to the AI at the end.
+- **A. A receptionist agent in chat, free text in** (kb#16, [#130](https://github.com/cofacts/ai/pull/130)).
+- **B. A form that takes free text** — a message text area, with or without a link.
+- **C. A form that takes a URL only**, with a button to the AI at the end.
 
 ## Decision Outcome
 
-Chosen option: **B**, from the designer's manuscript for the flow.
+Chosen option: **C**, because it is the only one that satisfies the drivers about
+findability, source labelling and verifiability together, and it does so without an agent in
+front of the write.
 
-The argument that settled it is one Cofacts had already written down in its own design doc,
-about takedown requests, without applying it to reporting: **a form is the right container for
-personal data, a chat box is not.** A form shows exactly what will be submitted, and there is no
-model in between deciding what the user meant.
+### The form replaces the receptionist
 
-B also turns out to remove the need for the agent layer entirely rather than merely bypassing
-it. The AI is now reachable only from the outcome screen, and that button always carries a
-Cofacts article URL — so `ai_writer`'s existing entry contract is not an obstacle to route
-around, it is exactly right. With it go `propose_article_submission`, the
-`LongRunningFunctionTool` human-in-the-loop design, the flattening of one agent's tool results
-into another's context, and the intent-vs-URL judgement for handing a conversation back: four of
-the hardest things in option A to verify, none of which now exist.
+The form is a mechanical flow: search for the link, show candidates, let the reporter pick one
+(a +1) or file a new one. It shows exactly what will be submitted, and no model decides what
+the user meant.
+
+It also removes the need for the agent layer rather than merely bypassing it. The AI is now
+reachable only from the outcome screen, and that button always carries a Cofacts article URL —
+so `ai_writer`'s existing entry contract is not an obstacle to route around, it is exactly
+right. With it go `propose_article_submission`, the `LongRunningFunctionTool`
+human-in-the-loop design, the flattening of one agent's tool results into another's context,
+and the intent-vs-URL judgement for handing a conversation back: four of the hardest things in
+option A to verify, none of which now exist.
 
 A receptionist becomes worth building again only if cofacts.ai ever opens a free-text entry
 point that is not this form.
 
 ### The form takes a URL, and only a URL
 
-`ArticleReferenceInput` has only `LINE | URL`, so a Threads or WhatsApp forward filed without a
-link can only be labelled `LINE`, overstating how much of Cofacts came from LINE. Accepting only
-a link removes that problem at this entry point instead of waiting for a new enum value.
+1. **Source labelling.** `ArticleReferenceInput` has only `LINE | URL`, so a Threads or
+   WhatsApp forward filed without a link can only be labelled `LINE`, overstating how much of
+   Cofacts came from LINE. Accepting only a link means `reference` is always `{URL, permalink}`
+   at this entry point, without waiting for a new enum value.
+2. **Coverage.** A link already reaches Facebook and Threads, the places Taiwan's circulating
+   messages gather. The cost is real and stated on the page: a pure LINE forward with no link
+   cannot be reported here, and is sent to the LINE bot, which can take it.
+3. **Verifiability.** A public link is what lets somebody other than the reporter confirm the
+   message is really circulating.
+4. **A much smaller surface for the concerns that shaped options A and B.** Those proposals
+   were drafted against what the working-group mailbox shows about an open text box: between
+   2025-10 and 2026-07 it received refund requests, fraud victims, takedown demands and
+   mis-sent screenshots, often carrying names, phone numbers and order numbers (kb#16 §8.1,
+   which counted them, and which is why a receptionist and a personal-data check were drafted at
+   all). Those people were not sending _messages that circulate_; they were sending _their own
+   situation_. A URL field filters for the first kind: what can be pasted is something that was
+   already shared publicly, which tends to carry public interest and fact-checking value. Spam
+   and personal data do not disappear — see Consequences — but they stop being the central
+   risk of the entry point.
 
-It is also an anti-abuse property, which is the better reason: a public link is what lets
-somebody other than the reporter confirm the message is really circulating. Nothing can be
-conjured into the database from memory.
-
-The input is a single URL field rather than a text area, because the first version offered a
-five-row box for pasted text and then quietly kept only the link out of it — inviting exactly
-the input it was about to discard. The URL is the article's `text` and its `reference.permalink`
+How the field behaves: it is a single URL input rather than a text area, because a text area
+that quietly kept only the link out of what was pasted would invite exactly the input it was
+about to discard. The URL is the article's `text` and its `reference.permalink`
 alike, one value that cannot drift, and rumors-api resolves the link at creation to fill in
 `hyperlinks.title/summary`, which is what a reader actually sees. Pasting prose along with a
 link still works: the link is kept and put back in the field, so the reporter sees what will be
 filed rather than having their words silently dropped.
-
-The cost is real and stated on the page: a pure LINE forward with no link cannot be reported
-here, and is sent to the LINE bot, which can take it.
 
 ### Searching a link needs a different threshold from searching prose
 
@@ -110,6 +148,14 @@ searches `hyperlinks.title/summary` as well as `text`, and separately matches th
 canonical form included — against other articles' hyperlinks. None of that rescues a link it
 cannot resolve, which is why the threshold still has to change.
 
+### The reason field uses the LINE bot's wording
+
+「為了協助查證，請告訴闢謠志工：為何您覺得這是謠言？」, with its example placeholder, is taken
+verbatim from `ReplyRequestForm` in rumors-line-bot. Cofacts has been asking exactly this
+question for years, and its own copy names who reads the answer — which is what gets one
+written. The first version of this page paraphrased it and read like an interface explaining
+itself.
+
 ### Consequences
 
 - Good, because the reporting path feeds Cofacts' existing popularity signal directly:
@@ -119,24 +165,27 @@ cannot resolve, which is why the threshold still has to change.
   mislabel a source.
 - Good, because no agent changes: the fact-checking pipeline is untouched by a feature that
   doubles what the product does.
-- **Bad, because nothing checks for personal data before a write reaches the public database.**
-  Option A put an LLM in front of that write; a form does not, and the decision here was to ship
-  a static warning rather than mechanical rejection, on the grounds that a false positive blocks
-  a real report. This is a knowing downgrade at the one point where content actually becomes
-  public, and it should be revisited with real submissions in hand.
-- Bad, because the same post reported twice under two URL forms (a share link and an address-bar
-  link) is two articles. Search finds both, so a reporter who reads the candidate list will pick
-  the existing one; only "都不是" splits them.
+- Bad, because **nothing screens a write before it reaches the public database.** Option A
+  would have put an LLM in front of that write; the form does not, and it ships a static
+  warning (「請不要包含姓名、電話、地址、訂單編號等個人資料」) rather than mechanical rejection,
+  because a false positive blocks a real report. Narrowing the input to a link makes this much
+  less severe than it was under A and B, but two paths remain:
+  - the **reason text area** is free text, and it is public;
+  - a **public URL can itself expose personal data**. That is the existing takedown route's
+    job, not something this form can see.
+
+  Revisit with real submissions in hand.
+
+- Bad, because a link is cheap to paste: URL-only narrows the input but does not stop a
+  logged-in account from filing junk links. Login and the per-user upserts above are the only
+  brakes today.
+- Bad, because the same post reported twice under two URL forms (a share link and an
+  address-bar link) is two articles. Search finds both, so a reporter who reads the candidate
+  list will pick the existing one; only "都不是" splits them.
 - Neutral, because attachments are not accepted yet. `CreateMediaArticle` needs a URL rumors-api
-  can fetch, and cofacts.ai's upload path produces only a private artifact.
-
-### The reason field uses the LINE bot's wording
-
-「為了協助查證，請告訴闢謠志工：為何您覺得這是謠言？」, with its example placeholder, is taken
-verbatim from `ReplyRequestForm` in rumors-line-bot. Cofacts has been asking exactly this
-question for years, and its own copy names who reads the answer — which is what gets one
-written. The first version of this page paraphrased it and read like an interface explaining
-itself.
+  can fetch, and cofacts.ai's upload path produces only a private artifact. A related case —
+  a link rumors-api cannot read because of a login wall — is tracked in
+  [#148](https://github.com/cofacts/ai/issues/148) as a screenshot upload.
 
 ## Confirmation
 
@@ -151,6 +200,36 @@ itself.
 - Not covered by tests: the outcome screens themselves. This repo has no React component test
   harness, and standing one up was out of scope here.
 
+## Pros and Cons of the Options
+
+### A. A receptionist agent in chat, free text in
+
+- Good, because the reporter stays in one place and the AI can ask follow-up questions.
+- Bad, because an LLM has to run search / pick / +1 reliably across turns, which needs
+  `propose_article_submission`, a long-running human-in-the-loop tool and cross-agent
+  tool-result flattening — hard to verify, and paid for on every message.
+- Bad, because an open text box in front of a public database is where the mailbox's
+  personal-data traffic would arrive. kb#16 had to add a triage step (eight categories of
+  "wrong door" visitors) and a personal-data stop, and noted that anything pasted would
+  also land in ADK sessions and Langfuse traces.
+- Bad, because the designer found that being taken into an AI chat distracts the reporter.
+
+### B. A form that takes free text
+
+- Good, because it is mechanical and stable, the same flow the LINE bot has used for years.
+- Bad, because text without a link cannot be told apart from something made up, and can only
+  be labelled `LINE` — the source-labelling problem again.
+- Bad, because it keeps the open-text-box exposure of A: the form shows what will be filed, but
+  it does not make that content any safer to publish.
+
+### C. A form that takes a URL only
+
+- Good, because every argument under Decision Outcome applies, and there is no agent to build or
+  verify.
+- Neutral, because it cannot take a pure LINE forward or an attachment; those go to the LINE bot
+  or wait for a later change.
+- Bad, because the residual risks listed under Consequences remain.
+
 ## More Information
 
 - Driving design doc: 可疑訊息回報：cofacts.ai 作為回報入口,
@@ -158,12 +237,13 @@ itself.
   it as
   ["superseded by design decision in ai#138"](https://github.com/cofacts/kb/pull/16#issuecomment-5604875201),
   i.e. this record. Its branch still holds the file for reference. Background, the mailbox
-  categories A–H, the `reference` enum gap (§6.3), LINE-bot drainage (§9) and the heat-metric
-  analysis (§10). It describes the conversational flow (option A), which this record supersedes
-  for the reporting path. Sourced from the same upstream research and meeting cited above.
-- Option A as built: [#130](https://github.com/cofacts/ai/pull/130), which carries its own
-  decision record on that branch. Nothing is superseded here, because it never landed on
-  `master`.
+  categories A–H (§8.1), the `reference` enum gap (§6.3), LINE-bot drainage (§9) and the
+  heat-metric analysis (§10). It describes the conversational flow (option A), which this record
+  supersedes for the reporting path. Sourced from the same upstream research and meeting cited
+  above.
+- Option A as built: [#130](https://github.com/cofacts/ai/pull/130), closed unmerged, which
+  carries its own decision record on that branch. Nothing is superseded here, because it never
+  landed on `master`.
 - Revisit when: attachments are added (needs an upload with a fetchable URL); real submissions
-  show what the missing personal-data check actually costs; or a free-text entry point is opened
-  that this form does not cover.
+  show what the missing personal-data check actually costs, or how much junk a link field
+  attracts; or a free-text entry point is opened that this form does not cover.
