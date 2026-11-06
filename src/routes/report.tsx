@@ -16,7 +16,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type {
   ReportOutcomeArticleQueryVariables,
@@ -59,6 +59,11 @@ import {
 
 /** Shown inline if the browser check is bypassed or disagrees with ours. */
 const NOT_A_LINK = '這裡只能放一個網址，例如 https:// 開頭的連結。'
+
+/** The server refused the link itself (see `NOT_A_LINK`). */
+function isNotALinkError(err: unknown): boolean {
+  return err instanceof Error && err.message === NOT_A_LINK
+}
 
 const searchSuspiciousMessages = createServerFn({ method: 'GET' })
   .inputValidator((text: SearchSuspiciousMessagesQueryVariables['like']) => {
@@ -138,6 +143,7 @@ function ReportPage() {
   const [url, setUrl] = useState('')
   const [reason, setReason] = useState('')
   const [urlError, setUrlError] = useState<UrlError>(null)
+  const urlInput = useRef<HTMLInputElement>(null)
   const [candidates, setCandidates] = useState<Array<SearchCandidate> | null>(
     null,
   )
@@ -165,6 +171,15 @@ function ReportPage() {
     onSuccess: (found, submitted) => {
       if (found.length === 0) return fileNew.mutateAsync(submitted)
       setCandidates(found)
+    },
+    // The browser applies the server's rule before submit, but its URL parser
+    // is not the server's: Chromium accepts a malformed punycode host
+    // (`https://xn--a.com`) that Node refuses. Such a refusal is about the
+    // field, so it is shown there, like the browser's own check.
+    onError: (err) => {
+      if (!isNotALinkError(err)) return
+      setUrlError('format')
+      urlInput.current?.focus()
     },
   })
 
@@ -210,7 +225,7 @@ function ReportPage() {
   // handler; only anything else deserves an inline message.
   const failure = mutations
     .map((m) => m.error)
-    .find((err) => err && !isAuthExpiredError(err))
+    .find((err) => err && !isAuthExpiredError(err) && !isNotALinkError(err))
 
   // Only reached once the browser's constraint validation has passed: the
   // form refuses to submit anything but one http(s) link, and the server
@@ -275,6 +290,7 @@ function ReportPage() {
       ) : (
         <ReportForm
           url={url}
+          urlInputRef={urlInput}
           onUrlChange={setUrl}
           urlError={urlError}
           onUrlErrorChange={setUrlError}
@@ -318,11 +334,27 @@ type UrlError = 'missing' | 'format' | null
 
 function urlErrorOf(input: HTMLInputElement): UrlError {
   if (input.validity.valid) return null
-  return input.validity.valueMissing ? 'missing' : 'format'
+  // Whitespace alone passes `required` but is still nothing pasted.
+  return input.value.trim() ? 'format' : 'missing'
+}
+
+/**
+ * Holds the field to the server's own rule, so the browser blocks exactly what
+ * the server would refuse — including what `type="url"` and `pattern` let
+ * through: invisible characters, an over-long value, a host the URL parser
+ * rejects. An empty value is left to `required`. The text is never shown:
+ * `invalid` is cancelled and our inline message used instead.
+ */
+function applyServerRule(input: HTMLInputElement) {
+  const { value } = input
+  input.setCustomValidity(
+    !value.trim() || parseReportUrl(value) ? '' : NOT_A_LINK,
+  )
 }
 
 function ReportForm({
   url,
+  urlInputRef,
   onUrlChange,
   urlError,
   onUrlErrorChange,
@@ -332,6 +364,7 @@ function ReportForm({
   busy,
 }: {
   url: string
+  urlInputRef: React.RefObject<HTMLInputElement | null>
   onUrlChange: (value: string) => void
   urlError: UrlError
   onUrlErrorChange: (error: UrlError) => void
@@ -340,6 +373,12 @@ function ReportForm({
   onSubmit: () => void
   busy: boolean
 }) {
+  // Also for a value that did not come from typing: the initial one, the
+  // cleared one after "再回報一則", or one filled in for the reporter.
+  useEffect(() => {
+    if (urlInputRef.current) applyServerRule(urlInputRef.current)
+  }, [url, urlInputRef])
+
   return (
     <form
       className="flex flex-col gap-spacing-16"
@@ -376,8 +415,14 @@ function ReportForm({
           type="url"
           name="url"
           required
-          // A full match: one link and nothing else, http(s) only, matching
-          // what parseReportUrl accepts on the server.
+          ref={urlInputRef}
+          // The declarative form of the rule: an http(s) link and nothing
+          // else. What actually keeps the browser in line with the server is
+          // applyServerRule (parseReportUrl as custom validity). What is left
+          // is where the browser is stricter (a leading full-width space or
+          // BOM, `https:\\` backslashes), which is harmless, and where
+          // Chromium's URL parser is laxer than Node's (a malformed punycode
+          // host), which startReport's onError shows inline.
           // - The scheme in any case (an auto-capitalised "Https://"),
           //   spelled out per letter: the `i` regex modifier isn't Baseline.
           // - No whitespace inside, so words after the link, separated by a
@@ -392,6 +437,8 @@ function ReportForm({
           enterKeyHint="send"
           value={url}
           onChange={(e) => {
+            // Before reading validity below; the effect covers other values.
+            applyServerRule(e.currentTarget)
             onUrlChange(e.target.value)
             // Only ever clears (or keeps accurate) a message already shown.
             if (urlError) onUrlErrorChange(urlErrorOf(e.currentTarget))
