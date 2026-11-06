@@ -162,11 +162,15 @@ export function FactCheckReply({
                 >
                   分享
                 </Button>
-                {/* Base/Button Icon = Only with Penpot's solid flag (flag_2, filled). */}
+                {/*
+                  Base/Button Icon = Only with Penpot's solid flag (flag_2, filled). Button's
+                  iconStart has no filled option, so the icon is a child and the classes are
+                  the ones Button uses for an icon-only md button.
+                */}
                 <Button
                   variant="outline"
                   aria-label="檢舉"
-                  className="hidden px-spacing-8 md:inline-flex"
+                  className="hidden size-[36px] p-spacing-8 md:inline-flex"
                   onClick={onReport}
                 >
                   <MaterialIcon name="flag_2" filled />
