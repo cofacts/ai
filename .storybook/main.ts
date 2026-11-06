@@ -3,7 +3,13 @@ import type { StorybookConfig } from '@storybook/tanstack-react'
 
 const config: StorybookConfig = {
   stories: ['../src/**/*.stories.@(ts|tsx)'],
-  addons: ['@storybook/addon-docs'],
+  // pseudo-states: Penpot draws no hover or focus boards, so stories force :hover / :focus-visible
+  // with `parameters.pseudo` to show them. a11y: axe checks in the Accessibility panel.
+  addons: [
+    '@storybook/addon-docs',
+    'storybook-addon-pseudo-states',
+    '@storybook/addon-a11y',
+  ],
   framework: {
     name: '@storybook/tanstack-react',
     options: {},
