@@ -16,7 +16,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
 import type {
   ReportOutcomeArticleQueryVariables,
@@ -82,11 +82,23 @@ const requestFactCheck = createServerFn({ method: 'POST' })
   .handler(({ data }) => recordFactCheckRequest(data))
 
 const createArticleReport = createServerFn({ method: 'POST' })
-  .inputValidator((input: CreateArticleReportInput) => {
-    const url = parseReportUrl(input.url)
-    if (!url) throw new Error(NOT_A_LINK)
-    return { ...input, url }
-  })
+  .inputValidator(
+    (input: CreateArticleReportInput): CreateArticleReportInput => {
+      // Typed for callers, but it is whatever the RPC was sent: maybe not even
+      // an object.
+      const raw: unknown = input
+      const { url, reason } =
+        typeof raw === 'object' && raw !== null
+          ? (raw as Record<string, unknown>)
+          : {}
+      const link = parseReportUrl(url)
+      if (!link) throw new Error(NOT_A_LINK)
+      if (reason != null && typeof reason !== 'string') {
+        throw new Error('reason must be text')
+      }
+      return { url: link, reason }
+    },
+  )
   .handler(({ data }) => fileArticleReport(data))
 
 export const Route = createFileRoute('/report')({
@@ -309,19 +321,6 @@ function urlErrorOf(input: HTMLInputElement): UrlError {
   return input.validity.valueMissing ? 'missing' : 'format'
 }
 
-/**
- * `:user-invalid`: invalid AND the reporter has had their go at it (changed it
- * and left, or tried to submit). Older browsers without the selector fall back
- * to "has something typed in it".
- */
-function isUserInvalid(input: HTMLInputElement): boolean {
-  try {
-    return input.matches(':user-invalid')
-  } catch {
-    return !input.validity.valid && input.value !== ''
-  }
-}
-
 function ReportForm({
   url,
   onUrlChange,
@@ -341,21 +340,6 @@ function ReportForm({
   onSubmit: () => void
   busy: boolean
 }) {
-  // Whether a mouse button, pen or finger is down right now; see onBlur.
-  const pressing = useRef(false)
-  useEffect(() => {
-    const down = () => (pressing.current = true)
-    const up = () => (pressing.current = false)
-    document.addEventListener('pointerdown', down, true)
-    document.addEventListener('pointerup', up, true)
-    document.addEventListener('pointercancel', up, true)
-    return () => {
-      document.removeEventListener('pointerdown', down, true)
-      document.removeEventListener('pointerup', up, true)
-      document.removeEventListener('pointercancel', up, true)
-    }
-  }, [])
-
   return (
     <form
       className="flex flex-col gap-spacing-16"
@@ -377,22 +361,31 @@ function ReportForm({
           例：https://www.facebook.com/share/p/…
         </p>
         {/*
-          The error follows `:user-invalid` timing: nothing on load or while
-          typing; shown when the reporter leaves the field or tries to submit;
-          gone as soon as the value becomes valid. The browser's own bubble is
-          suppressed because our message carries a link it cannot show.
+          The error appears only when the reporter tries to submit (the
+          input's `invalid` event) — never on load, while typing, or on blur.
+          Shown on blur, it would push the submit button down between press
+          and release and swallow the click (a tap on mobile, where focus
+          moves only after the finger lifts, included); shown by the submit
+          itself, nothing moves under the pointer. Once shown, editing keeps it
+          accurate and clears it as soon as the value is valid. The browser's
+          own bubble is suppressed because our message carries a link it
+          cannot show.
         */}
         <Input
           id="report-url"
           type="url"
           name="url"
           required
-          // A full match: one link and nothing else, http(s) only. No
-          // whitespace inside, so a link with the reporter's words after it is
-          // refused rather than filed with them. Whitespace around it is fine
-          // (copying often brings a trailing space or newline): Chrome checks
-          // the pattern against the untrimmed value, and submit trims.
-          pattern="\s*https?://\S+\s*"
+          // A full match: one link and nothing else, http(s) only, matching
+          // what parseReportUrl accepts on the server.
+          // - The scheme in any case (an auto-capitalised "Https://"),
+          //   spelled out per letter: the `i` regex modifier isn't Baseline.
+          // - No whitespace inside, so words after the link, separated by a
+          //   space, are refused rather than filed with it.
+          // - Whitespace around it is fine (copying often brings a trailing
+          //   space or newline): Chrome checks the pattern against the
+          //   untrimmed value, and submit trims.
+          pattern="\s*[Hh][Tt][Tt][Pp][Ss]?://\S+\s*"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
@@ -402,25 +395,6 @@ function ReportForm({
             onUrlChange(e.target.value)
             // Only ever clears (or keeps accurate) a message already shown.
             if (urlError) onUrlErrorChange(urlErrorOf(e.currentTarget))
-          }}
-          onBlur={(e) => {
-            const input = e.currentTarget
-            const update = () => {
-              if (input.validity.valid) onUrlErrorChange(null)
-              else if (isUserInvalid(input)) onUrlErrorChange(urlErrorOf(input))
-            }
-            if (!pressing.current) return update()
-            // Left by pressing on something else, usually the submit button.
-            // Showing the error now would push that button down before the
-            // press ends and the click would be lost, so wait for the press
-            // to end: a submit then reports the error (and refocuses) itself.
-            const afterPress = () => {
-              window.removeEventListener('pointerup', afterPress)
-              window.removeEventListener('pointercancel', afterPress)
-              setTimeout(update)
-            }
-            window.addEventListener('pointerup', afterPress)
-            window.addEventListener('pointercancel', afterPress)
           }}
           onInvalid={(e) => {
             e.preventDefault()

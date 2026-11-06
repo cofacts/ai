@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { parseReportUrl } from '../report'
+import { MAX_REPORT_URL_LENGTH, parseReportUrl } from '../report'
 
 describe('parseReportUrl', () => {
   test('accepts an https link as pasted', () => {
@@ -23,6 +23,18 @@ describe('parseReportUrl', () => {
   test('does not rewrite the link into its normalized form', () => {
     // It is stored, and matched against existing articles, as pasted.
     expect(parseReportUrl('https://EXAMPLE.com')).toBe('https://EXAMPLE.com')
+    expect(parseReportUrl('https://X.com')).toBe('https://X.com')
+  })
+
+  test('accepts an upper-case scheme, as the form does', () => {
+    expect(parseReportUrl('Https://x.com/a')).toBe('Https://x.com/a')
+    expect(parseReportUrl('HTTP://x.com/a')).toBe('HTTP://x.com/a')
+  })
+
+  test('accepts a link with a non-ASCII path', () => {
+    expect(parseReportUrl('https://zh.wikipedia.org/wiki/臺灣')).toBe(
+      'https://zh.wikipedia.org/wiki/臺灣',
+    )
   })
 
   test('trims surrounding whitespace', () => {
@@ -55,5 +67,29 @@ describe('parseReportUrl', () => {
 
   test('rejects a bare domain', () => {
     expect(parseReportUrl('example.com')).toBeNull()
+  })
+
+  test('rejects control and invisible format characters inside the link', () => {
+    expect(parseReportUrl('https://x.com/a\u0000b')).toBeNull() // NUL
+    expect(parseReportUrl('https://x.com/a\u0007')).toBeNull() // BEL
+    expect(parseReportUrl('https://x.com/a\u200bb')).toBeNull() // zero-width space
+    expect(parseReportUrl('https://x.com/a\u202eb')).toBeNull() // bidi override
+    expect(parseReportUrl('https://x.com/a\ufeffb')).toBeNull() // BOM
+  })
+
+  test('rejects a value over the length cap', () => {
+    const prefix = 'https://x.com/'
+    const atCap = prefix + 'a'.repeat(MAX_REPORT_URL_LENGTH - prefix.length)
+    expect(parseReportUrl(atCap)).toBe(atCap)
+    expect(parseReportUrl(atCap + 'a')).toBeNull()
+  })
+
+  test('rejects anything that is not a string', () => {
+    // It guards an RPC, so the input is whatever the caller sent.
+    expect(parseReportUrl(undefined)).toBeNull()
+    expect(parseReportUrl(null)).toBeNull()
+    expect(parseReportUrl(42)).toBeNull()
+    expect(parseReportUrl(['https://x.com'])).toBeNull()
+    expect(parseReportUrl({ url: 'https://x.com' })).toBeNull()
   })
 })

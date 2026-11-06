@@ -120,13 +120,17 @@ that quietly kept only the link out of what was pasted would invite exactly the 
 about to discard. The URL is the article's `text` and its `reference.permalink`
 alike, one value that cannot drift, and rumors-api resolves the link at creation to fill in
 `hyperlinks.title/summary`, which is what a reader actually sees. The field is a native
-`type="url"` input, limited to http(s) by its `pattern` (which also refuses whitespace inside,
-so a link with words after it does not pass). Constraint validation runs before submit: the
-browser refuses anything but one link, and the page shows an inline message on blur or submit,
-in `:user-invalid` timing, which also points a pure LINE forward to the LINE bot. The server
-functions' input validators (`parseReportUrl` in `src/lib/report.ts`) check again, because the
-browser check is UX and not a trust boundary — whatever passes is stored publicly. Pulling a
-link out of shared text is the Web Share Target's job
+`type="url"` input, limited by its `pattern` to an http(s) scheme (in any case) followed by no
+whitespace. Words separated from the link by a space are refused; words glued to the link with
+no space cannot be told apart from a legitimate non-ASCII path (zh.wikipedia's, say) and pass,
+on both sides. Constraint validation runs before submit: the browser refuses anything but one
+link, and the page shows an inline message, which also points a pure LINE forward to the LINE
+bot, when the reporter tries to submit — not on load, while typing or on blur — and updates or
+clears it while they edit. The server functions' input validators (`parseReportUrl` in
+`src/lib/report.ts`) check again, because the browser check is UX and not a trust boundary —
+whatever passes is stored publicly. They also refuse control and invisible (format) characters
+anywhere in the value, values over a 4,096-character sanity cap, and anything that is not a
+string. Pulling a link out of shared text is the Web Share Target's job
 ([#139](https://github.com/cofacts/ai/pull/139)), not this field's.
 
 ### Searching a link needs a different threshold from searching prose
@@ -201,9 +205,10 @@ itself.
 - `src/server/__tests__/cofactsSite.test.ts` covers deriving the site host from the API host —
   every deployment points at `dev-api.cofacts.tw`, so a `cofacts.tw` link would 404.
 - `src/lib/__tests__/report.test.ts` covers `parseReportUrl`, the server-side check: http(s)
-  links are accepted as pasted (only trimmed, never normalised), and prose — even with a link in
-  it — other schemes (`javascript:`, `data:`, `mailto:`, `ftp:`), a scheme with no host and a
-  bare domain are refused.
+  links, in any case, are accepted as pasted (only trimmed, never normalised), and prose — even
+  with a link in it — other schemes (`javascript:`, `data:`, `mailto:`, `ftp:`), a scheme with no
+  host, a bare domain, control and invisible characters, over-long values and non-strings are
+  refused.
 - Not covered by tests: the outcome screens themselves. This repo has no React component test
   harness, and standing one up was out of scope here.
 
