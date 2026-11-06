@@ -119,9 +119,15 @@ How the field behaves: it is a single URL input rather than a text area, because
 that quietly kept only the link out of what was pasted would invite exactly the input it was
 about to discard. The URL is the article's `text` and its `reference.permalink`
 alike, one value that cannot drift, and rumors-api resolves the link at creation to fill in
-`hyperlinks.title/summary`, which is what a reader actually sees. Pasting prose along with a
-link still works: the link is kept and put back in the field, so the reporter sees what will be
-filed rather than having their words silently dropped.
+`hyperlinks.title/summary`, which is what a reader actually sees. The field is a native
+`type="url"` input, limited to http(s) by its `pattern` (which also refuses whitespace inside,
+so a link with words after it does not pass). Constraint validation runs before submit: the
+browser refuses anything but one link, and the page shows an inline message on blur or submit,
+in `:user-invalid` timing, which also points a pure LINE forward to the LINE bot. The server
+functions' input validators (`parseReportUrl` in `src/lib/report.ts`) check again, because the
+browser check is UX and not a trust boundary — whatever passes is stored publicly. Pulling a
+link out of shared text is the Web Share Target's job
+([#139](https://github.com/cofacts/ai/pull/139)), not this field's.
 
 ### Searching a link needs a different threshold from searching prose
 
@@ -194,9 +200,10 @@ itself.
   being `URL`.
 - `src/server/__tests__/cofactsSite.test.ts` covers deriving the site host from the API host —
   every deployment points at `dev-api.cofacts.tw`, so a `cofacts.tw` link would 404.
-- `src/lib/__tests__/report.test.ts` covers pulling the link out of a paste — trimming the
-  sentence punctuation stuck to it without cutting a bracket that belongs to it — and the
-  link-required predicate.
+- `src/lib/__tests__/report.test.ts` covers `parseReportUrl`, the server-side check: http(s)
+  links are accepted as pasted (only trimmed, never normalised), and prose — even with a link in
+  it — other schemes (`javascript:`, `data:`, `mailto:`, `ftp:`), a scheme with no host and a
+  bare domain are refused.
 - Not covered by tests: the outcome screens themselves. This repo has no React component test
   harness, and standing one up was out of scope here.
 

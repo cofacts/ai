@@ -16,7 +16,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type {
   ReportOutcomeArticleQueryVariables,
@@ -38,7 +38,7 @@ import { FactCheckReplyCard } from '@/components/FactCheckReplyCard'
 import { SuspiciousMessageCard } from '@/components/SuspiciousMessageCard'
 import { useAuth } from '@/lib/auth'
 import { isAuthExpiredError } from '@/lib/authExpired'
-import { findFirstUrl } from '@/lib/report'
+import { parseReportUrl } from '@/lib/report'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import {
@@ -51,11 +51,19 @@ import {
 // Only this page calls these, so they live beside it. Each is an RPC wrapper
 // plus its input check; the Cofacts calls themselves are in report.server.ts,
 // where they can be tested.
+//
+// The form's `type="url"` input stops anything but a link before it is sent,
+// but that is UX, not a trust boundary: these validators check the link again,
+// since whatever passes is stored publicly as the article's text and its
+// `reference.permalink`.
+
+/** Shown inline if the browser check is bypassed or disagrees with ours. */
+const NOT_A_LINK = '這裡只能放一個網址，例如 https:// 開頭的連結。'
 
 const searchSuspiciousMessages = createServerFn({ method: 'GET' })
   .inputValidator((text: SearchSuspiciousMessagesQueryVariables['like']) => {
-    const like = text.trim()
-    if (!like) throw new Error('Nothing to search for')
+    const like = parseReportUrl(text)
+    if (!like) throw new Error(NOT_A_LINK)
     return like
   })
   .handler(({ data: like }) => findSimilarReports(like))
@@ -75,8 +83,9 @@ const requestFactCheck = createServerFn({ method: 'POST' })
 
 const createArticleReport = createServerFn({ method: 'POST' })
   .inputValidator((input: CreateArticleReportInput) => {
-    if (!input.url.trim()) throw new Error('url is required')
-    return input
+    const url = parseReportUrl(input.url)
+    if (!url) throw new Error(NOT_A_LINK)
+    return { ...input, url }
   })
   .handler(({ data }) => fileArticleReport(data))
 
@@ -116,7 +125,7 @@ function ReportPage() {
 
   const [url, setUrl] = useState('')
   const [reason, setReason] = useState('')
-  const [noLink, setNoLink] = useState(false)
+  const [urlError, setUrlError] = useState<UrlError>(null)
   const [candidates, setCandidates] = useState<Array<SearchCandidate> | null>(
     null,
   )
@@ -191,19 +200,12 @@ function ReportPage() {
     .map((m) => m.error)
     .find((err) => err && !isAuthExpiredError(err))
 
+  // Only reached once the browser's constraint validation has passed: the
+  // form refuses to submit anything but one http(s) link, and the server
+  // checks again.
   function submit() {
-    // Forgiving about a paste that brought prose with it: keep the link and put
-    // it back in the field, so the reporter sees exactly what will be filed
-    // rather than having their words silently dropped on the way to Cofacts.
-    const found = findFirstUrl(url)
-    if (!found) {
-      setNoLink(true)
-      return
-    }
-    setNoLink(false)
-    setUrl(found)
     clearMutations()
-    startReport.mutate(found)
+    startReport.mutate(url.trim())
   }
 
   // Every action starts from a clean slate: a chained filing leaves its error
@@ -213,13 +215,13 @@ function ReportPage() {
     mutations.forEach((m) => m.reset())
   }
 
-  // A fresh form, not the last report's. Left filled, a second link pasted
-  // into the field lands after the first, and findFirstUrl files the first
-  // one again.
+  // A fresh form, not the last report's: the previous link and reason would
+  // otherwise ride along into the next report, and a second link pasted into
+  // the field would land after the first.
   function startOver() {
     setUrl('')
     setReason('')
-    setNoLink(false)
+    setUrlError(null)
     setCandidates(null)
     setOutcome(null)
     clearMutations()
@@ -261,15 +263,13 @@ function ReportPage() {
       ) : (
         <ReportForm
           url={url}
-          onUrlChange={(value) => {
-            setUrl(value)
-            setNoLink(false)
-          }}
+          onUrlChange={setUrl}
+          urlError={urlError}
+          onUrlErrorChange={setUrlError}
           reason={reason}
           onReasonChange={setReason}
           onSubmit={submit}
           busy={busy}
-          noLink={noLink}
         />
       )}
 
@@ -298,30 +298,69 @@ function ReportPage() {
   )
 }
 
+/**
+ * Why the link field refuses what is in it, or null when it shows nothing.
+ * Kept in the page so "再回報一則" can clear it with the rest of the form.
+ */
+type UrlError = 'missing' | 'format' | null
+
+function urlErrorOf(input: HTMLInputElement): UrlError {
+  if (input.validity.valid) return null
+  return input.validity.valueMissing ? 'missing' : 'format'
+}
+
+/**
+ * `:user-invalid`: invalid AND the reporter has had their go at it (changed it
+ * and left, or tried to submit). Older browsers without the selector fall back
+ * to "has something typed in it".
+ */
+function isUserInvalid(input: HTMLInputElement): boolean {
+  try {
+    return input.matches(':user-invalid')
+  } catch {
+    return !input.validity.valid && input.value !== ''
+  }
+}
+
 function ReportForm({
   url,
   onUrlChange,
+  urlError,
+  onUrlErrorChange,
   reason,
   onReasonChange,
   onSubmit,
   busy,
-  noLink,
 }: {
   url: string
   onUrlChange: (value: string) => void
+  urlError: UrlError
+  onUrlErrorChange: (error: UrlError) => void
   reason: string
   onReasonChange: (value: string) => void
   onSubmit: () => void
   busy: boolean
-  noLink: boolean
 }) {
+  // Whether a mouse button, pen or finger is down right now; see onBlur.
+  const pressing = useRef(false)
+  useEffect(() => {
+    const down = () => (pressing.current = true)
+    const up = () => (pressing.current = false)
+    document.addEventListener('pointerdown', down, true)
+    document.addEventListener('pointerup', up, true)
+    document.addEventListener('pointercancel', up, true)
+    return () => {
+      document.removeEventListener('pointerdown', down, true)
+      document.removeEventListener('pointerup', up, true)
+      document.removeEventListener('pointercancel', up, true)
+    }
+  }, [])
+
   return (
     <form
       className="flex flex-col gap-spacing-16"
-      // Our own message, not the browser's bubble: a paste that brought prose
-      // along with the link is something we accept and tidy up, and native
-      // validation would reject it before the submit handler ever runs.
-      noValidate
+      // Native constraint validation guards the submit: the handler only runs
+      // once the field holds one http(s) link.
       onSubmit={(e) => {
         e.preventDefault()
         onSubmit()
@@ -329,18 +368,75 @@ function ReportForm({
     >
       <Field>
         <Label htmlFor="report-url">訊息的網址</Label>
+        {/* A visible hint rather than a placeholder, which is not a label and
+            disappears the moment the reporter starts pasting. */}
+        <p
+          id="report-url-hint"
+          className="text-type-body-s text-text-secondary"
+        >
+          例：https://www.facebook.com/share/p/…
+        </p>
+        {/*
+          The error follows `:user-invalid` timing: nothing on load or while
+          typing; shown when the reporter leaves the field or tries to submit;
+          gone as soon as the value becomes valid. The browser's own bubble is
+          suppressed because our message carries a link it cannot show.
+        */}
         <Input
           id="report-url"
           type="url"
+          name="url"
+          required
+          // A full match: one link and nothing else, http(s) only. No
+          // whitespace inside, so a link with the reporter's words after it is
+          // refused rather than filed with them. Whitespace around it is fine
+          // (copying often brings a trailing space or newline): Chrome checks
+          // the pattern against the untrimmed value, and submit trims.
+          pattern="\s*https?://\S+\s*"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="send"
           value={url}
-          onChange={(e) => onUrlChange(e.target.value)}
-          placeholder="https://www.facebook.com/share/p/..."
-          aria-invalid={noLink || undefined}
-          aria-describedby={noLink ? 'report-url-error' : undefined}
+          onChange={(e) => {
+            onUrlChange(e.target.value)
+            // Only ever clears (or keeps accurate) a message already shown.
+            if (urlError) onUrlErrorChange(urlErrorOf(e.currentTarget))
+          }}
+          onBlur={(e) => {
+            const input = e.currentTarget
+            const update = () => {
+              if (input.validity.valid) onUrlErrorChange(null)
+              else if (isUserInvalid(input)) onUrlErrorChange(urlErrorOf(input))
+            }
+            if (!pressing.current) return update()
+            // Left by pressing on something else, usually the submit button.
+            // Showing the error now would push that button down before the
+            // press ends and the click would be lost, so wait for the press
+            // to end: a submit then reports the error (and refocuses) itself.
+            const afterPress = () => {
+              window.removeEventListener('pointerup', afterPress)
+              window.removeEventListener('pointercancel', afterPress)
+              setTimeout(update)
+            }
+            window.addEventListener('pointerup', afterPress)
+            window.addEventListener('pointercancel', afterPress)
+          }}
+          onInvalid={(e) => {
+            e.preventDefault()
+            onUrlErrorChange(urlErrorOf(e.currentTarget))
+            e.currentTarget.focus()
+          }}
+          aria-invalid={urlError ? true : undefined}
+          aria-describedby={
+            urlError ? 'report-url-hint report-url-error' : 'report-url-hint'
+          }
         />
-        {noLink && (
+        {urlError && (
           <FieldError id="report-url-error">
-            回報需要一個大家都點得開的網址，別人才能確認這則訊息真的在流傳。
+            {urlError === 'missing'
+              ? '請貼上訊息的網址。'
+              : '這裡只能放一個網址，例如 https:// 開頭的連結。'}
             如果是在 LINE 上收到、沒有網址可以附，請改用{' '}
             <a
               href="https://line.me/R/ti/p/%40cofacts"
@@ -386,7 +482,9 @@ function ReportForm({
         type="submit"
         size="lg"
         className="self-center"
-        disabled={busy || !url.trim()}
+        // Not disabled while empty: submitting is what lets validation
+        // explain what the field needs. Busy only, so it can't double-post.
+        disabled={busy}
       >
         回報此訊息
       </Button>

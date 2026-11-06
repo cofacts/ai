@@ -1,66 +1,38 @@
 /**
- * Matches an http(s) URL up to the first whitespace.
- *
- * Trailing punctuation is trimmed separately: a link at the end of a sentence
- * ("看看這個 https://example.com/a。") would otherwise absorb the full stop and
- * stop resolving.
- */
-const URL_RE = /https?:\/\/[^\s<>"']+/
-
-/** Sentence punctuation that cannot be the last character of a link. */
-const TRAILING_PUNCT = new Set('.,;:!?。，、；：！？')
-
-/**
- * Closing brackets, mapped to their openers.
- *
- * Unlike sentence punctuation these can legitimately end a link —
- * `https://en.wikipedia.org/wiki/Mercury_(planet)` — so one is trimmed only
- * when the link does not contain its opener, i.e. when it belongs to the
- * surrounding prose: "(see https://x.com/a)".
- */
-const CLOSER_TO_OPENER: Record<string, string> = {
-  ')': '(',
-  ']': '[',
-  '}': '{',
-  '）': '（',
-  '】': '【',
-  '》': '《',
-  '」': '「',
-  '』': '『',
-}
-
-function count(text: string, char: string): number {
-  return text.split(char).length - 1
-}
-
-/** Drops whatever the surrounding sentence left stuck to the end of a link. */
-function trimTrailing(link: string): string {
-  // Never empties: every link starts with `http`, which is neither.
-  let trimmed = link
-  for (;;) {
-    const last = trimmed.slice(-1)
-    const opener = CLOSER_TO_OPENER[last]
-    const unbalanced =
-      opener !== undefined && count(trimmed, last) > count(trimmed, opener)
-    if (!TRAILING_PUNCT.has(last) && !unbalanced) return trimmed
-    trimmed = trimmed.slice(0, -1)
-  }
-}
-
-/**
- * The first http(s) URL across the given candidates, or null when there is none.
+ * The link a reporter submitted, trimmed, or null when it is not one http(s)
+ * link with a host.
  *
  * The report form needs one. An article has to point at something anyone can
  * open — that is what makes "this message is really circulating" checkable by
  * someone other than the reporter — and `ArticleReferenceInput` has no honest
  * value for "typed from memory" anyway.
+ *
+ * This is the server's check; the form's `type="url"` input is only UX, and
+ * whatever passes here is stored publicly as the article text and its
+ * `reference.permalink`. So it refuses anything that is not a link outright —
+ * prose with a link in it, other schemes (`javascript:`, `data:`, `mailto:`),
+ * a scheme with no host — rather than trying to rescue a link from it.
+ *
+ * Whitespace inside the value is refused too: `new URL()` would percent-encode
+ * it into the path, so "https://x.com/a 說很可怕" would otherwise pass with the
+ * reporter's words attached. A link copied from an address bar or a share
+ * button never contains a raw space.
+ *
+ * Returns the trimmed input, not `URL#href`: what the reporter pasted is what
+ * gets stored and matched against existing articles, so it is not rewritten.
  */
-export function findFirstUrl(
-  ...candidates: Array<string | undefined>
-): string | null {
-  for (const candidate of candidates) {
-    const match = candidate?.match(URL_RE)
-    if (match) return trimTrailing(match[0])
+export function parseReportUrl(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed || /\s/.test(trimmed)) return null
+
+  let url: URL
+  try {
+    url = new URL(trimmed)
+  } catch {
+    return null
   }
-  return null
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+  if (!url.hostname) return null
+  return trimmed
 }
