@@ -71,6 +71,24 @@ This will start both the UI and agent servers concurrently:
 - http://localhost:8000 for ADK web
 - http://localhost:8000/docs for ADK API docs
 
+## Agent evaluation
+
+The Verifier/Writer evaluation suite is self-contained in `adk/`; no
+`cofacts-ai-eval` checkout is required after importing cases. Historical
+conversation fixtures remain local pending publication authorization.
+
+```bash
+cd adk
+uv sync --group dev
+uv run pytest -q
+uv run python -m cofacts_eval import --raw-dir /path/to/langfuse/raw --output evals/cases.jsonl
+uv run python -m cofacts_eval inspect --target writer
+```
+
+See [the evaluation guide](docs/evaluation.md) for generating candidate outputs,
+grading with the Codex CLI, source-capture limitations and human review. Model
+runs send selected case contents to the relevant model service; unit tests do not.
+
 ## Deployment
 
 This project uses GitHub Actions for automated deployments to Google Cloud Run.

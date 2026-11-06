@@ -1,0 +1,35 @@
+{
+  "dataset_version": 1,
+  "prepared_at": "2026-09-14",
+  "source_project": "cofacts-ai-eval",
+  "source_checkout_commit": "fbbd7f13cceb536f57fcee21c08bddf35fc8aa2f",
+  "raw_file_sha256": {
+    "traces.jsonl": "ab1c81aab0ec9c153d9940281e7684c772e6963481fda3f1e1205d5af300d558",
+    "observations.jsonl": "4efeaf160ae0d4092d7192f3a02b4589832d6e46fefa28bd9e8ce2a2d63adc22",
+    "scores.jsonl": "74b7a25947fe003bfa7899b2a3f3f002c92a9ff1f2a9dac784f0fcd462ef8b84"
+  },
+  "cases_sha256": "e227a119520f10058d030431cef87d882e34f126a0e3723a04337170f8aa09af",
+  "counts": {
+    "verifier": 20,
+    "writer": 20,
+    "dev": 27,
+    "holdout": 13,
+    "pending_human_review": 40,
+    "verifier_sources_captured": 5,
+    "verifier_sources_not_captured": 15,
+    "multi_turn_writer": 7
+  },
+  "historical_date_range": [
+    "2026-07-30T05:53:51.010Z",
+    "2026-09-13T14:28:46.721Z"
+  ],
+  "selection": "Production only; recent cases interleaved by latest user-thumbs feedback (-1, +1, absent, cleared); one per group and target; no truncation; exclude media Verifier requests. Four Verifier cases replaced with focused cases from the 80-per-agent candidate pool, retaining group split assignments.",
+  "focused_verifier_ids": [
+    "verifier-857820b8f21d7b6f",
+    "verifier-9c401b2be8f206b5",
+    "verifier-5783c20d2486ba6d",
+    "verifier-994445adcf52f372"
+  ],
+  "labels": "All pending. Historical answers, user feedback and model scores are not correctness labels.",
+  "source_captures": "Independent web-reader excerpts or explicit retrieval failures from 2026-09-14; not original-run page snapshots. See sources[].note."
+}
