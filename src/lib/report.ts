@@ -28,8 +28,7 @@ export const MAX_REPORT_URL_LENGTH = 4096
  * Returns the trimmed input, not `URL#href`: what the reporter pasted is what
  * gets stored and matched against existing articles, so it is not rewritten.
  */
-export function parseReportUrl(value: unknown): string | null {
-  if (typeof value !== 'string') return null
+export function parseReportUrl(value: string): string | null {
   const trimmed = value.trim()
   if (!trimmed || trimmed.length > MAX_REPORT_URL_LENGTH) return null
   if (/[\s\p{Cc}\p{Cf}]/u.test(trimmed)) return null

@@ -83,13 +83,4 @@ describe('parseReportUrl', () => {
     expect(parseReportUrl(atCap)).toBe(atCap)
     expect(parseReportUrl(atCap + 'a')).toBeNull()
   })
-
-  test('rejects anything that is not a string', () => {
-    // It guards an RPC, so the input is whatever the caller sent.
-    expect(parseReportUrl(undefined)).toBeNull()
-    expect(parseReportUrl(null)).toBeNull()
-    expect(parseReportUrl(42)).toBeNull()
-    expect(parseReportUrl(['https://x.com'])).toBeNull()
-    expect(parseReportUrl({ url: 'https://x.com' })).toBeNull()
-  })
 })
