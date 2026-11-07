@@ -1,6 +1,6 @@
 ---
 status: 'accepted'
-date: 2026-11-06
+date: 2026-09-05
 decision-makers: mrorz
 consulted: Cofacts working group, Cofacts designer
 ---
@@ -101,18 +101,23 @@ The flow follows the designer's Penpot boards (page "AI"), one route per screen:
   submitting navigates to `/report/check` with `url` and `reason` in history state. Each field
   keeps what has been typed as a draft in `sessionStorage` (the shared
   `src/hooks/useSessionStorageDraft.ts`), so a reload or Back from check finds the form as it
-  was. The drafts are cleared when the report completes, so Back from the outcome finds an
-  **empty** form. TanStack Router's `useBlocker` asks before a reload or tab close while the
+  was. The drafts are cleared when the report completes. TanStack Router's `useBlocker` asks before a reload or tab close while the
   form's `FormData` holds any text (`enableBeforeUnload`); in-app navigation is never blocked.
 - **`/report/check`** — searches (02, the loading screen, while pending) and shows the candidates.
   `url` and `reason` live in history state only, never in the URL: they are the reporter's own,
-  and a search param would carry them into shared links and logs. History state exists only in
+  and a search param would carry them into shared links and logs (for the same reason the
+  search server function is a POST: a GET puts its input in the request URL). History state exists only in
   the browser, so the route is `ssr: false`, and its `beforeLoad` redirects to `/report` when the
   state is missing — refresh and Back keep it, a fresh tab or pasted link goes to the form.
   Picking a candidate nobody has answered records a +1 (`CreateOrUpdateReplyRequest`, with the
   reason); one with replies needs no write. **Zero results files the article at once** (02 →
-  03-第一個發現他, as in Penpot), as does 都不是; the automatic filing fires once per visit and
-  replaces the check entry, so Back from the outcome returns to the (now empty) form.
+  03-第一個發現他, as in Penpot), as does 都不是. `CreateArticle` returns the existing article
+  for identical text (with the reporter's reply request added), so a returned id that is one of
+  the candidates counts as a +1, not a new article; /report never derives the id itself. The
+  automatic filing fires once per visit (a failure offers 再試一次) and replaces the check
+  entry, so Back from its outcome goes to the form, now empty. After a pick or 都不是, Back
+  returns to the candidate list; picking again there is harmless, since the +1 is per user and
+  `CreateArticle` is idempotent.
 - **`/report/$articleId`** — the outcome, read fresh from Cofacts. Check passes what it did as
   `outcome` (`created`, `requested` for a +1, `matched` for no write) in history state, so this
   route is `ssr: false` with the same redirect. It shows 03-有文章且有查核回應 when the article
@@ -221,6 +226,13 @@ itself.
 - Bad, because the same post reported twice under two URL forms (a share link and an
   address-bar link) is two articles. Search finds both, so a reporter who reads the candidate
   list will pick the existing one; only "都不是" splits them.
+- Bad, because finding the same link depends on rumors-api's `more_like_this` over the page
+  content url-resolver scraped. When the linked page is gone — a removed YouTube video, say,
+  which returns YouTube's generic description — an exact duplicate can be missed, with unrelated
+  messages shown instead or none at all. With none, the automatic filing reuses that article (its
+  id is a hash of the text) while the outcome still says 第一個發現他, since there was no
+  candidate to compare the returned id with. Fixing that belongs in rumors-api / url-resolver (and a
+  `created` flag on `CreateArticle`), not this form.
 - Neutral, because attachments are not accepted yet. `CreateMediaArticle` needs a URL rumors-api
   can fetch, and cofacts.ai's upload path produces only a private artifact. A related case —
   a link rumors-api cannot read because of a login wall — is tracked in

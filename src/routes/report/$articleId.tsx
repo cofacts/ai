@@ -182,7 +182,11 @@ function OutcomeView({
   onDiscuss: () => void
   busy: boolean
 }) {
-  const hasReplies = article.articleReplies.length > 0
+  // A reply that could not be read is left out rather than given a verdict.
+  const replies = article.articleReplies.flatMap(({ reply, ...ar }) =>
+    reply ? [{ ...ar, reply }] : [],
+  )
+  const hasReplies = replies.length > 0
 
   if (!hasReplies && outcome === 'created') {
     return (
@@ -218,13 +222,13 @@ function OutcomeView({
     >
       {hasReplies && (
         <div className="flex flex-col gap-spacing-12">
-          {article.articleReplies.map((ar, i) => (
+          {replies.map((ar, i) => (
             <FactCheckReplyCard
               key={i}
-              type={ar.reply?.type ?? 'NOT_ARTICLE'}
-              text={ar.reply?.text ?? ''}
-              reference={ar.reply?.reference}
-              authorName={ar.reply?.user?.name}
+              type={ar.reply.type}
+              text={ar.reply.text ?? ''}
+              reference={ar.reply.reference}
+              authorName={ar.reply.user?.name}
               helpfulCount={ar.positiveFeedbackCount}
               unhelpfulCount={ar.negativeFeedbackCount}
             />
@@ -234,6 +238,10 @@ function OutcomeView({
     </OutcomeShell>
   )
 }
+
+// Stable, so React calls it only when the heading attaches — not on every
+// re-render. OutcomeShell renders only once the article has loaded.
+const focusOnMount = (el: HTMLElement | null) => el?.focus()
 
 function OutcomeShell({
   title,
@@ -255,7 +263,15 @@ function OutcomeShell({
   return (
     <div className="flex flex-col gap-spacing-16">
       <div className="flex flex-col gap-spacing-4 text-center">
-        <h2 className="text-type-heading-m text-text-primary">{title}</h2>
+        {/* Focused on arrival: the button that led here is gone, and a
+            screen reader would otherwise not hear that the result is in. */}
+        <h2
+          ref={focusOnMount}
+          tabIndex={-1}
+          className="text-type-heading-m text-text-primary"
+        >
+          {title}
+        </h2>
         <p className="text-type-body-s text-text-secondary">{subtitle}</p>
       </div>
       {children}

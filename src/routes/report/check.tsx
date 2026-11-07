@@ -97,7 +97,9 @@ export type SearchCandidate = NonNullable<
   articleUrl: string
 }
 
-export const searchSuspiciousMessages = createServerFn({ method: 'GET' })
+// POST, not GET: a GET server function puts its input in the request URL, and
+// with it the reporter's link in every request log on the way.
+export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
   .inputValidator((like: string) => {
     if (typeof like !== 'string') throw new Error('url must be text')
     return like.trim()
@@ -314,7 +316,11 @@ function ReportCheckPage() {
       createArticleReport({ data: { url, reason } }),
     onSuccess: ({ articleId }, { replace }) => {
       invalidateAfterWrite(articleId)
-      return showOutcome(articleId, 'created', replace)
+      // CreateArticle returns the existing article for identical text, with
+      // the reporter's reply request added — so a candidate coming back means
+      // a +1, not a new article.
+      const existing = search.data?.some((c) => c.node.id === articleId)
+      return showOutcome(articleId, existing ? 'requested' : 'created', replace)
     },
   })
 
@@ -335,14 +341,26 @@ function ReportCheckPage() {
 
   return (
     <ReportShell errors={[search.error, pickCandidate.error, fileNew.error]}>
-      {search.isPending || nothingFound ? (
+      {search.isError || (nothingFound && fileNew.isError) ? (
+        // The search or the automatic filing failed; the error shows below.
+        <Button
+          className="self-center"
+          onClick={() =>
+            search.isError
+              ? void search.refetch()
+              : fileNew.mutate({ replace: true })
+          }
+        >
+          再試一次
+        </Button>
+      ) : search.isPending || nothingFound ? (
         <p
           role="status"
           className="text-center text-type-body-m text-text-secondary"
         >
           {fileNew.isPending ? '處理中…' : '正在查看有沒有人回報過…'}
         </p>
-      ) : search.data ? (
+      ) : (
         <CandidateView
           candidates={search.data}
           onPick={(candidate) => {
@@ -355,7 +373,7 @@ function ReportCheckPage() {
           }}
           busy={busy}
         />
-      ) : null}
+      )}
     </ReportShell>
   )
 }

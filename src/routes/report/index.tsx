@@ -134,14 +134,12 @@ function ReportForm() {
           type="url"
           name="url"
           required
-          // An http(s) link and nothing else.
-          // - The scheme in any case (an auto-capitalised "Https://"),
-          //   spelled out per letter: the `i` regex modifier isn't Baseline.
-          // - No whitespace inside, so words after the link, separated by a
-          //   space, are refused rather than filed with it.
-          // - Whitespace around it is fine (copying often brings a trailing
-          //   space or newline): Chrome checks the pattern against the
-          //   untrimmed value, and submit trims.
+          // An http(s) link and nothing else: the scheme in any case (an
+          // auto-capitalised "Https://"), spelled out per letter since the `i`
+          // regex modifier isn't Baseline, then no whitespace, so words after
+          // the link are refused. `\s*` at both ends: a typed or pasted value
+          // is validated untrimmed (only a value set from script is trimmed),
+          // and submit trims it anyway.
           pattern="\s*[Hh][Tt][Tt][Pp][Ss]?://\S+\s*"
           autoCapitalize="off"
           autoCorrect="off"

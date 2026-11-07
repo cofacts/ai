@@ -1,3 +1,5 @@
+import { useId } from 'react'
+
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -42,9 +44,15 @@ export function SuspiciousMessageCard({
   onSelect,
   disabled,
 }: SuspiciousMessageCardProps) {
+  // Names the message each card's actions are about: every card's buttons
+  // read the same, so a screen reader would otherwise hear five 就是這則.
+  const textId = useId()
   const body = (
     <>
-      <p className="flex-1 text-left text-type-caption line-clamp-4 whitespace-pre-wrap wrap-anywhere text-text-secondary">
+      <p
+        id={textId}
+        className="flex-1 text-left text-type-caption line-clamp-4 whitespace-pre-wrap wrap-anywhere text-text-secondary"
+      >
         {text || `[${articleType}]`}
       </p>
       <div className="flex items-center gap-spacing-8">
@@ -95,10 +103,16 @@ export function SuspiciousMessageCard({
           target="_blank"
           rel="noopener noreferrer"
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          aria-describedby={textId}
         >
           查看這則訊息
         </a>
-        <Button size="sm" onClick={onSelect} disabled={disabled}>
+        <Button
+          size="sm"
+          onClick={onSelect}
+          disabled={disabled}
+          aria-describedby={textId}
+        >
           就是這則
         </Button>
       </div>

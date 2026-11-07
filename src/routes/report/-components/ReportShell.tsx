@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 
 import { LoginPrompt } from '@/components/LoginPrompt'
@@ -19,8 +20,9 @@ export function ReportShell({
   children,
 }: {
   /**
-   * The screen's query and mutation errors; the first one is shown under it.
-   * AUTH_EXPIRED is skipped: the global QueryCache / MutationCache handler
+   * The screen's query and mutation errors. Any of them shows one fixed
+   * message under the screen — the raw ones are written for engineers and go
+   * to the console. AUTH_EXPIRED is skipped: the global QueryCache / MutationCache handler
    * opens the login modal for it.
    */
   errors?: Array<unknown>
@@ -28,6 +30,9 @@ export function ReportShell({
 }) {
   const { user } = useAuth()
   const failure = errors.find((e) => e && !isAuthExpiredError(e))
+  useEffect(() => {
+    if (failure) console.error(failure)
+  }, [failure])
 
   return (
     <main className="mx-auto flex w-full max-w-[640px] flex-1 flex-col gap-spacing-24 px-spacing-20 py-spacing-32">
@@ -47,7 +52,7 @@ export function ReportShell({
           role="alert"
           className="text-center text-type-body-s text-status-incorrect"
         >
-          {failure instanceof Error ? failure.message : '送出失敗，請再試一次'}
+          出了點問題，請再試一次。
         </p>
       )}
     </main>
