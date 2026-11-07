@@ -16,7 +16,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 
 import type {
   ReportOutcomeArticleQueryVariables,
@@ -38,7 +38,6 @@ import { FactCheckReplyCard } from '@/components/FactCheckReplyCard'
 import { SuspiciousMessageCard } from '@/components/SuspiciousMessageCard'
 import { useAuth } from '@/lib/auth'
 import { isAuthExpiredError } from '@/lib/authExpired'
-import { parseReportUrl } from '@/lib/report'
 import { sendChatMessage } from '@/lib/chatCache'
 import { createSession } from '@/lib/chatSessions.functions'
 import {
@@ -50,10 +49,7 @@ import {
 
 // Only this page calls these, so they live beside it. Each is an RPC wrapper
 // plus its input check; the Cofacts calls themselves are in report.server.ts,
-// where they can be tested. "Only one link" is a UI rule: rumors-api takes any
-// forwarded text, so these pass it through.
-
-const NOT_A_LINK = '這裡只能放一個網址，例如 https:// 開頭的連結。'
+// where they can be tested. They pass the trimmed text through to rumors-api.
 
 const searchSuspiciousMessages = createServerFn({ method: 'GET' })
   .inputValidator((text: SearchSuspiciousMessagesQueryVariables['like']) => {
@@ -304,22 +300,7 @@ type UrlError = 'missing' | 'format' | null
 
 function urlErrorOf(input: HTMLInputElement): UrlError {
   if (input.validity.valid) return null
-  // Whitespace alone passes `required` but is still nothing pasted.
-  return input.value.trim() ? 'format' : 'missing'
-}
-
-/**
- * Holds the field to `parseReportUrl`, the form's one-link rule, so the
- * browser also blocks what `type="url"` and `pattern` let through: invisible
- * characters, an over-long value, a host the URL parser rejects. An empty
- * value is left to `required`. The text is never shown: `invalid` is cancelled
- * and our inline message used instead.
- */
-function applyUrlRule(input: HTMLInputElement) {
-  const { value } = input
-  input.setCustomValidity(
-    !value.trim() || parseReportUrl(value) ? '' : NOT_A_LINK,
-  )
+  return input.validity.valueMissing ? 'missing' : 'format'
 }
 
 function ReportForm({
@@ -341,13 +322,6 @@ function ReportForm({
   onSubmit: () => void
   busy: boolean
 }) {
-  const urlInputRef = useRef<HTMLInputElement>(null)
-  // Also for a value that did not come from typing: the initial one, the
-  // cleared one after "再回報一則", or one filled in for the reporter.
-  useEffect(() => {
-    if (urlInputRef.current) applyUrlRule(urlInputRef.current)
-  }, [url])
-
   return (
     <form
       className="flex flex-col gap-spacing-16"
@@ -384,12 +358,7 @@ function ReportForm({
           type="url"
           name="url"
           required
-          ref={urlInputRef}
-          // The declarative form of the rule: an http(s) link and nothing
-          // else. The full rule is applyUrlRule (parseReportUrl as custom
-          // validity); this pattern is also stricter in places (a leading
-          // full-width space or BOM, `https:\\` backslashes), which is
-          // harmless.
+          // An http(s) link and nothing else.
           // - The scheme in any case (an auto-capitalised "Https://"),
           //   spelled out per letter: the `i` regex modifier isn't Baseline.
           // - No whitespace inside, so words after the link, separated by a
@@ -404,8 +373,6 @@ function ReportForm({
           enterKeyHint="send"
           value={url}
           onChange={(e) => {
-            // Before reading validity below; the effect covers other values.
-            applyUrlRule(e.currentTarget)
             onUrlChange(e.target.value)
             // Only ever clears (or keeps accurate) a message already shown.
             if (urlError) onUrlErrorChange(urlErrorOf(e.currentTarget))
@@ -422,7 +389,9 @@ function ReportForm({
         />
         {urlError && (
           <FieldError id="report-url-error">
-            {urlError === 'missing' ? '請貼上訊息的網址。' : NOT_A_LINK}
+            {urlError === 'missing'
+              ? '請貼上訊息的網址。'
+              : '這裡只能放一個網址，例如 https:// 開頭的連結。'}
             如果是在 LINE 上收到、沒有網址可以附，請改用{' '}
             <a
               href="https://line.me/R/ti/p/%40cofacts"

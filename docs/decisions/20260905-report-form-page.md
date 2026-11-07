@@ -123,10 +123,9 @@ alike, one value that cannot drift, and rumors-api resolves the link at creation
 `type="url"` input, limited by its `pattern` to an http(s) scheme (in any case) followed by no
 whitespace. Words separated from the link by a space are refused; words glued to the link with
 no space cannot be told apart from a legitimate non-ASCII path (zh.wikipedia's, say) and pass.
-The input's custom validity (`parseReportUrl` in `src/lib/report.ts`) also refuses control and
-invisible characters and values over 4,096 characters. This rule is UI-only and a temporary
-choice for /report: the server functions pass the text through, because rumors-api is built to
-accept arbitrary forwarded text and extracts URLs itself. The inline message also points a pure
+Validation is native only (`type="url"`, `required`, the http(s) `pattern`); the server
+functions pass the trimmed text through to rumors-api, which accepts arbitrary text and
+extracts URLs itself. The inline message also points a pure
 LINE forward to the LINE bot. It appears when the reporter tries to submit — not on load, while
 typing or on blur, where it would move the submit button under a click or tap — and is updated
 or cleared while they edit. Pulling a link out of shared text is the Web Share Target's job
@@ -203,11 +202,6 @@ itself.
   being `URL`.
 - `src/server/__tests__/cofactsSite.test.ts` covers deriving the site host from the API host —
   every deployment points at `dev-api.cofacts.tw`, so a `cofacts.tw` link would 404.
-- `src/lib/__tests__/report.test.ts` covers `parseReportUrl`, the form's URL-only rule: http(s)
-  links, in any case, are accepted as pasted (only trimmed, never normalised), and prose — even
-  with a link in it — other schemes (`javascript:`, `data:`, `mailto:`, `ftp:`), a scheme with no
-  host, a bare domain, control and invisible characters, over-long values and non-strings are
-  refused.
 - Not covered by tests: the outcome screens themselves. This repo has no React component test
   harness, and standing one up was out of scope here.
 
