@@ -27,7 +27,6 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { ReportShell } from './-components/ReportShell'
-import { failureMessage } from './-components/failureMessage'
 import type { HistoryState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
@@ -137,7 +136,7 @@ function ReportOutcomePage() {
 
   const found = outcome.data
   return (
-    <ReportShell error={failureMessage([outcome.error, discussWithAi.error])}>
+    <ReportShell errors={[outcome.error, discussWithAi.error]}>
       {outcome.isPending ? (
         <p
           role="status"

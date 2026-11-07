@@ -34,7 +34,6 @@ import {
 import { useEffect, useRef } from 'react'
 
 import { ReportShell } from './-components/ReportShell'
-import { failureMessage } from './-components/failureMessage'
 import type { HistoryState } from '@tanstack/react-router'
 import type {
   CreateArticleReportMutationVariables,
@@ -335,9 +334,7 @@ function ReportCheckPage() {
   const busy = pickCandidate.isPending || fileNew.isPending
 
   return (
-    <ReportShell
-      error={failureMessage([search.error, pickCandidate.error, fileNew.error])}
-    >
+    <ReportShell errors={[search.error, pickCandidate.error, fileNew.error]}>
       {search.isPending || nothingFound ? (
         <p
           role="status"

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 import { LoginPrompt } from '@/components/LoginPrompt'
 import { useAuth } from '@/lib/auth'
+import { isAuthExpiredError } from '@/lib/authExpired'
 
 /**
  * The frame every /report screen shares: the page heading, and the sign-in
@@ -14,14 +15,19 @@ import { useAuth } from '@/lib/auth'
  * site nav comes from `__root`.
  */
 export function ReportShell({
-  error,
+  errors = [],
   children,
 }: {
-  /** A failure to show under the screen, or null. */
-  error?: ReactNode
+  /**
+   * The screen's query and mutation errors; the first one is shown under it.
+   * AUTH_EXPIRED is skipped: the global QueryCache / MutationCache handler
+   * opens the login modal for it.
+   */
+  errors?: Array<unknown>
   children: ReactNode
 }) {
   const { user } = useAuth()
+  const failure = errors.find((e) => e && !isAuthExpiredError(e))
 
   return (
     <main className="mx-auto flex w-full max-w-[640px] flex-1 flex-col gap-spacing-24 px-spacing-20 py-spacing-32">
@@ -36,12 +42,12 @@ export function ReportShell({
 
       {user ? children : <LoginPrompt message="登入後即可開始回報" />}
 
-      {user && error && (
+      {user && !!failure && (
         <p
           role="alert"
           className="text-center text-type-body-s text-status-incorrect"
         >
-          {error}
+          {failure instanceof Error ? failure.message : '送出失敗，請再試一次'}
         </p>
       )}
     </main>
