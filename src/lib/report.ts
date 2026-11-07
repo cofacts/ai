@@ -1,8 +1,4 @@
-/**
- * The longest value `parseReportUrl` accepts. A sanity cap well above any real
- * share or address-bar link, so a forged request cannot store a megabyte of
- * "link" as an article.
- */
+/** The longest value `parseReportUrl` accepts; no real link comes close. */
 export const MAX_REPORT_URL_LENGTH = 4096
 
 /**
@@ -14,13 +10,10 @@ export const MAX_REPORT_URL_LENGTH = 4096
  * someone other than the reporter — and `ArticleReferenceInput` has no honest
  * value for "typed from memory" anyway.
  *
- * This is the server's check; the form's `type="url"` input is only UX, and
- * whatever passes here is stored publicly as the article text and its
- * `reference.permalink`. So it refuses anything that is not a link outright —
- * prose with a link in it, other schemes (`javascript:`, `data:`, `mailto:`),
- * a scheme with no host — rather than trying to rescue a link from it. It
- * takes `unknown` because it guards an RPC: a forged non-string gets the same
- * refusal as any other bad value.
+ * The form's rule, as the URL input's custom validity (UI only). It refuses
+ * anything that is not a link outright — prose with a link in it, other
+ * schemes (`javascript:`, `data:`, `mailto:`), a scheme with no host — rather
+ * than trying to rescue a link from it.
  *
  * Also refused, anywhere inside the value:
  * - whitespace: `new URL()` would percent-encode it into the path, so

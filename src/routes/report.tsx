@@ -50,26 +50,15 @@ import {
 
 // Only this page calls these, so they live beside it. Each is an RPC wrapper
 // plus its input check; the Cofacts calls themselves are in report.server.ts,
-// where they can be tested.
-//
-// The form's `type="url"` input stops anything but a link before it is sent,
-// but that is UX, not a trust boundary: these validators check the link again,
-// since whatever passes is stored publicly as the article's text and its
-// `reference.permalink`.
+// where they can be tested. "Only one link" is a UI rule: rumors-api takes any
+// forwarded text, so these pass it through.
 
-/** Shown inline if the browser check is bypassed or disagrees with ours. */
 const NOT_A_LINK = '這裡只能放一個網址，例如 https:// 開頭的連結。'
-
-/** The server refused the link itself (see `NOT_A_LINK`). */
-function isNotALinkError(err: unknown): boolean {
-  return err instanceof Error && err.message === NOT_A_LINK
-}
 
 const searchSuspiciousMessages = createServerFn({ method: 'GET' })
   .inputValidator((text: SearchSuspiciousMessagesQueryVariables['like']) => {
-    const like = parseReportUrl(text)
-    if (!like) throw new Error(NOT_A_LINK)
-    return like
+    if (typeof text !== 'string') throw new Error('url must be text')
+    return text.trim()
   })
   .handler(({ data: like }) => findSimilarReports(like))
 
@@ -89,19 +78,12 @@ const requestFactCheck = createServerFn({ method: 'POST' })
 const createArticleReport = createServerFn({ method: 'POST' })
   .inputValidator(
     (input: CreateArticleReportInput): CreateArticleReportInput => {
-      // Typed for callers, but it is whatever the RPC was sent: maybe not even
-      // an object.
-      const raw: unknown = input
-      const { url, reason } =
-        typeof raw === 'object' && raw !== null
-          ? (raw as Record<string, unknown>)
-          : {}
-      const link = parseReportUrl(url)
-      if (!link) throw new Error(NOT_A_LINK)
+      const { url, reason } = input
+      if (typeof url !== 'string') throw new Error('url must be text')
       if (reason != null && typeof reason !== 'string') {
         throw new Error('reason must be text')
       }
-      return { url: link, reason }
+      return { url: url.trim(), reason }
     },
   )
   .handler(({ data }) => fileArticleReport(data))
@@ -143,7 +125,6 @@ function ReportPage() {
   const [url, setUrl] = useState('')
   const [reason, setReason] = useState('')
   const [urlError, setUrlError] = useState<UrlError>(null)
-  const urlInput = useRef<HTMLInputElement>(null)
   const [candidates, setCandidates] = useState<Array<SearchCandidate> | null>(
     null,
   )
@@ -171,15 +152,6 @@ function ReportPage() {
     onSuccess: (found, submitted) => {
       if (found.length === 0) return fileNew.mutateAsync(submitted)
       setCandidates(found)
-    },
-    // The browser applies the server's rule before submit, but its URL parser
-    // is not the server's: Chromium accepts a malformed punycode host
-    // (`https://xn--a.com`) that Node refuses. Such a refusal is about the
-    // field, so it is shown there, like the browser's own check.
-    onError: (err) => {
-      if (!isNotALinkError(err)) return
-      setUrlError('format')
-      urlInput.current?.focus()
     },
   })
 
@@ -225,11 +197,10 @@ function ReportPage() {
   // handler; only anything else deserves an inline message.
   const failure = mutations
     .map((m) => m.error)
-    .find((err) => err && !isAuthExpiredError(err) && !isNotALinkError(err))
+    .find((err) => err && !isAuthExpiredError(err))
 
   // Only reached once the browser's constraint validation has passed: the
-  // form refuses to submit anything but one http(s) link, and the server
-  // checks again.
+  // form refuses to submit anything but one http(s) link.
   function submit() {
     clearMutations()
     startReport.mutate(url.trim())
@@ -290,7 +261,6 @@ function ReportPage() {
       ) : (
         <ReportForm
           url={url}
-          urlInputRef={urlInput}
           onUrlChange={setUrl}
           urlError={urlError}
           onUrlErrorChange={setUrlError}
@@ -339,13 +309,13 @@ function urlErrorOf(input: HTMLInputElement): UrlError {
 }
 
 /**
- * Holds the field to the server's own rule, so the browser blocks exactly what
- * the server would refuse — including what `type="url"` and `pattern` let
- * through: invisible characters, an over-long value, a host the URL parser
- * rejects. An empty value is left to `required`. The text is never shown:
- * `invalid` is cancelled and our inline message used instead.
+ * Holds the field to `parseReportUrl`, the form's one-link rule, so the
+ * browser also blocks what `type="url"` and `pattern` let through: invisible
+ * characters, an over-long value, a host the URL parser rejects. An empty
+ * value is left to `required`. The text is never shown: `invalid` is cancelled
+ * and our inline message used instead.
  */
-function applyServerRule(input: HTMLInputElement) {
+function applyUrlRule(input: HTMLInputElement) {
   const { value } = input
   input.setCustomValidity(
     !value.trim() || parseReportUrl(value) ? '' : NOT_A_LINK,
@@ -354,7 +324,6 @@ function applyServerRule(input: HTMLInputElement) {
 
 function ReportForm({
   url,
-  urlInputRef,
   onUrlChange,
   urlError,
   onUrlErrorChange,
@@ -364,7 +333,6 @@ function ReportForm({
   busy,
 }: {
   url: string
-  urlInputRef: React.RefObject<HTMLInputElement | null>
   onUrlChange: (value: string) => void
   urlError: UrlError
   onUrlErrorChange: (error: UrlError) => void
@@ -373,11 +341,12 @@ function ReportForm({
   onSubmit: () => void
   busy: boolean
 }) {
+  const urlInputRef = useRef<HTMLInputElement>(null)
   // Also for a value that did not come from typing: the initial one, the
   // cleared one after "再回報一則", or one filled in for the reporter.
   useEffect(() => {
-    if (urlInputRef.current) applyServerRule(urlInputRef.current)
-  }, [url, urlInputRef])
+    if (urlInputRef.current) applyUrlRule(urlInputRef.current)
+  }, [url])
 
   return (
     <form
@@ -417,12 +386,10 @@ function ReportForm({
           required
           ref={urlInputRef}
           // The declarative form of the rule: an http(s) link and nothing
-          // else. What actually keeps the browser in line with the server is
-          // applyServerRule (parseReportUrl as custom validity). What is left
-          // is where the browser is stricter (a leading full-width space or
-          // BOM, `https:\\` backslashes), which is harmless, and where
-          // Chromium's URL parser is laxer than Node's (a malformed punycode
-          // host), which startReport's onError shows inline.
+          // else. The full rule is applyUrlRule (parseReportUrl as custom
+          // validity); this pattern is also stricter in places (a leading
+          // full-width space or BOM, `https:\\` backslashes), which is
+          // harmless.
           // - The scheme in any case (an auto-capitalised "Https://"),
           //   spelled out per letter: the `i` regex modifier isn't Baseline.
           // - No whitespace inside, so words after the link, separated by a
@@ -438,7 +405,7 @@ function ReportForm({
           value={url}
           onChange={(e) => {
             // Before reading validity below; the effect covers other values.
-            applyServerRule(e.currentTarget)
+            applyUrlRule(e.currentTarget)
             onUrlChange(e.target.value)
             // Only ever clears (or keeps accurate) a message already shown.
             if (urlError) onUrlErrorChange(urlErrorOf(e.currentTarget))
@@ -455,9 +422,7 @@ function ReportForm({
         />
         {urlError && (
           <FieldError id="report-url-error">
-            {urlError === 'missing'
-              ? '請貼上訊息的網址。'
-              : '這裡只能放一個網址，例如 https:// 開頭的連結。'}
+            {urlError === 'missing' ? '請貼上訊息的網址。' : NOT_A_LINK}
             如果是在 LINE 上收到、沒有網址可以附，請改用{' '}
             <a
               href="https://line.me/R/ti/p/%40cofacts"
