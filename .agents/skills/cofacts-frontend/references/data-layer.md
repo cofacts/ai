@@ -10,7 +10,6 @@ through TanStack Start server functions and the TanStack Query cache.
 | -------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
 | Server-only utilities: `cofactsExec`, the secret, JWT handling | `*.server.ts`                                                       | Only inside server-function handlers |
 | GraphQL document                                               | Inline in the handler (`graphql()`), moves with its server function | Only inside handlers                 |
-| Handler logic that needs unit tests, with its GraphQL          | `*.server.ts` next to the code that uses it (rule 7)                | Only inside server-function handlers |
 | Server function (`createServerFn`)                             | Inline in the route file, at module top level                       | Anyone                               |
 | Types, constants                                               | plain `.ts`                                                         | Anyone                               |
 
@@ -32,16 +31,15 @@ through TanStack Start server functions and the TanStack Query cache.
 6. Type every server-function input with `.inputValidator`, and check there whatever a caller
    could get wrong (an allowed value, a range), throwing on bad input. Return only fields the
    UI needs: the result is serialized into the HTML.
-7. **Logic worth a unit test moves to a `*.server.ts`, with its GraphQL documents.** A server
-   function can't be called from Vitest (it needs the Start runtime), so a handler whose behavior
-   matters on its own (variables derived from the input, a search threshold, an auth check before
-   a write, cleaning what gets stored) calls an exported plain function in a `*.server.ts`, and the
-   test mocks `cofactsExec` and checks the variables it receives. The `graphql()` documents move
-   with that function, not stay in the route. The `createServerFn` itself, its `.inputValidator`
-   and its `queryOptions` stay in the route (rule 1) or a `*.functions.ts` (rule 2); the handler
-   only calls the function. Rule 4 still applies: import it only inside handlers. Example:
-   `src/server/report.server.ts`, used by `src/routes/report.tsx`. A handler that only passes
-   its input to one query needs no such file.
+7. **Server functions stay inline, and are tested there.** Export the ones worth a test from the
+   route, mock `createServerFn` with `src/test/createServerFnMock.ts` (it runs the validator, then
+   the handler) and `cofactsExec`, and call them as the client does:
+   `vi.mock('@tanstack/react-start', () => import('@/test/createServerFnMock'))`. Test handlers with
+   their own logic (variables derived from the input, a search threshold, an auth check before a
+   write, cleaning what gets stored) and validators that reject input. A handler that only
+   forwards its input to `cofactsExec` needs no test. Vitest runs without the Start plugins
+   (`vite.config.ts`), whose compiler would replace the handler with an RPC stub. Example:
+   `src/routes/report/__tests__/check.test.ts`.
 
 ## Reading data: TanStack Query
 
@@ -59,6 +57,9 @@ through TanStack Start server functions and the TanStack Query cache.
    duplicates the cache. Page content always reads the cache, never `useLoaderData()`. Throw
    `notFound()` / `redirect()` from the loader to get the right status code.
 4. **Writes:** `useMutation` calling a server function, then `invalidateQueries` on the key.
+   Never in a loader or `beforeLoad`: those also run on hover preload and on refresh. A write
+   happens only when the user does something (or, like /report/check's auto-file, once per
+   visit from a component effect guarded by a ref).
 5. **`queryKey = [GraphQL operation name, variables]`**: `['GetArticle', id]`; objects for several
    params: `['ListArticles', filter]`. Operation names are unique (codegen enforces it), so
    routes can't overwrite each other's cache. A `queryOptions` factory (`articleQuery(id)`)
@@ -68,6 +69,12 @@ through TanStack Start server functions and the TanStack Query cache.
 7. Data the page can render without (a sidebar widget, below-the-fold extras) uses `useQuery`
    or a nested Suspense boundary instead, so its failure doesn't fail the page. To start it
    early, call `ensureQueryData` in the loader without `await`.
+8. **A route that only works with history state** (data handed over by `navigate({ state })`,
+   kept out of the URL) sets `ssr: false` and, in `beforeLoad`, throws
+   `redirect({ to: <the page that sets the state>, replace: true })` when the state is missing.
+   History state exists only in the browser; client-only, `beforeLoad` sees it on refresh and
+   Back as well, and only a fresh tab or pasted link is redirected. Declare the state's shape by
+   augmenting `HistoryState` in `@tanstack/react-router`. Example: `src/routes/report/check.tsx`.
 
 Route setup (once): `createRouter({ context: { queryClient } })` and
 `createRootRouteWithContext<{ queryClient: QueryClient }>()`.

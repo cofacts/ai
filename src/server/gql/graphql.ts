@@ -53,15 +53,24 @@ export type ListArticlesQuery = {
   } | null
 }
 
-export type GetCurrentUserQueryVariables = Exact<{ [key: string]: never }>
+export type ReportOutcomeArticleQueryVariables = Exact<{
+  id: string
+}>
 
-export type GetCurrentUserQuery = {
-  GetUser: {
+export type ReportOutcomeArticleQuery = {
+  GetArticle: {
     id: string
-    name: string | null
-    avatarUrl: string | null
-    avatarType: AvatarTypeEnum | null
-    avatarData: string | null
+    replyRequestCount: number | null
+    articleReplies: Array<{
+      positiveFeedbackCount: number
+      negativeFeedbackCount: number
+      reply: {
+        type: ReplyTypeEnum
+        text: string | null
+        reference: string | null
+        user: { name: string | null } | null
+      } | null
+    }>
   } | null
 }
 
@@ -85,33 +94,13 @@ export type SearchSuspiciousMessagesQuery = {
   } | null
 }
 
-export type ReportOutcomeArticleQueryVariables = Exact<{
-  id: string
-}>
-
-export type ReportOutcomeArticleQuery = {
-  GetArticle: {
-    id: string
-    articleReplies: Array<{
-      positiveFeedbackCount: number
-      negativeFeedbackCount: number
-      reply: {
-        type: ReplyTypeEnum
-        text: string | null
-        reference: string | null
-        user: { name: string | null } | null
-      } | null
-    }>
-  } | null
-}
-
 export type RequestFactCheckMutationVariables = Exact<{
   articleId: string
   reason?: string | null | undefined
 }>
 
 export type RequestFactCheckMutation = {
-  CreateOrUpdateReplyRequest: { replyRequestCount: number | null } | null
+  CreateOrUpdateReplyRequest: { id: string } | null
 }
 
 export type CreateArticleReportMutationVariables = Exact<{
@@ -122,6 +111,18 @@ export type CreateArticleReportMutationVariables = Exact<{
 
 export type CreateArticleReportMutation = {
   CreateArticle: { id: string | null } | null
+}
+
+export type GetCurrentUserQueryVariables = Exact<{ [key: string]: never }>
+
+export type GetCurrentUserQuery = {
+  GetUser: {
+    id: string
+    name: string | null
+    avatarUrl: string | null
+    avatarType: AvatarTypeEnum | null
+    avatarData: string | null
+  } | null
 }
 
 export const ListArticlesDocument = {
@@ -236,27 +237,111 @@ export const ListArticlesDocument = {
     },
   ],
 } as unknown as DocumentNode<ListArticlesQuery, ListArticlesQueryVariables>
-export const GetCurrentUserDocument = {
+export const ReportOutcomeArticleDocument = {
   kind: 'Document',
   definitions: [
     {
       kind: 'OperationDefinition',
       operation: 'query',
-      name: { kind: 'Name', value: 'GetCurrentUser' },
+      name: { kind: 'Name', value: 'ReportOutcomeArticle' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+      ],
       selectionSet: {
         kind: 'SelectionSet',
         selections: [
           {
             kind: 'Field',
-            name: { kind: 'Name', value: 'GetUser' },
+            name: { kind: 'Name', value: 'GetArticle' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'id' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'id' },
+                },
+              },
+            ],
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'id' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'avatarUrl' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'avatarType' } },
-                { kind: 'Field', name: { kind: 'Name', value: 'avatarData' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'replyRequestCount' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'articleReplies' },
+                  arguments: [
+                    {
+                      kind: 'Argument',
+                      name: { kind: 'Name', value: 'statuses' },
+                      value: {
+                        kind: 'ListValue',
+                        values: [{ kind: 'EnumValue', value: 'NORMAL' }],
+                      },
+                    },
+                  ],
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'positiveFeedbackCount' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'negativeFeedbackCount' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'reply' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'type' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'text' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'reference' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'user' },
+                              selectionSet: {
+                                kind: 'SelectionSet',
+                                selections: [
+                                  {
+                                    kind: 'Field',
+                                    name: { kind: 'Name', value: 'name' },
+                                  },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
               ],
             },
           },
@@ -264,7 +349,10 @@ export const GetCurrentUserDocument = {
       },
     },
   ],
-} as unknown as DocumentNode<GetCurrentUserQuery, GetCurrentUserQueryVariables>
+} as unknown as DocumentNode<
+  ReportOutcomeArticleQuery,
+  ReportOutcomeArticleQueryVariables
+>
 export const SearchSuspiciousMessagesDocument = {
   kind: 'Document',
   definitions: [
@@ -431,118 +519,6 @@ export const SearchSuspiciousMessagesDocument = {
   SearchSuspiciousMessagesQuery,
   SearchSuspiciousMessagesQueryVariables
 >
-export const ReportOutcomeArticleDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'ReportOutcomeArticle' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'GetArticle' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'id' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'id' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
-                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'articleReplies' },
-                  arguments: [
-                    {
-                      kind: 'Argument',
-                      name: { kind: 'Name', value: 'statuses' },
-                      value: {
-                        kind: 'ListValue',
-                        values: [{ kind: 'EnumValue', value: 'NORMAL' }],
-                      },
-                    },
-                  ],
-                  selectionSet: {
-                    kind: 'SelectionSet',
-                    selections: [
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'positiveFeedbackCount' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'negativeFeedbackCount' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'reply' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'type' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'text' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'reference' },
-                            },
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'user' },
-                              selectionSet: {
-                                kind: 'SelectionSet',
-                                selections: [
-                                  {
-                                    kind: 'Field',
-                                    name: { kind: 'Name', value: 'name' },
-                                  },
-                                ],
-                              },
-                            },
-                          ],
-                        },
-                      },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  ReportOutcomeArticleQuery,
-  ReportOutcomeArticleQueryVariables
->
 export const RequestFactCheckDocument = {
   kind: 'Document',
   definitions: [
@@ -601,10 +577,7 @@ export const RequestFactCheckDocument = {
             selectionSet: {
               kind: 'SelectionSet',
               selections: [
-                {
-                  kind: 'Field',
-                  name: { kind: 'Name', value: 'replyRequestCount' },
-                },
+                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
               ],
             },
           },
@@ -705,3 +678,32 @@ export const CreateArticleReportDocument = {
   CreateArticleReportMutation,
   CreateArticleReportMutationVariables
 >
+export const GetCurrentUserDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetCurrentUser' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'GetUser' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'avatarUrl' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'avatarType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'avatarData' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetCurrentUserQuery, GetCurrentUserQueryVariables>

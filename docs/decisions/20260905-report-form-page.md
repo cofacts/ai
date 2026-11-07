@@ -93,6 +93,31 @@ option A to verify, none of which now exist.
 A receptionist becomes worth building again only if cofacts.ai ever opens a free-text entry
 point that is not this form.
 
+### Three routes, one per screen
+
+The flow follows the designer's Penpot boards (page "AI"), one route per screen:
+
+- **`/report`** — the form (01-回報可疑訊息). It calls no server: submitting writes `url` and
+  `reason` into its own history entry (`replace`), so Back restores the form, then navigates to
+  `/report/check` with the same history state.
+- **`/report/check`** — searches (02, the loading screen, while pending) and shows the candidates.
+  `url` and `reason` live in history state only, never in the URL: they are the reporter's own,
+  and a search param would carry them into shared links and logs. History state exists only in
+  the browser, so the route is `ssr: false`, and its `beforeLoad` redirects to `/report` when the
+  state is missing — refresh and Back keep it, a fresh tab or pasted link goes to the form.
+  Picking a candidate nobody has answered records a +1 (`CreateOrUpdateReplyRequest`, with the
+  reason); one with replies needs no write. **Zero results files the article at once** (02 →
+  03-第一個發現他, as in Penpot), as does 都不是; the automatic filing fires once per visit and
+  replaces the check entry, so Back from the outcome returns to the form.
+- **`/report/$articleId`** — the outcome, read fresh from Cofacts: 03-有文章且有查核回應 when it has
+  replies, 03-第一個發現他 when `?created=true`, otherwise 03-有文章但無回應 with the article's
+  `replyRequestCount`. From here: 與 Cofacts AI 討論, the article on cofacts.tw, and 再回報一則 (an
+  empty `/report`).
+
+Every logged-out screen shows the sign-in prompt instead (01-回報可疑訊息-未登入). Each route
+keeps its server functions inline; the handlers with logic of their own are unit-tested in
+`src/routes/report/__tests__/` by mocking `createServerFn`.
+
 ### The form takes a URL, and only a URL
 
 1. **Source labelling.** `ArticleReferenceInput` has only `LINE | URL`, so a Threads or
@@ -197,9 +222,9 @@ itself.
 
 ## Confirmation
 
-- `src/server/__tests__/report.server.test.ts` covers all four Cofacts calls, including the
-  threshold switch, the signed-out refusal that never reaches the API, and `reference` always
-  being `URL`.
+- `src/routes/report/__tests__/` covers the handlers of the report routes: the search
+  threshold, the signed-out refusal that never reaches the API, the reason trimmed to `null`, and
+  `reference` always being `URL`.
 - `src/server/__tests__/cofactsSite.test.ts` covers deriving the site host from the API host —
   every deployment points at `dev-api.cofacts.tw`, so a `cofacts.tw` link would 404.
 - Not covered by tests: the outcome screens themselves. This repo has no React component test
