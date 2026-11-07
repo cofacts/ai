@@ -111,13 +111,14 @@ The flow follows the designer's Penpot boards (page "AI"), one route per screen:
   state is missing — refresh and Back keep it, a fresh tab or pasted link goes to the form.
   Picking a candidate nobody has answered records a +1 (`CreateOrUpdateReplyRequest`, with the
   reason); one with replies needs no write. **Zero results files the article at once** (02 →
-  03-第一個發現他, as in Penpot), as does 都不是. `CreateArticle` returns the existing article
-  for identical text (with the reporter's reply request added), so a returned id that is one of
-  the candidates counts as a +1, not a new article; /report never derives the id itself. The
-  automatic filing fires once per visit (a failure offers 再試一次) and replaces the check
-  entry, so Back from its outcome goes to the form, now empty. After a pick or 都不是, Back
-  returns to the candidate list; picking again there is harmless, since the +1 is per user and
-  `CreateArticle` is idempotent.
+  03-第一個發現他, as in Penpot), as does 都不是. Identical messages follow rumors-line-bot: the
+  candidates are re-sorted by Dice similarity (`string-similarity`) between the
+  whitespace-stripped texts, and at 0.95 or above the top one counts as the same message — 都不是
+  is hidden, and when it is the only candidate it is picked for the reporter (+1 only if it has
+  no replies). The automatic filing and pick fire once per visit (a failure offers 再試一次) and
+  replace the check entry, so Back from their outcome goes to the form, now empty. After a manual
+  pick or 都不是, Back returns to the candidate list; picking again there is harmless, since the
+  +1 is per user and `CreateArticle` is idempotent.
 - **`/report/$articleId`** — the outcome, read fresh from Cofacts. Check passes what it did as
   `outcome` (`created`, `requested` for a +1, `matched` for no write) in history state, so this
   route is `ssr: false` with the same redirect. It shows 03-有文章且有查核回應 when the article
@@ -230,9 +231,8 @@ itself.
   content url-resolver scraped. When the linked page is gone — a removed YouTube video, say,
   which returns YouTube's generic description — an exact duplicate can be missed, with unrelated
   messages shown instead or none at all. With none, the automatic filing reuses that article (its
-  id is a hash of the text) while the outcome still says 第一個發現他, since there was no
-  candidate to compare the returned id with. Fixing that belongs in rumors-api / url-resolver (and a
-  `created` flag on `CreateArticle`), not this form.
+  id is a hash of the text) while the outcome still says 第一個發現他. Fixing that belongs in
+  rumors-api / url-resolver, not this form.
 - Neutral, because attachments are not accepted yet. `CreateMediaArticle` needs a URL rumors-api
   can fetch, and cofacts.ai's upload path produces only a private artifact. A related case —
   a link rumors-api cannot read because of a login wall — is tracked in

@@ -3,7 +3,9 @@
 // Shows Penpot 02-回報可疑訊息Loading頁面 while it searches, then either the
 // candidates (no Penpot board yet) or — when there are none — files the link
 // straight away and moves on to 03-第一個發現他. Picking a candidate nobody has
-// answered adds the reporter's +1; 都不是 files a new article.
+// answered adds the reporter's +1; 都不是 files a new article. As in
+// rumors-line-bot, an identical candidate hides 都不是, and is picked for the
+// reporter when it is the only one.
 //
 // `url` and `reason` arrive in history state from the /report form, never in
 // the URL: the link and the reason are the reporter's own, and a search param
@@ -33,6 +35,7 @@ import {
 } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 
+import stringSimilarity from 'string-similarity'
 import { ReportShell } from './-components/ReportShell'
 import type { HistoryState } from '@tanstack/react-router'
 import type {
@@ -95,7 +98,17 @@ export type SearchCandidate = NonNullable<
    * base is server-only. Lets the reporter look before picking: picking is a +1.
    */
   articleUrl: string
+  /** How alike its text and the searched link are, 0–1; candidates come sorted by it. */
+  similarity: number
 }
+
+/**
+ * At or above this similarity, a candidate counts as the same message: 都不是 is
+ * hidden, and a lone such candidate is picked for the reporter. Same rule and
+ * value as rumors-line-bot (`SIMILARITY_THRESHOLD` in
+ * src/webhook/handlers/initState.ts).
+ */
+const SIMILARITY_THRESHOLD = 0.95
 
 // POST, not GET: a GET server function puts its input in the request URL, and
 // with it the reporter's link in every request log on the way.
@@ -140,10 +153,19 @@ export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
         minimumShouldMatch: BARE_LINK_MIN_SHOULD_MATCH,
       },
     )
-    return (data.ListArticles?.edges ?? []).map((edge) => ({
-      ...edge,
-      articleUrl: getArticleUrl(edge.node.id),
-    }))
+    // Re-ranked by text similarity, as rumors-line-bot's searchText does:
+    // Dice coefficient with whitespace removed, so only the words count.
+    const strip = (text: string) => text.replace(/\s/g, '')
+    return (data.ListArticles?.edges ?? [])
+      .map((edge) => ({
+        ...edge,
+        articleUrl: getArticleUrl(edge.node.id),
+        similarity: stringSimilarity.compareTwoStrings(
+          strip(edge.node.text ?? ''),
+          strip(like),
+        ),
+      }))
+      .sort((a, b) => b.similarity - a.similarity)
   })
 
 /** `reason` is the reporter's own words. Never a summary written for them. */
@@ -295,7 +317,12 @@ function ReportCheckPage() {
   }
 
   const pickCandidate = useMutation({
-    mutationFn: async (candidate: SearchCandidate) => {
+    mutationFn: async ({
+      candidate,
+    }: {
+      candidate: SearchCandidate
+      replace: boolean
+    }) => {
       const articleId = candidate.node.id
       // Already answered: nothing to write.
       if (candidate.node.replyCount) return { articleId, requested: false }
@@ -305,8 +332,8 @@ function ReportCheckPage() {
       invalidateAfterWrite(articleId)
       return { articleId, requested: true }
     },
-    onSuccess: ({ articleId, requested }) =>
-      showOutcome(articleId, requested ? 'requested' : 'matched'),
+    onSuccess: ({ articleId, requested }, { replace }) =>
+      showOutcome(articleId, requested ? 'requested' : 'matched', replace),
   })
 
   // The one way a new article gets filed: straight after a search that found
@@ -316,61 +343,74 @@ function ReportCheckPage() {
       createArticleReport({ data: { url, reason } }),
     onSuccess: ({ articleId }, { replace }) => {
       invalidateAfterWrite(articleId)
-      // CreateArticle returns the existing article for identical text, with
-      // the reporter's reply request added — so a candidate coming back means
-      // a +1, not a new article.
-      const existing = search.data?.some((c) => c.node.id === articleId)
-      return showOutcome(articleId, existing ? 'requested' : 'created', replace)
+      return showOutcome(articleId, 'created', replace)
     },
   })
 
-  // Nothing found: file it now (02 → 03-第一個發現他). Once per visit — the
-  // ref survives StrictMode's double effect. A second call would still be
-  // harmless: CreateArticle upserts on a hash of the text, and the reply
-  // request is per user. Replaces this entry, since the reporter never saw a
-  // choice here; Back goes to the form.
-  const autoFiled = useRef(false)
+  // Two cases decide for the reporter, as in rumors-line-bot: nothing found
+  // files it now (02 → 03-第一個發現他), and a lone identical candidate is
+  // picked. Once per visit — the ref survives StrictMode's double effect, and a
+  // repeat would be harmless anyway (CreateArticle upserts on a hash of the
+  // text; the +1 is per user). Both replace this entry, since the reporter
+  // never saw a choice here; Back goes to the form.
+  const top = search.data?.[0]
+  const identical = !!top && top.similarity >= SIMILARITY_THRESHOLD
   const nothingFound = search.data?.length === 0
+  const autoPick = identical && search.data?.length === 1 ? top : undefined
+  const decided = useRef(false)
   useEffect(() => {
-    if (!nothingFound || autoFiled.current) return
-    autoFiled.current = true
-    fileNew.mutate({ replace: true })
-  }, [nothingFound, fileNew])
+    if (decided.current) return
+    if (nothingFound) fileNew.mutate({ replace: true })
+    else if (autoPick)
+      pickCandidate.mutate({ candidate: autoPick, replace: true })
+    else return
+    decided.current = true
+  }, [nothingFound, autoPick, fileNew, pickCandidate])
 
   const busy = pickCandidate.isPending || fileNew.isPending
 
   return (
     <ReportShell errors={[search.error, pickCandidate.error, fileNew.error]}>
-      {search.isError || (nothingFound && fileNew.isError) ? (
-        // The search or the automatic filing failed; the error shows below.
+      {search.isError ||
+      (nothingFound && fileNew.isError) ||
+      (autoPick && pickCandidate.isError) ? (
+        // The search or the automatic step failed; the error shows below.
         <Button
           className="self-center"
           onClick={() =>
             search.isError
               ? void search.refetch()
-              : fileNew.mutate({ replace: true })
+              : autoPick
+                ? pickCandidate.mutate({ candidate: autoPick, replace: true })
+                : fileNew.mutate({ replace: true })
           }
         >
           再試一次
         </Button>
-      ) : search.isPending || nothingFound ? (
+      ) : search.isPending || nothingFound || autoPick ? (
         <p
           role="status"
           className="text-center text-type-body-m text-text-secondary"
         >
-          {fileNew.isPending ? '處理中…' : '正在查看有沒有人回報過…'}
+          {busy ? '處理中…' : '正在查看有沒有人回報過…'}
         </p>
       ) : (
         <CandidateView
           candidates={search.data}
           onPick={(candidate) => {
             fileNew.reset()
-            pickCandidate.mutate(candidate)
+            pickCandidate.mutate({ candidate, replace: false })
           }}
-          onNoneMatch={() => {
-            pickCandidate.reset()
-            fileNew.mutate({ replace: false })
-          }}
+          // An identical message is listed: it is the one (rumors-line-bot
+          // hides "none of these" the same way).
+          onNoneMatch={
+            identical
+              ? undefined
+              : () => {
+                  pickCandidate.reset()
+                  fileNew.mutate({ replace: false })
+                }
+          }
           busy={busy}
         />
       )}
@@ -386,7 +426,8 @@ function CandidateView({
 }: {
   candidates: Array<SearchCandidate>
   onPick: (candidate: SearchCandidate) => void
-  onNoneMatch: () => void
+  /** Omitted when an identical candidate is listed. */
+  onNoneMatch?: () => void
   busy: boolean
 }) {
   return (
@@ -413,14 +454,16 @@ function CandidateView({
           disabled={busy}
         />
       ))}
-      <Button
-        variant="outline"
-        className="self-center"
-        onClick={onNoneMatch}
-        disabled={busy}
-      >
-        都不是，我要回報新的
-      </Button>
+      {onNoneMatch && (
+        <Button
+          variant="outline"
+          className="self-center"
+          onClick={onNoneMatch}
+          disabled={busy}
+        >
+          都不是，我要回報新的
+        </Button>
+      )}
     </div>
   )
 }
