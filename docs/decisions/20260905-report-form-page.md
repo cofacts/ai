@@ -97,9 +97,13 @@ point that is not this form.
 
 The flow follows the designer's Penpot boards (page "AI"), one route per screen:
 
-- **`/report`** — the form (01-回報可疑訊息). It calls no server: submitting writes `url` and
-  `reason` into its own history entry (`replace`), so Back restores the form, then navigates to
-  `/report/check` with the same history state.
+- **`/report`** — the form (01-回報可疑訊息), with uncontrolled inputs. It calls no server:
+  submitting navigates to `/report/check` with `url` and `reason` in history state. Each field
+  keeps what has been typed as a draft in `sessionStorage` (the shared
+  `src/hooks/useSessionStorageDraft.ts`), so a reload or Back from check finds the form as it
+  was. The drafts are cleared when the report completes, so Back from the outcome finds an
+  **empty** form. TanStack Router's `useBlocker` asks before a reload or tab close discards a
+  draft (`enableBeforeUnload`); in-app navigation is never blocked.
 - **`/report/check`** — searches (02, the loading screen, while pending) and shows the candidates.
   `url` and `reason` live in history state only, never in the URL: they are the reporter's own,
   and a search param would carry them into shared links and logs. History state exists only in
@@ -108,11 +112,13 @@ The flow follows the designer's Penpot boards (page "AI"), one route per screen:
   Picking a candidate nobody has answered records a +1 (`CreateOrUpdateReplyRequest`, with the
   reason); one with replies needs no write. **Zero results files the article at once** (02 →
   03-第一個發現他, as in Penpot), as does 都不是; the automatic filing fires once per visit and
-  replaces the check entry, so Back from the outcome returns to the form.
-- **`/report/$articleId`** — the outcome, read fresh from Cofacts: 03-有文章且有查核回應 when it has
-  replies, 03-第一個發現他 when `?created=true`, otherwise 03-有文章但無回應 with the article's
-  `replyRequestCount`. From here: 與 Cofacts AI 討論, the article on cofacts.tw, and 再回報一則 (an
-  empty `/report`).
+  replaces the check entry, so Back from the outcome returns to the (now empty) form.
+- **`/report/$articleId`** — the outcome, read fresh from Cofacts. Check passes what it did as
+  `outcome` (`created`, `requested` for a +1, `matched` for no write) in history state, so this
+  route is `ssr: false` with the same redirect. It shows 03-有文章且有查核回應 when the article
+  has replies, 03-第一個發現他 when `created`, and otherwise 03-有文章但無回應 with the
+  article's `replyRequestCount`, saying the +1 was added only for `requested`. From here:
+  與 Cofacts AI 討論, the article on cofacts.tw, and 再回報一則 (an empty `/report`).
 
 Every logged-out screen shows the sign-in prompt instead (01-回報可疑訊息-未登入). Each route
 keeps its server functions inline; the handlers with logic of their own are unit-tested in

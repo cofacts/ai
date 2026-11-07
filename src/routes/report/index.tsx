@@ -8,18 +8,24 @@
 // is the only input `ai_writer` has ever wanted.
 //
 // The form talks to no server. Submitting hands `url` and `reason` to
-// /report/check in history state, which searches and writes. The same state is
-// first written onto this page's own history entry, so Back from the check
-// screen returns to the form as it was filled in.
+// /report/check in history state, which searches and writes. The inputs are
+// uncontrolled; each keeps what has been typed as a draft in sessionStorage
+// (useSessionStorageDraft), which refills the form after a reload or on Back
+// from /report/check, until /report/check completes the report and clears it.
 
 import {
   createFileRoute,
-  useLocation,
+  useBlocker,
   useNavigate,
 } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { ReportShell } from './-components/ReportShell'
+import type { FormEvent } from 'react'
+import {
+  hasSessionStorageDraft,
+  useSessionStorageDraft,
+} from '@/hooks/useSessionStorageDraft'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -41,34 +47,9 @@ export const Route = createFileRoute('/report/')({
 })
 
 function ReportFormPage() {
-  const navigate = useNavigate()
-  // Filled in when Back returns here from /report/check; empty on a fresh visit
-  // (including 再回報一則, which links here with no state).
-  const initial = useLocation({ select: (location) => location.state })
-
-  const [url, setUrl] = useState(initial.url ?? '')
-  const [reason, setReason] = useState(initial.reason ?? '')
-  const [urlError, setUrlError] = useState<UrlError>(null)
-
-  // Only reached once the browser's constraint validation has passed: the
-  // form refuses to submit anything but one http(s) link.
-  async function submit() {
-    const state = { url: url.trim(), reason }
-    await navigate({ to: '/report', replace: true, state })
-    await navigate({ to: '/report/check', state })
-  }
-
   return (
     <ReportShell>
-      <ReportForm
-        url={url}
-        onUrlChange={setUrl}
-        urlError={urlError}
-        onUrlErrorChange={setUrlError}
-        reason={reason}
-        onReasonChange={setReason}
-        onSubmit={() => void submit()}
-      />
+      <ReportForm />
     </ReportShell>
   )
 }
@@ -83,33 +64,44 @@ function urlErrorOf(input: HTMLInputElement): UrlError {
   return input.validity.valueMissing ? 'missing' : 'format'
 }
 
-function ReportForm({
-  url,
-  onUrlChange,
-  urlError,
-  onUrlErrorChange,
-  reason,
-  onReasonChange,
-  onSubmit,
-}: {
-  url: string
-  onUrlChange: (value: string) => void
-  urlError: UrlError
-  onUrlErrorChange: (error: UrlError) => void
-  reason: string
-  onReasonChange: (value: string) => void
-  onSubmit: () => void
-}) {
+/** The draft ids of the form's two fields; /report/check clears them. */
+const URL_DRAFT = 'report.url'
+const REASON_DRAFT = 'report.reason'
+
+// The drafts mirror the fields, so they are the dirty check: ask before a
+// reload or tab close throws away an unsent report.
+const hasUnsentReport = () => hasSessionStorageDraft(URL_DRAFT, REASON_DRAFT)
+
+function ReportForm() {
+  const navigate = useNavigate()
+  const [urlError, setUrlError] = useState<UrlError>(null)
+  const urlDraft = useSessionStorageDraft(URL_DRAFT)
+  const reasonDraft = useSessionStorageDraft(REASON_DRAFT)
+
+  // In-app navigation is never blocked: submitting goes to /report/check, and
+  // the draft covers leaving through the site nav.
+  useBlocker({
+    shouldBlockFn: () => false,
+    enableBeforeUnload: hasUnsentReport,
+  })
+
+  // Only reached once the browser's constraint validation has passed: the
+  // form refuses to submit anything but one http(s) link. The draft stays
+  // until /report/check completes the report.
+  function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const data = new FormData(e.currentTarget)
+    void navigate({
+      to: '/report/check',
+      state: {
+        url: String(data.get('url') ?? '').trim(),
+        reason: String(data.get('reason') ?? ''),
+      },
+    })
+  }
+
   return (
-    <form
-      className="flex flex-col gap-spacing-16"
-      // Native constraint validation guards the submit: the handler only runs
-      // once the field holds one http(s) link.
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSubmit()
-      }}
-    >
+    <form className="flex flex-col gap-spacing-16" onSubmit={onSubmit}>
       <Field>
         <Label htmlFor="report-url">訊息的網址</Label>
         {/* A visible hint rather than a placeholder, which is not a label and
@@ -149,15 +141,14 @@ function ReportForm({
           autoCorrect="off"
           spellCheck={false}
           enterKeyHint="send"
-          value={url}
+          {...urlDraft}
           onChange={(e) => {
-            onUrlChange(e.target.value)
             // Only ever clears (or keeps accurate) a message already shown.
-            if (urlError) onUrlErrorChange(urlErrorOf(e.currentTarget))
+            if (urlError) setUrlError(urlErrorOf(e.currentTarget))
           }}
           onInvalid={(e) => {
             e.preventDefault()
-            onUrlErrorChange(urlErrorOf(e.currentTarget))
+            setUrlError(urlErrorOf(e.currentTarget))
             e.currentTarget.focus()
           }}
           aria-invalid={urlError ? true : undefined}
@@ -200,8 +191,8 @@ function ReportForm({
         </Label>
         <Textarea
           id="report-reason"
-          value={reason}
-          onChange={(e) => onReasonChange(e.target.value)}
+          name="reason"
+          {...reasonDraft}
           placeholder="例：我用 OO 關鍵字查詢 Facebook，發現⋯⋯ / 我在 XX 官網上找到不一樣的說法如下⋯⋯"
         />
       </Field>

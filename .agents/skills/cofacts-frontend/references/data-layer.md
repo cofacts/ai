@@ -74,7 +74,8 @@ through TanStack Start server functions and the TanStack Query cache.
    `redirect({ to: <the page that sets the state>, replace: true })` when the state is missing.
    History state exists only in the browser; client-only, `beforeLoad` sees it on refresh and
    Back as well, and only a fresh tab or pasted link is redirected. Declare the state's shape by
-   augmenting `HistoryState` in `@tanstack/react-router`. Example: `src/routes/report/check.tsx`.
+   augmenting `HistoryState` in `@tanstack/react-router`. Examples: `src/routes/report/check.tsx`
+   and `src/routes/report/$articleId.tsx`.
 
 Route setup (once): `createRouter({ context: { queryClient } })` and
 `createRootRouteWithContext<{ queryClient: QueryClient }>()`.

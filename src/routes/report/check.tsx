@@ -35,6 +35,7 @@ import { useEffect, useRef } from 'react'
 
 import { ReportShell } from './-components/ReportShell'
 import { failureMessage } from './-components/failureMessage'
+import type { HistoryState } from '@tanstack/react-router'
 import type {
   CreateArticleReportMutationVariables,
   RequestFactCheckMutationVariables,
@@ -42,6 +43,7 @@ import type {
 } from '@/server/gql/graphql'
 import { Button } from '@/components/ui/button'
 import { SuspiciousMessageCard } from '@/components/SuspiciousMessageCard'
+import { clearSessionStorageDraft } from '@/hooks/useSessionStorageDraft'
 import { useAuth } from '@/lib/auth'
 import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
 import { cofactsExec } from '@/server/cofacts.server'
@@ -49,12 +51,20 @@ import { getArticleUrl } from '@/server/cofactsSite'
 import { graphql } from '@/server/gql'
 
 declare module '@tanstack/react-router' {
-  /** What the /report form hands to /report/check. */
   interface HistoryState {
+    /** What the /report form hands to /report/check. */
     url?: string
     reason?: string
+    /**
+     * What /report/check did, for /report/$articleId: filed a new article, added
+     * the reporter's +1, or matched an article without writing (it already has
+     * replies).
+     */
+    outcome?: 'created' | 'requested' | 'matched'
   }
 }
+
+type ReportOutcome = NonNullable<HistoryState['outcome']>
 
 /** How many candidates a person can actually read before giving up. */
 const CANDIDATE_LIMIT = 5
@@ -249,7 +259,11 @@ function ReportCheckPage() {
   // Search first, always. Filing straight away is what produces the duplicates
   // that make the database harder to search for everyone after you. Waits for
   // a user: logged out, the page shows the sign-in prompt instead.
-  const search = useQuery({ ...searchQuery(url), enabled: !!user })
+  const search = useQuery({
+    ...searchQuery(url),
+    // No url once this page is being left (the state is gone): nothing to search.
+    enabled: !!user && !!url,
+  })
 
   // The search counts and the article lists change with every write here.
   function invalidateAfterWrite(articleId: string) {
@@ -262,19 +276,36 @@ function ReportCheckPage() {
     })
   }
 
+  // The report is done: the form's draft goes, and the outcome screen learns
+  // what happened from history state.
+  function showOutcome(
+    articleId: string,
+    outcome: ReportOutcome,
+    replace = false,
+  ) {
+    // The /report form's field drafts (see src/routes/report/index.tsx).
+    clearSessionStorageDraft('report.url', 'report.reason')
+    return navigate({
+      to: '/report/$articleId',
+      params: { articleId },
+      state: { outcome },
+      replace,
+    })
+  }
+
   const pickCandidate = useMutation({
     mutationFn: async (candidate: SearchCandidate) => {
       const articleId = candidate.node.id
+      // Already answered: nothing to write.
+      if (candidate.node.replyCount) return { articleId, requested: false }
       // Nobody has answered it yet: register the demand. That +1 is what tells
       // volunteers which messages people are actually asking about.
-      if (candidate.node.replyCount === 0) {
-        await requestFactCheck({ data: { articleId, reason } })
-        invalidateAfterWrite(articleId)
-      }
-      return articleId
+      await requestFactCheck({ data: { articleId, reason } })
+      invalidateAfterWrite(articleId)
+      return { articleId, requested: true }
     },
-    onSuccess: (articleId) =>
-      navigate({ to: '/report/$articleId', params: { articleId } }),
+    onSuccess: ({ articleId, requested }) =>
+      showOutcome(articleId, requested ? 'requested' : 'matched'),
   })
 
   // The one way a new article gets filed: straight after a search that found
@@ -284,12 +315,7 @@ function ReportCheckPage() {
       createArticleReport({ data: { url, reason } }),
     onSuccess: ({ articleId }, { replace }) => {
       invalidateAfterWrite(articleId)
-      return navigate({
-        to: '/report/$articleId',
-        params: { articleId },
-        search: { created: true },
-        replace,
-      })
+      return showOutcome(articleId, 'created', replace)
     },
   })
 

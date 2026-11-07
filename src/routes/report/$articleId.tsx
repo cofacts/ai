@@ -2,14 +2,23 @@
 // they picked or filed on /report/check. One of three Penpot boards:
 //
 // - 03-回報可疑訊息有文章且有查核回應: it already has fact-check replies;
-// - 03-回報可疑訊息第一個發現他: `?created=true`, the reporter just filed it;
-// - 03-回報可疑訊息有文章但無回應: otherwise — their +1 is in, and the page
-//   says how many people are waiting.
+// - 03-回報可疑訊息第一個發現他: the reporter just filed it;
+// - 03-回報可疑訊息有文章但無回應: otherwise — with how many people are waiting,
+//   and, when check added it, that their +1 is in.
 //
-// It only reads. The writes happened on /report/check; the one action here,
-// 與 Cofacts AI 討論, opens a chat session about the article.
+// What check did arrives as `outcome` in history state. Like check, the route
+// is client-only and sends a visit without that state (a fresh tab, a pasted
+// link) to the form. It only reads: the writes happened on /report/check, and
+// the one action here, 與 Cofacts AI 討論, opens a chat session about the
+// article.
 
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import {
+  Link,
+  createFileRoute,
+  redirect,
+  useLocation,
+  useNavigate,
+} from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import {
   queryOptions,
@@ -19,6 +28,7 @@ import {
 } from '@tanstack/react-query'
 import { ReportShell } from './-components/ReportShell'
 import { failureMessage } from './-components/failureMessage'
+import type { HistoryState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import type { ReportOutcomeArticleQuery } from '@/server/gql/graphql'
@@ -86,17 +96,22 @@ const outcomeQuery = (articleId: string) =>
   })
 
 export const Route = createFileRoute('/report/$articleId')({
-  validateSearch: (search: Record<string, unknown>): { created?: true } =>
-    search.created === true || search.created === 'true'
-      ? { created: true }
-      : {},
+  // History state exists only in the browser; see /report/check.
+  ssr: false,
+  beforeLoad: ({ location }) => {
+    if (!location.state.outcome) {
+      throw redirect({ to: '/report', replace: true })
+    }
+  },
   component: ReportOutcomePage,
   head: () => ({ meta: [{ title: '回報可疑訊息 — Cofacts.ai' }] }),
 })
 
 function ReportOutcomePage() {
   const { articleId } = Route.useParams()
-  const { created } = Route.useSearch()
+  const outcomeKind = useLocation({
+    select: (location) => location.state.outcome,
+  })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -138,7 +153,7 @@ function ReportOutcomePage() {
         <OutcomeView
           article={found.article}
           articleUrl={found.articleUrl}
-          created={!!created}
+          outcome={outcomeKind}
           onDiscuss={() => discussWithAi.mutate(found.articleUrl)}
           busy={discussWithAi.isPending}
         />
@@ -158,19 +173,19 @@ function ReportOutcomePage() {
 function OutcomeView({
   article,
   articleUrl,
-  created,
+  outcome,
   onDiscuss,
   busy,
 }: {
   article: ReportOutcomeArticle
   articleUrl: string
-  created: boolean
+  outcome: HistoryState['outcome']
   onDiscuss: () => void
   busy: boolean
 }) {
   const hasReplies = article.articleReplies.length > 0
 
-  if (!hasReplies && created) {
+  if (!hasReplies && outcome === 'created') {
     return (
       <OutcomeShell
         title="感謝回報，你是第一個發現他的！"
@@ -193,7 +208,9 @@ function OutcomeView({
       subtitle={
         hasReplies
           ? '查核結果在下面，你也可以留下看法。'
-          : `目前還沒有查核結論，已經幫你一起請求查核了——現在有 ${article.replyRequestCount ?? 0} 個人在等答案。`
+          : outcome === 'requested'
+            ? `目前還沒有查核結論，已經幫你一起請求查核了——現在有 ${article.replyRequestCount ?? 0} 個人在等答案。`
+            : `目前還沒有查核結論，現在有 ${article.replyRequestCount ?? 0} 個人在等答案。`
       }
       onDiscuss={onDiscuss}
       busy={busy}
