@@ -21,6 +21,7 @@ import {
 import { useRef, useState } from 'react'
 
 import { ReportShell } from './-components/ReportShell'
+import { REASON_DRAFT, URL_DRAFT } from './-lib'
 import type { FormEvent } from 'react'
 import { NAV_LINKS } from '@/components/SiteNav'
 import { useSessionStorageDraft } from '@/hooks/useSessionStorageDraft'
@@ -61,10 +62,6 @@ function urlErrorOf(input: HTMLInputElement): UrlError {
   if (input.validity.valid) return null
   return input.validity.valueMissing ? 'missing' : 'format'
 }
-
-/** The draft ids of the form's two fields; /report/check clears them. */
-const URL_DRAFT = 'report.url'
-const REASON_DRAFT = 'report.reason'
 
 /** Whether the form holds anything a reload or tab close would throw away. */
 function hasUnsentText(form: HTMLFormElement | null): boolean {

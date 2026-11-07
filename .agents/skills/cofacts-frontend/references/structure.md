@@ -13,6 +13,8 @@
 **`-components/`:** TanStack Router ignores files and folders starting with `-`, so
 `routes/article.$id/-components/Transcript.tsx` doesn't become a route. Put page-only
 components there (never as loose `-Foo.tsx` files), so everything else under `routes/` is a route.
+Non-component code those routes share (constants, small helpers) goes in one `-lib.ts` beside
+them, e.g. `routes/report/-lib.ts`.
 A `-components/` folder serves the routes in its directory. **Never import another directory's
 `-components/`.** When a second place needs a component, move it to `src/components/` and give it
 a story and `parameters.penpot`.

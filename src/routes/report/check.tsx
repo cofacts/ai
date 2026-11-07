@@ -37,6 +37,7 @@ import {
 import { useEffect, useRef } from 'react'
 
 import { ReportShell } from './-components/ReportShell'
+import { REASON_DRAFT, URL_DRAFT } from './-lib'
 import type { HistoryState } from '@tanstack/react-router'
 import type {
   CreateArticleReportMutationVariables,
@@ -304,8 +305,7 @@ function ReportCheckPage() {
     outcome: ReportOutcome,
     replace = false,
   ) {
-    // The /report form's field drafts (see src/routes/report/index.tsx).
-    clearSessionStorageDraft('report.url', 'report.reason')
+    clearSessionStorageDraft(URL_DRAFT, REASON_DRAFT)
     return navigate({
       to: '/report/$articleId',
       params: { articleId },
