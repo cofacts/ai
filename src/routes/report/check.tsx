@@ -1,0 +1,473 @@
+// /report/check — has anyone reported this link already?
+//
+// Shows Penpot 02-回報可疑訊息Loading頁面 while it searches, then either the
+// candidates (no Penpot board yet) or — when there are none — files the link
+// straight away and moves on to 03-第一個發現他. Picking a candidate adds the
+// reporter's +1 (skipped only when it is answered and they gave no reason);
+// 都不是 files a new article. As in
+// rumors-line-bot, an identical candidate hides 都不是, and is picked for the
+// reporter when it is the only one.
+//
+// `url` and `reason` arrive in history state from the /report form, never in
+// the URL: the link and the reason are the reporter's own, and a search param
+// would put them in shared links, analytics and server logs. History state
+// exists only in the browser, so this route renders client-only (`ssr: false`)
+// and sends anyone without that state — a fresh tab, a pasted URL — back to the
+// form. Refresh and Back keep the state, so they keep working.
+//
+// Every Cofacts call goes through cofactsExec, which attaches the reporter's
+// own JWT from the HttpOnly session cookie — so what lands in Cofacts is
+// attributed to the person who filed it. Searching needs no session; the two
+// writes do, and resolveAdkUserIdOrThrow rejects them before any request
+// reaches rumors-api.
+
+import {
+  createFileRoute,
+  redirect,
+  useLocation,
+  useNavigate,
+} from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
+
+import { ReportShell } from './-components/ReportShell'
+import { REASON_DRAFT, URL_DRAFT } from './-lib'
+import type { HistoryState } from '@tanstack/react-router'
+import type {
+  CreateArticleReportMutationVariables,
+  RequestFactCheckMutationVariables,
+  SearchSuspiciousMessagesQuery,
+} from '@/server/gql/graphql'
+import { Button } from '@/components/ui/button'
+import { SuspiciousMessageCard } from '@/components/SuspiciousMessageCard'
+import { clearSessionStorageDraft } from '@/hooks/useSessionStorageDraft'
+import { useAuth } from '@/lib/auth'
+import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
+import { cofactsExec } from '@/server/cofacts.server'
+import { getArticleUrl } from '@/server/cofactsSite'
+import { graphql } from '@/server/gql'
+
+declare module '@tanstack/react-router' {
+  interface HistoryState {
+    /** What the /report form hands to /report/check. */
+    url?: string
+    reason?: string
+    /**
+     * What /report/check did, for /report/$articleId: filed a new article, added
+     * the reporter's +1, or matched an article without writing (it already has
+     * replies).
+     */
+    outcome?: 'created' | 'requested' | 'matched'
+  }
+}
+
+type ReportOutcome = NonNullable<HistoryState['outcome']>
+
+/** How many candidates a person can actually read before giving up. */
+const CANDIDATE_LIMIT = 5
+
+/**
+ * How much of the pasted link has to match.
+ *
+ * The report form only accepts a URL, so `like` is always a bare link — and
+ * rumors-api's default (`10<70%`) is tuned for prose and actively wrong for
+ * one. A URL tokenises into `https`, `www`, `facebook`, `com`, `share` and one
+ * unique id, and every Facebook link shares all but the last of those, so on
+ * dev, searching for a share link nobody has reported returns 54 unrelated
+ * Facebook posts, all scoring an identical 225.5. A candidate list of
+ * confident-looking noise is worse than an empty one: it invites the reporter
+ * to +1 somebody else's message.
+ *
+ * At 90% the unique id has to match too, which turns the query into the
+ * question actually being asked — "has anyone posted this same link?" — and it
+ * answers correctly in both directions: 1 hit for a link that is in the
+ * database, 0 for one that is not. 80% is already back in the noise (50 hits).
+ */
+const BARE_LINK_MIN_SHOULD_MATCH = '90%'
+
+export type SearchCandidate = NonNullable<
+  NonNullable<SearchSuspiciousMessagesQuery['ListArticles']>['edges']
+>[number] & {
+  /**
+   * Where a human reads this article. Computed on the server because the site
+   * base is server-only. Lets the reporter look before picking: picking is a +1.
+   */
+  articleUrl: string
+  /**
+   * Its text is the searched link, once whitespace is removed: the same
+   * message. Mirrors rumors-line-bot's identical-message handling (hide
+   * 都不是; pick a lone identical candidate), but by exact equality rather than
+   * its 0.95 string similarity — two links that differ by one character are
+   * different posts. Identical candidates come first.
+   */
+  identical: boolean
+}
+
+// POST, not GET: a GET server function puts its input in the request URL, and
+// with it the reporter's link in every request log on the way.
+export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
+  .inputValidator((like: string) => {
+    if (typeof like !== 'string') throw new Error('url must be text')
+    return like.trim()
+  })
+  .handler(async ({ data: like }): Promise<Array<SearchCandidate>> => {
+    const data = await cofactsExec(
+      graphql(`
+        query SearchSuspiciousMessages(
+          $like: String!
+          $first: Int!
+          $minimumShouldMatch: String
+        ) {
+          ListArticles(
+            filter: {
+              moreLikeThis: {
+                like: $like
+                minimumShouldMatch: $minimumShouldMatch
+              }
+            }
+            orderBy: [{ _score: DESC }]
+            first: $first
+          ) {
+            edges {
+              node {
+                id
+                text
+                articleType
+                replyCount
+                replyRequestCount
+              }
+            }
+          }
+        }
+      `),
+      {
+        like,
+        first: CANDIDATE_LIMIT,
+        minimumShouldMatch: BARE_LINK_MIN_SHOULD_MATCH,
+      },
+    )
+    const strip = (text: string) => text.replace(/\s/g, '')
+    return (data.ListArticles?.edges ?? [])
+      .map((edge) => ({
+        ...edge,
+        articleUrl: getArticleUrl(edge.node.id),
+        identical: strip(edge.node.text ?? '') === strip(like),
+      }))
+      .sort((a, b) => Number(b.identical) - Number(a.identical))
+  })
+
+/** `reason` is the reporter's own words. Never a summary written for them. */
+export const requestFactCheck = createServerFn({ method: 'POST' })
+  .inputValidator((input: RequestFactCheckMutationVariables) => {
+    if (typeof input.articleId !== 'string' || !input.articleId) {
+      throw new Error('articleId is required')
+    }
+    if (input.reason != null && typeof input.reason !== 'string') {
+      throw new Error('reason must be text')
+    }
+    return input
+  })
+  .handler(async ({ data }) => {
+    await resolveAdkUserIdOrThrow()
+    const result = await cofactsExec(
+      graphql(`
+        mutation RequestFactCheck($articleId: String!, $reason: String) {
+          CreateOrUpdateReplyRequest(articleId: $articleId, reason: $reason) {
+            id
+          }
+        }
+      `),
+      { articleId: data.articleId, reason: data.reason?.trim() || null },
+    )
+    if (!result.CreateOrUpdateReplyRequest) {
+      throw new Error('Article not found')
+    }
+  })
+
+/**
+ * The mutation's own variables, except that `text` and `reference` collapse
+ * into one `url`: this form files a link and nothing else, so both are derived
+ * from it.
+ */
+type CreateArticleReportInput = Pick<
+  CreateArticleReportMutationVariables,
+  'reason'
+> & {
+  /** Where the message is circulating. Also the article's own text. */
+  url: string
+}
+
+export const createArticleReport = createServerFn({ method: 'POST' })
+  .inputValidator(
+    (input: CreateArticleReportInput): CreateArticleReportInput => {
+      const { url, reason } = input
+      if (typeof url !== 'string') throw new Error('url must be text')
+      if (reason != null && typeof reason !== 'string') {
+        throw new Error('reason must be text')
+      }
+      return { url: url.trim(), reason }
+    },
+  )
+  .handler(async ({ data }): Promise<{ articleId: string }> => {
+    await resolveAdkUserIdOrThrow()
+    const result = await cofactsExec(
+      graphql(`
+        mutation CreateArticleReport(
+          $text: String!
+          $reference: ArticleReferenceInput!
+          $reason: String
+        ) {
+          CreateArticle(text: $text, reference: $reference, reason: $reason) {
+            id
+          }
+        }
+      `),
+      {
+        // The URL is the article body and the reference alike — one value, so
+        // the two cannot drift apart. rumors-api resolves the link at creation
+        // and fills in `hyperlinks.title/summary`, which is what a reader sees.
+        text: data.url,
+        // Always URL. This entry point only accepts a link, so every report it
+        // files can be described honestly — it never hits the missing enum
+        // value that forces other non-LINE sources to be labelled LINE.
+        reference: { type: 'URL', permalink: data.url },
+        reason: data.reason?.trim() || null,
+      },
+    )
+    const articleId = result.CreateArticle?.id
+    if (!articleId) throw new Error('Cofacts did not return an article id')
+    return { articleId }
+  })
+
+const searchQuery = (like: string) =>
+  queryOptions({
+    queryKey: ['SearchSuspiciousMessages', like],
+    queryFn: () => searchSuspiciousMessages({ data: like }),
+    staleTime: 60_000,
+  })
+
+export const Route = createFileRoute('/report/check')({
+  // History state exists only in the browser. Rendered there, beforeLoad sees
+  // it on refresh and Back too, and only a visit without it goes to the form.
+  ssr: false,
+  beforeLoad: ({ location }) => {
+    if (!location.state.url) {
+      throw redirect({ to: '/report', replace: true })
+    }
+  },
+  component: ReportCheckPage,
+  head: () => ({ meta: [{ title: '回報可疑訊息 — Cofacts.ai' }] }),
+})
+
+function ReportCheckPage() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { url = '', reason = '' } = useLocation({
+    select: (location) => location.state,
+  })
+
+  // Search first, always. Filing straight away is what produces the duplicates
+  // that make the database harder to search for everyone after you. Waits for
+  // a user: logged out, the page shows the sign-in prompt instead.
+  const search = useQuery({
+    ...searchQuery(url),
+    // No url once this page is being left (the state is gone): nothing to search.
+    enabled: !!user && !!url,
+    // Every visit searches afresh: the automatic steps below must never act
+    // on a cached result from before the last report.
+    refetchOnMount: 'always',
+  })
+
+  // The search counts and the article lists change with every write here.
+  function invalidateAfterWrite(articleId: string) {
+    void queryClient.invalidateQueries({ queryKey: ['ListArticles'] })
+    // Stale only: refetched on the next visit, not right before leaving.
+    void queryClient.invalidateQueries({
+      queryKey: ['SearchSuspiciousMessages'],
+      refetchType: 'none',
+    })
+    void queryClient.invalidateQueries({
+      queryKey: ['ReportOutcomeArticle', articleId],
+    })
+  }
+
+  // The report is done: the form's draft goes, and the outcome screen learns
+  // what happened from history state.
+  function showOutcome(
+    articleId: string,
+    outcome: ReportOutcome,
+    replace = false,
+  ) {
+    clearSessionStorageDraft(URL_DRAFT, REASON_DRAFT)
+    return navigate({
+      to: '/report/$articleId',
+      params: { articleId },
+      state: { outcome },
+      replace,
+    })
+  }
+
+  const pickCandidate = useMutation({
+    mutationFn: async ({
+      candidate,
+    }: {
+      candidate: SearchCandidate
+      replace: boolean
+    }) => {
+      const articleId = candidate.node.id
+      // Already answered and nothing to add: no write. With a reason, the +1
+      // still goes in, so the reporter's words reach the volunteers.
+      if (candidate.node.replyCount && !reason.trim()) {
+        return { articleId, requested: false }
+      }
+      // Register the demand. That +1 is what tells volunteers which messages
+      // people are actually asking about.
+      await requestFactCheck({ data: { articleId, reason } })
+      invalidateAfterWrite(articleId)
+      return { articleId, requested: true }
+    },
+    onSuccess: ({ articleId, requested }, { replace }) =>
+      showOutcome(articleId, requested ? 'requested' : 'matched', replace),
+  })
+
+  // The one way a new article gets filed: straight after a search that found
+  // nothing, or when the reporter says none of the candidates is theirs.
+  const fileNew = useMutation({
+    mutationFn: (_: { replace: boolean }) =>
+      createArticleReport({ data: { url, reason } }),
+    onSuccess: ({ articleId }, { replace }) => {
+      invalidateAfterWrite(articleId)
+      return showOutcome(articleId, 'created', replace)
+    },
+  })
+
+  // Two cases decide for the reporter, as in rumors-line-bot: nothing found
+  // files it now (02 → 03-第一個發現他), and a lone identical candidate is
+  // picked. Once per visit — the ref survives StrictMode's double effect, and a
+  // repeat would be harmless anyway (CreateArticle upserts on a hash of the
+  // text; the +1 is per user). Both replace this entry, since the reporter
+  // never saw a choice here; Back goes to the form.
+  const top = search.data?.[0]
+  const identical = !!top && top.identical
+  const nothingFound = search.data?.length === 0
+  const autoPick = identical && search.data?.length === 1 ? top : undefined
+  const decided = useRef(false)
+  // A failed refetch keeps the old data, so that doesn't count either.
+  const searchedNow =
+    search.isFetchedAfterMount && !search.isFetching && !search.isError
+  useEffect(() => {
+    if (decided.current || !searchedNow) return
+    if (nothingFound) fileNew.mutate({ replace: true })
+    else if (autoPick)
+      pickCandidate.mutate({ candidate: autoPick, replace: true })
+    else return
+    decided.current = true
+  }, [searchedNow, nothingFound, autoPick, fileNew, pickCandidate])
+
+  const busy = pickCandidate.isPending || fileNew.isPending
+
+  return (
+    <ReportShell errors={[search.error, pickCandidate.error, fileNew.error]}>
+      {search.isError ||
+      (nothingFound && fileNew.isError) ||
+      (autoPick && pickCandidate.isError) ? (
+        // The search or the automatic step failed; the error shows below.
+        <Button
+          className="self-center"
+          onClick={() =>
+            search.isError
+              ? void search.refetch()
+              : autoPick
+                ? pickCandidate.mutate({ candidate: autoPick, replace: true })
+                : fileNew.mutate({ replace: true })
+          }
+        >
+          再試一次
+        </Button>
+      ) : search.isPending || nothingFound || autoPick ? (
+        <p
+          role="status"
+          className="text-center text-type-body-m text-text-secondary"
+        >
+          {busy ? '處理中…' : '正在查看有沒有人回報過…'}
+        </p>
+      ) : (
+        <CandidateView
+          candidates={search.data}
+          onPick={(candidate) => {
+            fileNew.reset()
+            pickCandidate.mutate({ candidate, replace: false })
+          }}
+          // An identical message is listed: it is the one (rumors-line-bot
+          // hides "none of these" the same way).
+          onNoneMatch={
+            identical
+              ? undefined
+              : () => {
+                  pickCandidate.reset()
+                  fileNew.mutate({ replace: false })
+                }
+          }
+          busy={busy}
+        />
+      )}
+    </ReportShell>
+  )
+}
+
+function CandidateView({
+  candidates,
+  onPick,
+  onNoneMatch,
+  busy,
+}: {
+  candidates: Array<SearchCandidate>
+  onPick: (candidate: SearchCandidate) => void
+  /** Omitted when an identical candidate is listed. */
+  onNoneMatch?: () => void
+  busy: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-spacing-12">
+      <div className="flex flex-col gap-spacing-4 text-center">
+        <h2 className="text-type-heading-m text-text-primary">
+          有人回報過類似的訊息
+        </h2>
+        <p className="text-type-body-s text-text-secondary">
+          可以先點「查看這則訊息」確認內容。選了「就是這則」之後，如果還沒有人回應，或你有填理由，會幫你一起請求查核。
+        </p>
+      </div>
+      {candidates.map((candidate) => (
+        <SuspiciousMessageCard
+          key={candidate.node.id}
+          text={candidate.node.text}
+          articleType={candidate.node.articleType}
+          factCheckCount={candidate.node.replyCount}
+          communityDemandCount={candidate.node.replyRequestCount}
+          viewHref={candidate.articleUrl}
+          onSelect={() => onPick(candidate)}
+          // A second tap would race the first: a second +1, or a +1 landing
+          // on one article while 都不是 files another.
+          disabled={busy}
+        />
+      ))}
+      {onNoneMatch && (
+        <Button
+          variant="outline"
+          className="self-center"
+          onClick={onNoneMatch}
+          disabled={busy}
+        >
+          都不是，我要回報新的
+        </Button>
+      )}
+    </div>
+  )
+}
