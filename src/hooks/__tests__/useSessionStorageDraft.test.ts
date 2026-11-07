@@ -3,7 +3,6 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import {
   clearSessionStorageDraft,
-  hasSessionStorageDraft,
   useSessionStorageDraft,
 } from '../useSessionStorageDraft'
 import type { FormEvent } from 'react'
@@ -69,21 +68,19 @@ describe('useSessionStorageDraft', () => {
     expect(() => result.current.ref(el)).not.toThrow()
     expect(el.value).toBe('')
     expect(() => typeInto(el, 'x', result.current.onInput)).not.toThrow()
-    expect(hasSessionStorageDraft('t.a')).toBe(false)
+    vi.restoreAllMocks()
+    expect(sessionStorage.getItem('cofacts.draft.t.a')).toBeNull()
   })
 })
 
-describe('hasSessionStorageDraft / clearSessionStorageDraft', () => {
-  test('cover any of several fields', () => {
-    expect(hasSessionStorageDraft('t.a', 't.b')).toBe(false)
-
-    sessionStorage.setItem('cofacts.draft.t.b', 'x')
-    expect(hasSessionStorageDraft('t.a', 't.b')).toBe(true)
-
+describe('clearSessionStorageDraft', () => {
+  test('clears several fields at once', () => {
     sessionStorage.setItem('cofacts.draft.t.a', 'y')
+    sessionStorage.setItem('cofacts.draft.t.b', 'x')
     sessionStorage.setItem('cofacts.draft.other', 'z')
     clearSessionStorageDraft('t.a', 't.b')
-    expect(hasSessionStorageDraft('t.a', 't.b')).toBe(false)
+    expect(sessionStorage.getItem('cofacts.draft.t.a')).toBeNull()
+    expect(sessionStorage.getItem('cofacts.draft.t.b')).toBeNull()
     // Only the named fields.
     expect(sessionStorage.getItem('cofacts.draft.other')).toBe('z')
   })

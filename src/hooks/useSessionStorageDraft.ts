@@ -38,11 +38,6 @@ function writeDraft(id: string, value: string) {
   }
 }
 
-/** Whether any of these fields has unsent text saved. */
-export function hasSessionStorageDraft(...ids: Array<string>): boolean {
-  return ids.some((id) => readDraft(id) !== '')
-}
-
 /** Forget these fields' drafts, once their text has been sent. */
 export function clearSessionStorageDraft(...ids: Array<string>) {
   for (const id of ids) writeDraft(id, '')

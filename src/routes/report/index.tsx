@@ -18,14 +18,11 @@ import {
   useBlocker,
   useNavigate,
 } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { ReportShell } from './-components/ReportShell'
 import type { FormEvent } from 'react'
-import {
-  hasSessionStorageDraft,
-  useSessionStorageDraft,
-} from '@/hooks/useSessionStorageDraft'
+import { useSessionStorageDraft } from '@/hooks/useSessionStorageDraft'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -68,13 +65,18 @@ function urlErrorOf(input: HTMLInputElement): UrlError {
 const URL_DRAFT = 'report.url'
 const REASON_DRAFT = 'report.reason'
 
-// The drafts mirror the fields, so they are the dirty check: ask before a
-// reload or tab close throws away an unsent report.
-const hasUnsentReport = () => hasSessionStorageDraft(URL_DRAFT, REASON_DRAFT)
+/** Whether the form holds anything a reload or tab close would throw away. */
+function hasUnsentText(form: HTMLFormElement | null): boolean {
+  if (!form) return false
+  return [...new FormData(form).values()].some(
+    (value) => typeof value === 'string' && value.trim() !== '',
+  )
+}
 
 function ReportForm() {
   const navigate = useNavigate()
   const [urlError, setUrlError] = useState<UrlError>(null)
+  const formRef = useRef<HTMLFormElement>(null)
   const urlDraft = useSessionStorageDraft(URL_DRAFT)
   const reasonDraft = useSessionStorageDraft(REASON_DRAFT)
 
@@ -82,7 +84,7 @@ function ReportForm() {
   // the draft covers leaving through the site nav.
   useBlocker({
     shouldBlockFn: () => false,
-    enableBeforeUnload: hasUnsentReport,
+    enableBeforeUnload: () => hasUnsentText(formRef.current),
   })
 
   // Only reached once the browser's constraint validation has passed: the
@@ -101,7 +103,11 @@ function ReportForm() {
   }
 
   return (
-    <form className="flex flex-col gap-spacing-16" onSubmit={onSubmit}>
+    <form
+      ref={formRef}
+      className="flex flex-col gap-spacing-16"
+      onSubmit={onSubmit}
+    >
       <Field>
         <Label htmlFor="report-url">訊息的網址</Label>
         {/* A visible hint rather than a placeholder, which is not a label and

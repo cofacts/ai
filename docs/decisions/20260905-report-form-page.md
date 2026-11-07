@@ -102,8 +102,8 @@ The flow follows the designer's Penpot boards (page "AI"), one route per screen:
   keeps what has been typed as a draft in `sessionStorage` (the shared
   `src/hooks/useSessionStorageDraft.ts`), so a reload or Back from check finds the form as it
   was. The drafts are cleared when the report completes, so Back from the outcome finds an
-  **empty** form. TanStack Router's `useBlocker` asks before a reload or tab close discards a
-  draft (`enableBeforeUnload`); in-app navigation is never blocked.
+  **empty** form. TanStack Router's `useBlocker` asks before a reload or tab close while the
+  form's `FormData` holds any text (`enableBeforeUnload`); in-app navigation is never blocked.
 - **`/report/check`** — searches (02, the loading screen, while pending) and shows the candidates.
   `url` and `reason` live in history state only, never in the URL: they are the reporter's own,
   and a search param would carry them into shared links and logs. History state exists only in
