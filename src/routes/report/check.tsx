@@ -2,8 +2,9 @@
 //
 // Shows Penpot 02-回報可疑訊息Loading頁面 while it searches, then either the
 // candidates (no Penpot board yet) or — when there are none — files the link
-// straight away and moves on to 03-第一個發現他. Picking a candidate nobody has
-// answered adds the reporter's +1; 都不是 files a new article. As in
+// straight away and moves on to 03-第一個發現他. Picking a candidate adds the
+// reporter's +1 (skipped only when it is answered and they gave no reason);
+// 都不是 files a new article. As in
 // rumors-line-bot, an identical candidate hides 都不是, and is picked for the
 // reporter when it is the only one.
 //
@@ -35,7 +36,6 @@ import {
 } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 
-import stringSimilarity from 'string-similarity'
 import { ReportShell } from './-components/ReportShell'
 import type { HistoryState } from '@tanstack/react-router'
 import type {
@@ -98,17 +98,15 @@ export type SearchCandidate = NonNullable<
    * base is server-only. Lets the reporter look before picking: picking is a +1.
    */
   articleUrl: string
-  /** How alike its text and the searched link are, 0–1; candidates come sorted by it. */
-  similarity: number
+  /**
+   * Its text is the searched link, once whitespace is removed: the same
+   * message. Mirrors rumors-line-bot's identical-message handling (hide
+   * 都不是; pick a lone identical candidate), but by exact equality rather than
+   * its 0.95 string similarity — two links that differ by one character are
+   * different posts. Identical candidates come first.
+   */
+  identical: boolean
 }
-
-/**
- * At or above this similarity, a candidate counts as the same message: 都不是 is
- * hidden, and a lone such candidate is picked for the reporter. Same rule and
- * value as rumors-line-bot (`SIMILARITY_THRESHOLD` in
- * src/webhook/handlers/initState.ts).
- */
-const SIMILARITY_THRESHOLD = 0.95
 
 // POST, not GET: a GET server function puts its input in the request URL, and
 // with it the reporter's link in every request log on the way.
@@ -153,19 +151,14 @@ export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
         minimumShouldMatch: BARE_LINK_MIN_SHOULD_MATCH,
       },
     )
-    // Re-ranked by text similarity, as rumors-line-bot's searchText does:
-    // Dice coefficient with whitespace removed, so only the words count.
     const strip = (text: string) => text.replace(/\s/g, '')
     return (data.ListArticles?.edges ?? [])
       .map((edge) => ({
         ...edge,
         articleUrl: getArticleUrl(edge.node.id),
-        similarity: stringSimilarity.compareTwoStrings(
-          strip(edge.node.text ?? ''),
-          strip(like),
-        ),
+        identical: strip(edge.node.text ?? '') === strip(like),
       }))
-      .sort((a, b) => b.similarity - a.similarity)
+      .sort((a, b) => Number(b.identical) - Number(a.identical))
   })
 
 /** `reason` is the reporter's own words. Never a summary written for them. */
@@ -286,13 +279,18 @@ function ReportCheckPage() {
     ...searchQuery(url),
     // No url once this page is being left (the state is gone): nothing to search.
     enabled: !!user && !!url,
+    // Every visit searches afresh: the automatic steps below must never act
+    // on a cached result from before the last report.
+    refetchOnMount: 'always',
   })
 
   // The search counts and the article lists change with every write here.
   function invalidateAfterWrite(articleId: string) {
     void queryClient.invalidateQueries({ queryKey: ['ListArticles'] })
+    // Stale only: refetched on the next visit, not right before leaving.
     void queryClient.invalidateQueries({
       queryKey: ['SearchSuspiciousMessages'],
+      refetchType: 'none',
     })
     void queryClient.invalidateQueries({
       queryKey: ['ReportOutcomeArticle', articleId],
@@ -324,10 +322,13 @@ function ReportCheckPage() {
       replace: boolean
     }) => {
       const articleId = candidate.node.id
-      // Already answered: nothing to write.
-      if (candidate.node.replyCount) return { articleId, requested: false }
-      // Nobody has answered it yet: register the demand. That +1 is what tells
-      // volunteers which messages people are actually asking about.
+      // Already answered and nothing to add: no write. With a reason, the +1
+      // still goes in, so the reporter's words reach the volunteers.
+      if (candidate.node.replyCount && !reason.trim()) {
+        return { articleId, requested: false }
+      }
+      // Register the demand. That +1 is what tells volunteers which messages
+      // people are actually asking about.
       await requestFactCheck({ data: { articleId, reason } })
       invalidateAfterWrite(articleId)
       return { articleId, requested: true }
@@ -354,18 +355,21 @@ function ReportCheckPage() {
   // text; the +1 is per user). Both replace this entry, since the reporter
   // never saw a choice here; Back goes to the form.
   const top = search.data?.[0]
-  const identical = !!top && top.similarity >= SIMILARITY_THRESHOLD
+  const identical = !!top && top.identical
   const nothingFound = search.data?.length === 0
   const autoPick = identical && search.data?.length === 1 ? top : undefined
   const decided = useRef(false)
+  // A failed refetch keeps the old data, so that doesn't count either.
+  const searchedNow =
+    search.isFetchedAfterMount && !search.isFetching && !search.isError
   useEffect(() => {
-    if (decided.current) return
+    if (decided.current || !searchedNow) return
     if (nothingFound) fileNew.mutate({ replace: true })
     else if (autoPick)
       pickCandidate.mutate({ candidate: autoPick, replace: true })
     else return
     decided.current = true
-  }, [nothingFound, autoPick, fileNew, pickCandidate])
+  }, [searchedNow, nothingFound, autoPick, fileNew, pickCandidate])
 
   const busy = pickCandidate.isPending || fileNew.isPending
 
@@ -437,7 +441,7 @@ function CandidateView({
           有人回報過類似的訊息
         </h2>
         <p className="text-type-body-s text-text-secondary">
-          可以先點「查看這則訊息」確認內容。選了「就是這則」之後，如果還沒有人回應，會幫你一起請求查核。
+          可以先點「查看這則訊息」確認內容。選了「就是這則」之後，如果還沒有人回應，或你有填理由，會幫你一起請求查核。
         </p>
       </div>
       {candidates.map((candidate) => (

@@ -210,7 +210,9 @@ function OutcomeView({
       }
       subtitle={
         hasReplies
-          ? '查核結果在下面，你也可以留下看法。'
+          ? outcome === 'requested'
+            ? '查核結果在下面。你的理由也已經轉給查核志工。'
+            : '查核結果在下面，你也可以留下看法。'
           : outcome === 'requested'
             ? `目前還沒有查核結論，已經幫你一起請求查核了——現在有 ${article.replyRequestCount ?? 0} 個人在等答案。`
             : `目前還沒有查核結論，現在有 ${article.replyRequestCount ?? 0} 個人在等答案。`

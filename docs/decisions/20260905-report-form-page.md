@@ -109,14 +109,16 @@ The flow follows the designer's Penpot boards (page "AI"), one route per screen:
   search server function is a POST: a GET puts its input in the request URL). History state exists only in
   the browser, so the route is `ssr: false`, and its `beforeLoad` redirects to `/report` when the
   state is missing — refresh and Back keep it, a fresh tab or pasted link goes to the form.
-  Picking a candidate nobody has answered records a +1 (`CreateOrUpdateReplyRequest`, with the
-  reason); one with replies needs no write. **Zero results files the article at once** (02 →
-  03-第一個發現他, as in Penpot), as does 都不是. Identical messages follow rumors-line-bot: the
-  candidates are re-sorted by Dice similarity (`string-similarity`) between the
-  whitespace-stripped texts, and at 0.95 or above the top one counts as the same message — 都不是
-  is hidden, and when it is the only candidate it is picked for the reporter (+1 only if it has
-  no replies). The automatic filing and pick fire once per visit (a failure offers 再試一次) and
-  replace the check entry, so Back from their outcome goes to the form, now empty. After a manual
+  Picking a candidate records a +1 (`CreateOrUpdateReplyRequest`, with the reason) unless it
+  already has replies and the reason is blank — a reason typed is never dropped. **Zero results
+  files the article at once** (02 → 03-第一個發現他, as in Penpot), as does 都不是. Identical
+  messages mirror rumors-line-bot: a candidate whose text equals the link once whitespace is
+  removed is the same message, listed first; 都不是 is then hidden, and a lone identical
+  candidate is picked for the reporter. The LINE bot uses string similarity ≥ 0.95, which suits
+  prose; for bare links only exact equality is safe, because two links differing by one
+  character of a post id are different posts yet score about 0.96 or more. The automatic filing
+  and pick act only on a search made during this visit, fire once per visit (a failure offers
+  再試一次) and replace the check entry, so Back from their outcome goes to the form, now empty. After a manual
   pick or 都不是, Back returns to the candidate list; picking again there is harmless, since the
   +1 is per user and `CreateArticle` is idempotent.
 - **`/report/$articleId`** — the outcome, read fresh from Cofacts. Check passes what it did as
@@ -233,6 +235,9 @@ itself.
   messages shown instead or none at all. With none, the automatic filing reuses that article (its
   id is a hash of the text) while the outcome still says 第一個發現他. Fixing that belongs in
   rumors-api / url-resolver, not this form.
+- Bad, because reloading in the moment between a successful automatic filing and its navigation
+  re-runs the search, auto-picks the reporter's own new article and shows `requested`. The extra
+  +1 is the same user's, so it does not double-count.
 - Neutral, because attachments are not accepted yet. `CreateMediaArticle` needs a URL rumors-api
   can fetch, and cofacts.ai's upload path produces only a private artifact. A related case —
   a link rumors-api cannot read because of a login wall — is tracked in

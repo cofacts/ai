@@ -71,28 +71,29 @@ describe('searchSuspiciousMessages', () => {
     expect(candidate?.articleUrl).toBe('https://dev.cofacts.tw/article/a1')
   })
 
-  test('ranks candidates by text similarity to the link, as the LINE bot does', async () => {
-    // Search ranks by relevance score; the link's own article can come second.
+  test('puts the identical message first, and only an exact match counts', async () => {
+    // Search ranks by relevance score; the link's own article can come later.
+    const link = 'https://www.facebook.com/somepage/posts/987654321012345/'
     mockedExec.mockResolvedValueOnce({
       ListArticles: {
         edges: [
-          { node: { id: 'other', text: 'https://example.com/other-post' } },
-          { node: { id: 'same', text: 'https://example.com/a\n' } },
+          // One character off: a different post, not the same message.
+          { node: { id: 'near', text: link.replace('345/', '346/') } },
           { node: { id: 'image', text: null } },
+          // Whitespace around and inside does not make it different.
+          { node: { id: 'same', text: ` ${link}\n` } },
         ],
       },
     })
 
-    const candidates = await searchSuspiciousMessages({
-      data: 'https://example.com/a',
-    })
+    const candidates = await searchSuspiciousMessages({ data: link })
 
-    expect(candidates.map((c) => c.node.id)).toEqual(['same', 'other', 'image'])
-    // Whitespace is ignored, so the same link scores 1.
-    expect(candidates[0]?.similarity).toBe(1)
-    expect(candidates[1]?.similarity).toBeGreaterThan(0)
-    expect(candidates[1]?.similarity).toBeLessThan(0.95)
-    expect(candidates[2]?.similarity).toBe(0)
+    // Identical first; the rest keep rumors-api's order.
+    expect(candidates.map((c) => [c.node.id, c.identical])).toEqual([
+      ['same', true],
+      ['near', false],
+      ['image', false],
+    ])
   })
 
   test('survives a null connection', async () => {

@@ -22,6 +22,7 @@ import { useRef, useState } from 'react'
 
 import { ReportShell } from './-components/ReportShell'
 import type { FormEvent } from 'react'
+import { NAV_LINKS } from '@/components/SiteNav'
 import { useSessionStorageDraft } from '@/hooks/useSessionStorageDraft'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError } from '@/components/ui/field'
@@ -167,7 +168,7 @@ function ReportForm() {
               : '這裡只能放一個網址，例如 https:// 開頭的連結。'}
             如果是在 LINE 上收到、沒有網址可以附，請改用{' '}
             <a
-              href="https://line.me/R/ti/p/%40cofacts"
+              href={NAV_LINKS.line.href}
               target="_blank"
               rel="noopener noreferrer"
               className="underline"
