@@ -315,12 +315,7 @@ function ReportCheckPage() {
   }
 
   const pickCandidate = useMutation({
-    mutationFn: async ({
-      candidate,
-    }: {
-      candidate: SearchCandidate
-      replace: boolean
-    }) => {
+    mutationFn: async (candidate: SearchCandidate) => {
       const articleId = candidate.node.id
       // Already answered and nothing to add: no write. With a reason, the +1
       // still goes in, so the reporter's words reach the volunteers.
@@ -333,20 +328,39 @@ function ReportCheckPage() {
       invalidateAfterWrite(articleId)
       return { articleId, requested: true }
     },
-    onSuccess: ({ articleId, requested }, { replace }) =>
-      showOutcome(articleId, requested ? 'requested' : 'matched', replace),
   })
 
   // The one way a new article gets filed: straight after a search that found
   // nothing, or when the reporter says none of the candidates is theirs.
   const fileNew = useMutation({
-    mutationFn: (_: { replace: boolean }) =>
-      createArticleReport({ data: { url, reason } }),
-    onSuccess: ({ articleId }, { replace }) => {
-      invalidateAfterWrite(articleId)
-      return showOutcome(articleId, 'created', replace)
-    },
+    mutationFn: () => createArticleReport({ data: { url, reason } }),
+    // On the mutation itself: the caches go stale whether or not the reporter
+    // is still here.
+    onSuccess: ({ articleId }) => invalidateAfterWrite(articleId),
   })
+
+  // Showing the outcome clears the shared draft and navigates, so it must only
+  // happen while this page is still open. A reporter who goes Back while a
+  // write is in flight and starts another report would otherwise lose the new
+  // draft and be pulled to the old article when the old write finishes.
+  // Callbacks passed to mutate() run only while this component is subscribed;
+  // the ones on useMutation() run regardless. The write itself still lands.
+  function pick(candidate: SearchCandidate, replace: boolean) {
+    pickCandidate.mutate(candidate, {
+      onSuccess: ({ articleId, requested }) =>
+        void showOutcome(
+          articleId,
+          requested ? 'requested' : 'matched',
+          replace,
+        ),
+    })
+  }
+  function file(replace: boolean) {
+    fileNew.mutate(undefined, {
+      onSuccess: ({ articleId }) =>
+        void showOutcome(articleId, 'created', replace),
+    })
+  }
 
   // Two cases decide for the reporter, as in rumors-line-bot: nothing found
   // files it now (02 → 03-第一個發現他), and a lone identical candidate is
@@ -364,9 +378,8 @@ function ReportCheckPage() {
     search.isFetchedAfterMount && !search.isFetching && !search.isError
   useEffect(() => {
     if (decided.current || !searchedNow) return
-    if (nothingFound) fileNew.mutate({ replace: true })
-    else if (autoPick)
-      pickCandidate.mutate({ candidate: autoPick, replace: true })
+    if (nothingFound) file(true)
+    else if (autoPick) pick(autoPick, true)
     else return
     decided.current = true
   }, [searchedNow, nothingFound, autoPick, fileNew, pickCandidate])
@@ -385,8 +398,8 @@ function ReportCheckPage() {
             search.isError
               ? void search.refetch()
               : autoPick
-                ? pickCandidate.mutate({ candidate: autoPick, replace: true })
-                : fileNew.mutate({ replace: true })
+                ? pick(autoPick, true)
+                : file(true)
           }
         >
           再試一次
@@ -403,7 +416,7 @@ function ReportCheckPage() {
           candidates={search.data}
           onPick={(candidate) => {
             fileNew.reset()
-            pickCandidate.mutate({ candidate, replace: false })
+            pick(candidate, false)
           }}
           // An identical message is listed: it is the one (rumors-line-bot
           // hides "none of these" the same way).
@@ -412,7 +425,7 @@ function ReportCheckPage() {
               ? undefined
               : () => {
                   pickCandidate.reset()
-                  fileNew.mutate({ replace: false })
+                  file(false)
                 }
           }
           busy={busy}
