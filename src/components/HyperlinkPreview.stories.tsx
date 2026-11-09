@@ -1,3 +1,5 @@
+import { expect, within } from 'storybook/test'
+
 import { viewportOptions } from '../../.storybook/viewports'
 import { HyperlinkPreview } from './HyperlinkPreview'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
@@ -38,5 +40,13 @@ export const UrlOnly: Story = {
     hyperlink: {
       url: 'https://www.kaineng.com.tw/knowledge-bedridden-care/?utm_source=line&utm_medium=share&utm_campaign=a-very-long-campaign-name',
     },
+  },
+}
+
+/** The url is user-submitted: a non-http(s) one is shown as text, never as a link. */
+export const UnsafeUrl: Story = {
+  args: { hyperlink: { url: 'javascript:alert(1)', title: 'Not a link' } },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).queryByRole('link')).toBeNull()
   },
 }
