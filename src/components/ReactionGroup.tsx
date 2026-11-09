@@ -1,136 +1,147 @@
 import { Toggle as TogglePrimitive } from '@base-ui/react/toggle'
-import { useState } from 'react'
 
 import type { MaterialSymbol } from '@/components/icons/material-symbols'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
-export type Reaction = 'up' | 'down' | null
+/** rumors-api `FeedbackVote`. NEUTRAL takes a vote back. */
+export type ReplyVote = 'UPVOTE' | 'DOWNVOTE' | 'NEUTRAL'
+
+export type ReactionGroupProps = {
+  /**
+   * Penpot Type. `reason` ends with 看理由 (the reasons other users gave); `report` ends with a
+   * flag button for 檢舉.
+   */
+  type?: 'reason' | 'report'
+  /** 有幫助 votes. */
+  positiveCount: number
+  /** 沒幫助 votes. */
+  negativeCount: number
+  /** The current user's vote; null or undefined when they haven't voted. */
+  ownVote?: 'UPVOTE' | 'DOWNVOTE' | null
+  /**
+   * Pressing a vote sends it; pressing the vote you already gave sends NEUTRAL. The parent owns
+   * the vote state: the buttons show `ownVote`, not what was pressed.
+   */
+  onVote?: (vote: ReplyVote) => void
+  /** 看理由 (`type="reason"`). */
+  onShowReasons?: () => void
+  /** The flag button (`type="report"`). */
+  onReport?: () => void
+  /** Disables both vote buttons (R5), e.g. while a vote is being saved. */
+  voteDisabled?: boolean
+  className?: string
+}
 
 /**
- * Penpot Feedback/ReactionGroup: 讚 and 倒讚 with their counts, joined to a trailing action
- * (Type = reason: 看理由, Type = report: a flag icon, solid while pressed).
+ * Every segment: 36px high (a min-height, so larger text grows it), control border, base
+ * background; hover raises it. Full width with equal segments on mobile (ReplyCard-Mobile), its
+ * own width from `md` up.
  *
- * 讚 and 倒讚 are toggles (`<button aria-pressed>`), and at most one is pressed: pressing one
- * releases the other, pressing it again releases it. Like the 收藏 Toggle, an unpressed icon is
- * the outline, a pressed one is solid in the brand color (State = Up / Down).
- *
- * The three segments share their borders: each one has the full border and overlaps the previous
- * one by 1px, so the line between them stays 1px. Later segments paint over earlier ones, so the
+ * The segments share their borders: each one has the full border and overlaps the previous one
+ * by 1px, so the line between them stays 1px. Later segments paint over earlier ones, so the
  * focused segment is raised (`focus-visible:z-10`) to keep its focus ring whole.
  */
-export function ReactionGroup({
-  helpfulCount,
-  unhelpfulCount,
-  value,
-  defaultValue = null,
-  onValueChange,
-  action,
-  onAction,
-  className,
-}: {
-  helpfulCount: number
-  unhelpfulCount: number
-  /** Controlled: which one is pressed. */
-  value?: Reaction
-  /** Uncontrolled: which one starts pressed. */
-  defaultValue?: Reaction
-  onValueChange?: (value: Reaction) => void
-  /** reason = 看理由 (Penpot Type = reason); report = flag button (Type = report). */
-  action: 'reason' | 'report'
-  onAction?: () => void
-  className?: string
-}) {
-  const [uncontrolled, setUncontrolled] = useState<Reaction>(defaultValue)
-  const current = value === undefined ? uncontrolled : value
+const segment =
+  'relative inline-flex min-h-[36px] flex-1 shrink cursor-pointer items-center justify-center border border-border-control bg-surface-base py-0 text-type-ui-m whitespace-nowrap text-text-primary not-first:-ml-px first:rounded-l-radius-5 last:rounded-r-radius-5 hover:bg-surface-raised focus-visible:z-10 disabled:pointer-events-none disabled:opacity-50 md:flex-none md:shrink-0'
 
-  const choose = (reaction: 'up' | 'down', pressed: boolean) => {
-    const next = pressed ? reaction : null
-    if (value === undefined) setUncontrolled(next)
-    onValueChange?.(next)
-  }
+/**
+ * Penpot Feedback/ReactionGroup: 有幫助 / 沒幫助 with their counts, then
+ * 看理由 or 檢舉. Presentational only: the reasons list, the reason form after a vote and the
+ * report dialog belong to `ReplyFeedback`, which wraps this and handles the callbacks.
+ *
+ * 有幫助 and 沒幫助 are toggles (`<button aria-pressed>`), and at most one is pressed. Like the
+ * 收藏 Toggle, an unpressed icon is the outline and a pressed one is solid in the brand color
+ * (State = Up / Down). The last segment is a plain button: it has no pressed state.
+ */
+export function ReactionGroup({
+  type = 'reason',
+  positiveCount,
+  negativeCount,
+  ownVote,
+  onVote,
+  onShowReasons,
+  onReport,
+  voteDisabled,
+  className,
+}: ReactionGroupProps) {
+  const vote = (value: 'UPVOTE' | 'DOWNVOTE') => () =>
+    onVote?.(ownVote === value ? 'NEUTRAL' : value)
 
   return (
     <div
       role="group"
-      aria-label="這則回應有幫助嗎"
+      aria-label="評價這則回應"
       data-slot="reaction-group"
-      className={cn('inline-flex', className)}
+      className={cn('flex w-full md:inline-flex md:w-auto', className)}
     >
-      <ReactionToggle
+      <VoteToggle
         icon="thumb_up"
-        label="讚"
-        count={helpfulCount}
-        pressed={current === 'up'}
-        onPressedChange={(pressed) => choose('up', pressed)}
-        className="rounded-l-radius-5"
+        label="有幫助"
+        count={positiveCount}
+        pressed={ownVote === 'UPVOTE'}
+        onPressedChange={vote('UPVOTE')}
+        disabled={voteDisabled}
       />
-      <ReactionToggle
+      <VoteToggle
         icon="thumb_down"
-        label="倒讚"
-        count={unhelpfulCount}
-        pressed={current === 'down'}
-        onPressedChange={(pressed) => choose('down', pressed)}
-        className="-ml-px"
+        label="沒幫助"
+        count={negativeCount}
+        pressed={ownVote === 'DOWNVOTE'}
+        onPressedChange={vote('DOWNVOTE')}
+        disabled={voteDisabled}
       />
-      <button
-        type="button"
-        onClick={onAction}
-        aria-label={action === 'report' ? '檢舉這則回應' : undefined}
-        className={cn(
-          segment,
-          'group/action -ml-px rounded-r-radius-5 px-spacing-12',
-        )}
-      >
-        {action === 'report' ? (
-          // While pressed, the flag turns solid.
-          <>
-            <MaterialIcon
-              name="flag_2"
-              className="group-active/action:hidden"
-            />
-            <MaterialIcon
-              name="flag_2"
-              filled
-              className="hidden group-active/action:inline-flex"
-            />
-          </>
-        ) : (
-          '看理由'
-        )}
-      </button>
+      {type === 'reason' ? (
+        <button
+          type="button"
+          className={cn(segment, 'px-spacing-12')}
+          onClick={onShowReasons}
+        >
+          看理由
+        </button>
+      ) : (
+        <button
+          type="button"
+          aria-label="檢舉"
+          className={cn(segment, 'group/action px-spacing-12')}
+          onClick={onReport}
+        >
+          {/* While pressed, the flag turns solid. */}
+          <MaterialIcon name="flag_2" className="group-active/action:hidden" />
+          <MaterialIcon
+            name="flag_2"
+            filled
+            className="hidden group-active/action:inline-flex"
+          />
+        </button>
+      )}
     </div>
   )
 }
 
-/** One segment: 36px high, control border, base background; hover raises it. */
-const segment =
-  'relative focus-visible:z-10 inline-flex h-[36px] shrink-0 items-center border border-border-control bg-surface-base text-type-ui-m whitespace-nowrap text-text-primary hover:bg-surface-raised'
-
-function ReactionToggle({
+function VoteToggle({
   icon,
   label,
   count,
   pressed,
   onPressedChange,
-  className,
+  disabled,
 }: {
   icon: MaterialSymbol
   label: string
   count: number
   pressed: boolean
-  onPressedChange: (pressed: boolean) => void
-  className?: string
+  onPressedChange: () => void
+  disabled?: boolean
 }) {
   return (
     <TogglePrimitive
       pressed={pressed}
       onPressedChange={onPressedChange}
-      aria-label={`${label} ${count}`}
+      disabled={disabled}
       className={cn(
         segment,
         'group/reaction gap-spacing-4 pr-spacing-12 pl-spacing-8',
-        className,
       )}
     >
       <MaterialIcon
@@ -142,6 +153,7 @@ function ReactionToggle({
         filled
         className="hidden text-icon-brand group-data-pressed/reaction:inline-flex"
       />
+      <span className="sr-only">{label}</span>
       {count}
     </TogglePrimitive>
   )

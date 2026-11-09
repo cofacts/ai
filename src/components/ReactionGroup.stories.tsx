@@ -1,71 +1,87 @@
 import { expect, fn, userEvent, within } from 'storybook/test'
 
+import { viewportOptions } from '../../.storybook/viewports'
 import { ReactionGroup } from './ReactionGroup'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
 const meta = {
   title: 'components/ReactionGroup',
   component: ReactionGroup,
-  parameters: { penpot: { component: 'Feedback/ReactionGroup' } },
+  parameters: {
+    penpot: { component: 'Feedback/ReactionGroup' },
+    viewport: { options: viewportOptions },
+  },
   args: {
-    helpfulCount: 100,
-    unhelpfulCount: 100,
-    action: 'reason',
-    onValueChange: fn(),
-    onAction: fn(),
+    type: 'reason',
+    positiveCount: 100,
+    negativeCount: 100,
+    ownVote: null,
+    onVote: fn(),
+    onShowReasons: fn(),
+    onReport: fn(),
   },
 } satisfies Meta<typeof ReactionGroup>
 
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** Type = reason, State = Default. */
-export const Default: Story = {}
-
-/** State = Up. */
-export const Up: Story = { args: { defaultValue: 'up' } }
-
-/** State = Down. */
-export const Down: Story = { args: { defaultValue: 'down' } }
-
-/** Type = report: the trailing action is a flag button. */
-export const Report: Story = { args: { action: 'report' } }
-
-/** Every Type × State, as on Penpot's Feedback board. */
-export const All: Story = {
-  render: (args) => (
-    <div className="grid w-fit grid-cols-3 gap-spacing-16">
-      {(['reason', 'report'] as const).map((action) =>
-        ([null, 'up', 'down'] as const).map((value) => (
-          <ReactionGroup
-            key={`${action}-${value}`}
-            {...args}
-            action={action}
-            defaultValue={value}
-          />
-        )),
-      )}
-    </div>
-  ),
-}
-
-/** Pressing 讚 then 倒讚 moves the choice; pressing 倒讚 again clears it. */
-export const Toggling: Story = {
+/** Penpot Type = reason. Pressing a vote sends it. */
+export const Reason: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
-    const up = canvas.getByRole('button', { name: '讚 100' })
-    const down = canvas.getByRole('button', { name: '倒讚 100' })
-
-    await userEvent.click(up)
-    await expect(up).toHaveAttribute('aria-pressed', 'true')
-    await expect(args.onValueChange).toHaveBeenLastCalledWith('up')
-
-    await userEvent.click(down)
+    const up = canvas.getByRole('button', { name: '有幫助 100' })
     await expect(up).toHaveAttribute('aria-pressed', 'false')
-    await expect(down).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(up)
+    await expect(args.onVote).toHaveBeenLastCalledWith('UPVOTE')
+    await userEvent.click(canvas.getByRole('button', { name: '看理由' }))
+    await expect(args.onShowReasons).toHaveBeenCalled()
+  },
+}
 
-    await userEvent.click(down)
-    await expect(down).toHaveAttribute('aria-pressed', 'false')
-    await expect(args.onValueChange).toHaveBeenLastCalledWith(null)
+/** Penpot Type = report: the last segment is the flag, 檢舉. */
+export const Report: Story = {
+  args: { type: 'report' },
+  play: async ({ canvasElement, args }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole('button', { name: '檢舉' }),
+    )
+    await expect(args.onReport).toHaveBeenCalled()
+  },
+}
+
+/**
+ * Not in Penpot: the user voted 有幫助. Base/Toggle active (strong border, solid icon).
+ * Pressing it again takes the vote back.
+ */
+export const VotedUp: Story = {
+  args: { ownVote: 'UPVOTE', positiveCount: 101 },
+  play: async ({ canvasElement, args }) => {
+    const up = within(canvasElement).getByRole('button', {
+      name: '有幫助 101',
+    })
+    await expect(up).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(up)
+    await expect(args.onVote).toHaveBeenLastCalledWith('NEUTRAL')
+  },
+}
+
+/** Not in Penpot: the user voted 沒幫助; pressing 有幫助 switches the vote. */
+export const VotedDown: Story = {
+  args: { ownVote: 'DOWNVOTE', negativeCount: 101 },
+  play: async ({ canvasElement, args }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole('button', { name: '有幫助 100' }),
+    )
+    await expect(args.onVote).toHaveBeenLastCalledWith('UPVOTE')
+  },
+}
+
+/** Votes disabled (R5: default look at 50% opacity, `disabled`). */
+export const VoteDisabled: Story = {
+  args: { voteDisabled: true },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole('button', { name: '有幫助 100' }),
+    ).toBeDisabled()
   },
 }
