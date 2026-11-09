@@ -21,16 +21,13 @@ export function HyperlinkPreview({
   hyperlink: Hyperlink
   className?: string
 }) {
-  return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn(
-        'flex w-full flex-col gap-spacing-8 rounded-radius-10 bg-surface-raised p-spacing-20',
-        className,
-      )}
-    >
+  const classes = cn(
+    'flex w-full flex-col gap-spacing-8 rounded-radius-10 bg-surface-raised p-spacing-20',
+    className,
+  )
+  // The url is user-submitted. Anything but http(s) (javascript:, data:) shows as text, not a link.
+  const content = (
+    <>
       {title && (
         <span className="text-type-heading-xs text-text-primary">{title}</span>
       )}
@@ -46,6 +43,23 @@ export function HyperlinkPreview({
           {url}
         </span>
       </span>
-    </a>
+    </>
   )
+  return isHttpUrl(url) ? (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={classes}>
+      {content}
+      <span className="sr-only">（另開新分頁）</span>
+    </a>
+  ) : (
+    <div className={classes}>{content}</div>
+  )
+}
+
+function isHttpUrl(url: string) {
+  try {
+    const { protocol } = new URL(url)
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
 }

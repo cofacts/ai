@@ -1,3 +1,5 @@
+import { expect, within } from 'storybook/test'
+
 import { desktop, mobile, viewportOptions } from '../../.storybook/viewports'
 import { HyperlinkPreview } from './HyperlinkPreview'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
@@ -48,4 +50,12 @@ export const UrlOnly: Story = {
 /** Keyboard focus, from Storybook pseudo-states. */
 export const FocusVisible: Story = {
   parameters: { pseudo: { focusVisible: true } },
+}
+
+/** The url is user-submitted: a non-http(s) one is shown as text, never as a link. */
+export const UnsafeUrl: Story = {
+  args: { hyperlink: { url: 'javascript:alert(1)', title: 'Not a link' } },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).queryByRole('link')).toBeNull()
+  },
 }
