@@ -48,10 +48,13 @@ const segment =
  */
 const voteSegment = cn(segment, 'min-h-[36px] pl-spacing-8')
 
-/** The last segment (看理由 or the flag) is a plain button with Base/Toggle's box. */
+/**
+ * The last segment (看理由 or the flag) is a plain button with Base/Toggle's box and hover. Keep
+ * it in step with `Toggle` in `ui/toggle.tsx`.
+ */
 const lastSegment = cn(
   segment,
-  'inline-flex min-h-[36px] items-center justify-center gap-spacing-8 border border-border-control px-spacing-12 py-0 text-type-ui-m whitespace-nowrap text-text-primary',
+  'inline-flex min-h-[36px] items-center justify-center gap-spacing-8 border border-border-control px-spacing-12 py-0 text-type-ui-m whitespace-nowrap text-text-primary hover:bg-surface-base',
 )
 
 /**
