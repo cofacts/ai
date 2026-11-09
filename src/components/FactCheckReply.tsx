@@ -33,6 +33,11 @@ export type FactCheckReplyProps = {
   text: string
   /** When the reply was written (rumors-api `createdAt`, ISO string). 「回應於 N 天前」. */
   createdAt: string | Date
+  /**
+   * The time 「N 天前」 counts from. The route loader takes it once and passes it down, so the
+   * server render and the browser agree; `new Date()` here would differ between them.
+   */
+  now: string | Date
   /** How many messages use this reply. 「被引用 N 次」. */
   citationCount: number
   /** with-link: the reference text. URLs in it become links. */
@@ -71,6 +76,7 @@ export function FactCheckReply({
   author,
   text,
   createdAt,
+  now,
   citationCount,
   reference,
   hyperlinks,
@@ -146,12 +152,8 @@ export function FactCheckReply({
             {hasCreatedAt && (
               <>
                 回應於{' '}
-                <time
-                  dateTime={created.toISOString()}
-                  // The server and the browser can land on either side of a unit boundary.
-                  suppressHydrationWarning
-                >
-                  {formatTimeAgo(created)}
+                <time dateTime={created.toISOString()}>
+                  {formatTimeAgo(created, new Date(now))}
                 </time>
                 ｜
               </>
