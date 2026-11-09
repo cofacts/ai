@@ -1,5 +1,5 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
-import { Toggle, toggleBox } from '@/components/ui/toggle'
+import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
 
 /** rumors-api `FeedbackVote`. NEUTRAL takes a vote back. */
@@ -48,11 +48,15 @@ const segment =
  */
 const voteSegment = cn(segment, 'min-h-[36px] pl-spacing-8')
 
-/** The last segment (看理由 or the flag) is a plain button with Base/Toggle's box and hover. */
+/**
+ * The last segment (看理由 or the flag) is a plain button, not a Toggle. Penpot draws it as a
+ * plain frame in the group with Base/Button (Medium, Outline) sizes: 36px tall, 12px sides, 8px
+ * gap. It has no pressed state, so it can't be a Toggle (`aria-pressed`). Penpot defines no hover
+ * for it; it gets Toggle's hover so the row reacts alike.
+ */
 const lastSegment = cn(
-  toggleBox,
+  'inline-flex min-h-[36px] shrink-0 items-center justify-center gap-spacing-8 rounded-radius-5 border border-border-control px-spacing-12 py-0 text-type-ui-m whitespace-nowrap text-text-primary hover:bg-surface-base',
   segment,
-  'min-h-[36px] justify-center gap-spacing-8',
 )
 
 /**
