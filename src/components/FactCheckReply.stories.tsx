@@ -5,6 +5,7 @@ import { FactCheckReply } from './FactCheckReply'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
 const DAY = 24 * 60 * 60 * 1000
+const NOW = Date.parse('2026-11-06T12:00:00+08:00')
 
 /** Penpot's sample copy. */
 const longText =
@@ -41,7 +42,9 @@ const meta = {
       level: 11,
     },
     text: longText,
-    createdAt: new Date(Date.now() - DAY - 60_000).toISOString(),
+    // Fixed, so 「1 天前」 doesn't change with the day the story is opened.
+    createdAt: new Date(NOW - DAY - 60_000).toISOString(),
+    now: new Date(NOW).toISOString(),
     citationCount: 2,
     feedback: { positiveCount: 100, negativeCount: 100, ownVote: null },
     onVote: fn(),
