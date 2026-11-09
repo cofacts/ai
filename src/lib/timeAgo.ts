@@ -22,7 +22,11 @@ const rtf = new Intl.RelativeTimeFormat('zh-TW', { numeric: 'always' })
 export function formatTimeAgo(date: Date | string, now: Date = new Date()) {
   const elapsed = Math.max(0, now.getTime() - new Date(date).getTime())
   for (const [unit, ms] of UNITS) {
-    if (elapsed >= ms) return rtf.format(-Math.floor(elapsed / ms), unit)
+    if (elapsed >= ms) {
+      const count = Math.floor(elapsed / ms)
+      // 12 months of 30 days is 360 days, short of a 365-day year: stop at 11 so it never reads 「12 個月前」.
+      return rtf.format(-(unit === 'month' ? Math.min(count, 11) : count), unit)
+    }
   }
   return rtf.format(-Math.floor(elapsed / SECOND), 'second')
 }

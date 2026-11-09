@@ -15,6 +15,12 @@ describe('formatTimeAgo', () => {
     expect(formatTimeAgo(ago(800 * DAY), now)).toBe('2 年前')
   })
 
+  it('never reads 12 個月前: the month count stops at 11 until a full year', () => {
+    expect(formatTimeAgo(ago(359 * DAY), now)).toBe('11 個月前')
+    expect(formatTimeAgo(ago(364 * DAY), now)).toBe('11 個月前')
+    expect(formatTimeAgo(ago(365 * DAY), now)).toBe('1 年前')
+  })
+
   it('says 1 天前, not 昨天', () => {
     expect(formatTimeAgo(ago(DAY + HOUR), now)).toBe('1 天前')
   })
