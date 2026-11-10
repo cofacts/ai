@@ -5,7 +5,8 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
- * Penpot Base/Toggle (e.g. 收藏). `<button aria-pressed>`; hover shows the solid icon as a
+ * [Penpot Base/Toggle](https://design.penpot.app/?screen=workspace&team-id=1710bc7f-8249-8127-8007-d006475d6947&file-id=81f57451-85cc-819d-8008-71f291481dd2&page-id=86907e95-1cb8-8122-8008-4f4d51befa98&layout=layers&board-id=d3600d97-74cb-80be-8008-50ec79e9e8f9)
+ * (e.g. 收藏). `<button aria-pressed>`; hover shows the solid icon as a
  * preview; pressed shows a strong border and the solid icon in brand yellow (`icon-brand`).
  *
  * Penpot draws the 1px border inside the padding (inner stroke): 32px tall with text only, 36px
