@@ -4,6 +4,7 @@ import { print } from 'graphql'
 import {
   createArticleReport,
   requestFactCheck,
+  sameLink,
   searchSuspiciousMessages,
 } from '../check'
 import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
@@ -96,6 +97,29 @@ describe('searchSuspiciousMessages', () => {
     ])
   })
 
+  test('ignores the case of the scheme and host, not of the rest', async () => {
+    // The form accepts `Https://`; scheme and host are case-insensitive, but a
+    // share id is not.
+    const link = 'https://www.facebook.com/share/p/1HSNRpimmH/'
+    mockedExec.mockResolvedValueOnce({
+      ListArticles: {
+        edges: [
+          { node: { id: 'path-case', text: link.replace('1HSN', '1hsn') } },
+          { node: { id: 'same', text: link } },
+        ],
+      },
+    })
+
+    const candidates = await searchSuspiciousMessages({
+      data: 'Https://WWW.Facebook.COM/share/p/1HSNRpimmH/',
+    })
+
+    expect(candidates.map((c) => [c.node.id, c.identical])).toEqual([
+      ['same', true],
+      ['path-case', false],
+    ])
+  })
+
   test('survives a null connection', async () => {
     mockedExec.mockResolvedValueOnce({ ListArticles: null })
     expect(await searchSuspiciousMessages({ data: 'foo' })).toEqual([])
@@ -182,5 +206,18 @@ describe('createArticleReport', () => {
     await expect(
       createArticleReport({ data: { url: 'https://example.com/a' } }),
     ).rejects.toThrowError(/article id/i)
+  })
+})
+
+describe('sameLink', () => {
+  test.each([
+    ['Https://WWW.Example.COM/A?B=C', 'https://www.example.com/A?B=C'],
+    [' https://example.com/a \n', 'https://example.com/a'],
+    // Only the host part of the authority: userinfo is case-sensitive.
+    ['HTTP://User:Pass@Example.COM/x', 'http://User:Pass@example.com/x'],
+    // Not a link: whitespace removed, nothing else touched.
+    ['Not A Link', 'NotALink'],
+  ])('%j → %j', (input, expected) => {
+    expect(sameLink(input)).toBe(expected)
   })
 })

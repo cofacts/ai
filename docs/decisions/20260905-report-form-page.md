@@ -113,12 +113,15 @@ The flow follows the designer's Penpot boards (page "AI"), one route per screen:
   already has replies and the reason is blank — a reason typed is never dropped. **Zero results
   files the article at once** (02 → 03-第一個發現他, as in Penpot), as does 都不是. Identical
   messages mirror rumors-line-bot: a candidate whose text equals the link once whitespace is
-  removed is the same message, listed first; 都不是 is then hidden, and a lone identical
+  removed and the scheme and host are lowercased (both case-insensitive; the path is not) is
+  the same message, listed first; 都不是 is then hidden, and a lone identical
   candidate is picked for the reporter. The LINE bot uses string similarity ≥ 0.95, which suits
   prose; for bare links only exact equality is safe, because two links differing by one
   character of a post id are different posts yet score about 0.96 or more. The automatic filing
-  and pick act only on a search made during this visit, fire once per visit (a failure offers
-  再試一次) and replace the check entry, so Back from their outcome goes to the form, now empty. After a manual
+  and pick act only on the first successful search of this visit (a failure offers 再試一次) and
+  replace the check entry, so Back from their outcome goes to the form, now empty. That first
+  search decides whether or not it acts: once it has shown candidates, nothing later files or
+  +1s for the reporter, and the candidates do not refetch on returning to the tab. After a manual
   pick or 都不是, Back returns to the candidate list; picking again there is harmless, since the
   +1 is per user and `CreateArticle` is idempotent.
 - **`/report/$articleId`** — the outcome, read fresh from Cofacts. Check passes what it did as

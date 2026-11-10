@@ -34,7 +34,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 import { ReportShell } from './-components/ReportShell'
 import { REASON_DRAFT, URL_DRAFT } from './-lib'
@@ -100,13 +100,30 @@ export type SearchCandidate = NonNullable<
    */
   articleUrl: string
   /**
-   * Its text is the searched link, once whitespace is removed: the same
-   * message. Mirrors rumors-line-bot's identical-message handling (hide
+   * Its text is the searched link, once both are normalised by `sameLink`: the
+   * same message. Mirrors rumors-line-bot's identical-message handling (hide
    * 都不是; pick a lone identical candidate), but by exact equality rather than
    * its 0.95 string similarity — two links that differ by one character are
    * different posts. Identical candidates come first.
    */
   identical: boolean
+}
+
+/**
+ * A link reduced to what tells two links apart: whitespace removed, and the
+ * scheme and host lowercased, since both are case-insensitive (the form accepts
+ * `Https://`). The rest stays as typed: paths and queries are case-sensitive,
+ * and ids such as Facebook's `share/p/1HSNRpimmH` depend on it.
+ */
+export function sameLink(text: string): string {
+  const compact = text.replace(/\s/g, '')
+  const match = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#]*)(.*)$/i.exec(compact)
+  if (!match) return compact
+  const [, scheme = '', authority = '', rest = ''] = match
+  // Lowercase the host only: userinfo before an `@` is case-sensitive.
+  const at = authority.lastIndexOf('@')
+  const host = authority.slice(at + 1).toLowerCase()
+  return scheme.toLowerCase() + authority.slice(0, at + 1) + host + rest
 }
 
 // POST, not GET: a GET server function puts its input in the request URL, and
@@ -152,12 +169,12 @@ export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
         minimumShouldMatch: BARE_LINK_MIN_SHOULD_MATCH,
       },
     )
-    const strip = (text: string) => text.replace(/\s/g, '')
+    const searched = sameLink(like)
     return (data.ListArticles?.edges ?? [])
       .map((edge) => ({
         ...edge,
         articleUrl: getArticleUrl(edge.node.id),
-        identical: strip(edge.node.text ?? '') === strip(like),
+        identical: sameLink(edge.node.text ?? '') === searched,
       }))
       .sort((a, b) => Number(b.identical) - Number(a.identical))
   })
@@ -283,6 +300,9 @@ function ReportCheckPage() {
     // Every visit searches afresh: the automatic steps below must never act
     // on a cached result from before the last report.
     refetchOnMount: 'always',
+    // Once the candidates are on screen they stay put: a refetch on returning
+    // to the tab could change them under the reporter.
+    refetchOnWindowFocus: false,
   })
 
   // The search counts and the article lists change with every write here.
@@ -300,19 +320,18 @@ function ReportCheckPage() {
 
   // The report is done: the form's draft goes, and the outcome screen learns
   // what happened from history state.
-  function showOutcome(
-    articleId: string,
-    outcome: ReportOutcome,
-    replace = false,
-  ) {
-    clearSessionStorageDraft(URL_DRAFT, REASON_DRAFT)
-    return navigate({
-      to: '/report/$articleId',
-      params: { articleId },
-      state: { outcome },
-      replace,
-    })
-  }
+  const showOutcome = useCallback(
+    (articleId: string, outcome: ReportOutcome, replace: boolean) => {
+      clearSessionStorageDraft(URL_DRAFT, REASON_DRAFT)
+      return navigate({
+        to: '/report/$articleId',
+        params: { articleId },
+        state: { outcome },
+        replace,
+      })
+    },
+    [navigate],
+  )
 
   const pickCandidate = useMutation({
     mutationFn: async (candidate: SearchCandidate) => {
@@ -345,29 +364,39 @@ function ReportCheckPage() {
   // draft and be pulled to the old article when the old write finishes.
   // Callbacks passed to mutate() run only while this component is subscribed;
   // the ones on useMutation() run regardless. The write itself still lands.
-  function pick(candidate: SearchCandidate, replace: boolean) {
-    pickCandidate.mutate(candidate, {
-      onSuccess: ({ articleId, requested }) =>
-        void showOutcome(
-          articleId,
-          requested ? 'requested' : 'matched',
-          replace,
-        ),
-    })
-  }
-  function file(replace: boolean) {
-    fileNew.mutate(undefined, {
-      onSuccess: ({ articleId }) =>
-        void showOutcome(articleId, 'created', replace),
-    })
-  }
+  // useMutation returns a new object every render, but its `mutate` is
+  // stable, so these are built from `mutate` and stay stable too.
+  const { mutate: mutatePick } = pickCandidate
+  const { mutate: mutateFile } = fileNew
+  const pick = useCallback(
+    (candidate: SearchCandidate, replace: boolean) =>
+      mutatePick(candidate, {
+        onSuccess: ({ articleId, requested }) =>
+          void showOutcome(
+            articleId,
+            requested ? 'requested' : 'matched',
+            replace,
+          ),
+      }),
+    [mutatePick, showOutcome],
+  )
+  const file = useCallback(
+    (replace: boolean) =>
+      mutateFile(undefined, {
+        onSuccess: ({ articleId }) =>
+          void showOutcome(articleId, 'created', replace),
+      }),
+    [mutateFile, showOutcome],
+  )
 
   // Two cases decide for the reporter, as in rumors-line-bot: nothing found
   // files it now (02 → 03-第一個發現他), and a lone identical candidate is
-  // picked. Once per visit — the ref survives StrictMode's double effect, and a
-  // repeat would be harmless anyway (CreateArticle upserts on a hash of the
-  // text; the +1 is per user). Both replace this entry, since the reporter
-  // never saw a choice here; Back goes to the form.
+  // picked. Both replace this entry, since the reporter never saw a choice
+  // here; Back goes to the form. Only the first successful search of a visit
+  // decides, whether or not it acts: once the reporter has seen candidates, a
+  // later result must not file or +1 on their behalf. The ref survives
+  // StrictMode's double effect. A failed automatic step is retried by hand
+  // (再試一次), not by this effect.
   const top = search.data?.[0]
   const identical = !!top && top.identical
   const nothingFound = search.data?.length === 0
@@ -378,11 +407,10 @@ function ReportCheckPage() {
     search.isFetchedAfterMount && !search.isFetching && !search.isError
   useEffect(() => {
     if (decided.current || !searchedNow) return
+    decided.current = true
     if (nothingFound) file(true)
     else if (autoPick) pick(autoPick, true)
-    else return
-    decided.current = true
-  }, [searchedNow, nothingFound, autoPick, fileNew, pickCandidate])
+  }, [searchedNow, nothingFound, autoPick, file, pick])
 
   const busy = pickCandidate.isPending || fileNew.isPending
 
