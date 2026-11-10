@@ -5,8 +5,8 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
- * Penpot Base/Toggle (e.g. 收藏). `<button aria-pressed>`; pressed shows a strong border and the
- * icon's solid version in brand yellow (bookmark → filled bookmark with `icon-brand`).
+ * Penpot Base/Toggle (e.g. 收藏). `<button aria-pressed>`; hover shows the solid icon as a
+ * preview; pressed shows a strong border and the solid icon in brand yellow (`icon-brand`).
  *
  * Penpot draws the 1px border inside the padding (inner stroke): 32px tall with text only, 36px
  * with an icon. A CSS border sits outside the padding, so the height is a min-height with no
@@ -35,7 +35,12 @@ function Toggle({
         <>
           <MaterialIcon
             name={icon}
-            className="group-data-pressed/toggle:hidden"
+            className="group-hover/toggle:hidden group-data-pressed/toggle:hidden"
+          />
+          <MaterialIcon
+            name={icon}
+            filled
+            className="hidden group-hover/toggle:inline-flex group-data-pressed/toggle:hidden"
           />
           <MaterialIcon
             name={icon}

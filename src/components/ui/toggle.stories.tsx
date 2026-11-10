@@ -12,6 +12,9 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {}
+export const Hover: Story = {
+  parameters: { pseudo: { hover: true } },
+}
 export const Pressed: Story = { args: { defaultPressed: true } }
 export const Outline: Story = {
   args: { icon: undefined, children: '文字' },
