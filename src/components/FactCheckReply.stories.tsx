@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { expect, fn, userEvent, within } from 'storybook/test'
 
 import { viewportOptions } from '../../.storybook/viewports'
-import { FactCheckReply  } from './FactCheckReply'
-import type {FactCheckReplyProps} from './FactCheckReply';
+import { FactCheckReply } from './FactCheckReply'
+import type { FactCheckReplyProps } from './FactCheckReply'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
 const DAY = 24 * 60 * 60 * 1000
