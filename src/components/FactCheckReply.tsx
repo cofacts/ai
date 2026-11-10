@@ -102,7 +102,8 @@ export function FactCheckReply({
       className={cn(
         'flex w-full bg-surface-base p-spacing-20 md:gap-spacing-48 md:px-spacing-32 md:py-spacing-24',
         withLink
-          ? 'border border-border-accent'
+          ? // Penpot's mobile with-link has gray 1px lines above and below the yellow frame.
+            'border border-border-accent shadow-[0_-1px_0_var(--color-border-control),0_1px_0_var(--color-border-control)] md:shadow-none'
           : 'border-y border-border-control',
         className,
       )}
@@ -125,7 +126,11 @@ export function FactCheckReply({
           <div id={titleId}>
             <FactCheckReplyTitle type={replyType} author={author.name ?? ''} />
           </div>
-          <ExpandableText defaultExpanded={defaultExpanded}>
+          {/* Penpot: desktop with-link has 16px above 閱讀全文; the other three variants have none. */}
+          <ExpandableText
+            defaultExpanded={defaultExpanded}
+            className={withLink ? 'md:gap-spacing-16' : undefined}
+          >
             {text}
           </ExpandableText>
         </div>
@@ -207,9 +212,11 @@ export function FactCheckReply({
 function ExpandableText({
   children,
   defaultExpanded,
+  className,
 }: {
   children: string
   defaultExpanded: boolean
+  className?: string
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   // Starts false so a short reply never shows 閱讀全文; a long one gets it once measured.
@@ -228,7 +235,7 @@ function ExpandableText({
   }, [expanded, children])
 
   return (
-    <div className="flex flex-col items-start">
+    <div className={cn('flex flex-col items-start', className)}>
       <p
         ref={textRef}
         id={textId}
