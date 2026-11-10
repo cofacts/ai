@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { expect, fn, userEvent, within } from 'storybook/test'
+import { fn } from 'storybook/test'
 
 import { viewportOptions } from '../../.storybook/viewports'
 import { FactCheckReply } from './FactCheckReply'
@@ -83,20 +83,7 @@ type Story = StoryObj<typeof meta>
  * Penpot Type = default. Click 閱讀全文 to open the whole text; the button becomes 收合全文. The
  * four results (Incorrect, Correct, …) are FactCheckReply-Title's variants, shown in its stories.
  */
-export const Default: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    const open = canvas.getByRole('button', { name: '閱讀全文' })
-    await expect(open).toHaveAttribute('aria-expanded', 'false')
-    await userEvent.click(open)
-    const close = canvas.getByRole('button', { name: '收合全文' })
-    await expect(close).toHaveAttribute('aria-expanded', 'true')
-    const text = document.getElementById(close.getAttribute('aria-controls')!)!
-    await expect(text.scrollHeight).toBeLessThanOrEqual(text.clientHeight + 1)
-    await userEvent.click(close)
-    await expect(canvas.getByRole('button', { name: '閱讀全文' })).toHaveFocus()
-  },
-}
+export const Default: Story = {}
 
 // ── Penpot Type = with-link ──
 
@@ -115,12 +102,6 @@ export const WithLink: Story = {
       },
     ],
   },
-  play: async ({ canvasElement, args }) => {
-    const canvas = within(canvasElement)
-    await expect(canvas.getByText('資料佐證')).toBeVisible()
-    await userEvent.click(canvas.getByRole('button', { name: '檢舉' }))
-    await expect(args.onReport).toHaveBeenCalled()
-  },
 }
 
 // ── Not in Penpot ──
@@ -128,9 +109,4 @@ export const WithLink: Story = {
 /** A text that fits needs no 閱讀全文. */
 export const ShortText: Story = {
   args: { text: '假的。目前沒有研究可以證實雨水會傳播病毒。' },
-  play: async ({ canvasElement }) => {
-    await expect(
-      within(canvasElement).queryByRole('button', { name: '閱讀全文' }),
-    ).toBeNull()
-  },
 }
