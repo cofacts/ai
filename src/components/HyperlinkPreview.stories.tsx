@@ -1,6 +1,6 @@
 import { expect, within } from 'storybook/test'
 
-import { desktop, mobile, viewportOptions } from '../../.storybook/viewports'
+import { viewportOptions } from '../../.storybook/viewports'
 import { HyperlinkPreview } from './HyperlinkPreview'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
@@ -11,7 +11,6 @@ const meta = {
     penpot: { component: 'Content/LinkCard' },
     viewport: { options: viewportOptions },
   },
-  globals: { ...desktop },
   decorators: [
     (Story) => (
       <div className="max-w-[860px]">
@@ -34,9 +33,6 @@ type Story = StoryObj<typeof meta>
 
 /** Penpot Content/LinkCard. */
 export const Default: Story = {}
-export const Dark: Story = { globals: { theme: 'dark' } }
-export const Mobile: Story = { globals: { ...mobile } }
-export const MobileDark: Story = { globals: { ...mobile, theme: 'dark' } }
 
 /** Not in Penpot: rumors-api found no title or summary, so only the URL is left. */
 export const UrlOnly: Story = {
