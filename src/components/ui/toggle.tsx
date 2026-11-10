@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * Penpot Base/Toggle (e.g. 收藏). `<button aria-pressed>`; pressed shows a strong border and the
- * icon's solid version (bookmark → filled bookmark).
+ * icon's solid version in brand yellow (bookmark → filled bookmark with `icon-brand`).
  *
  * Penpot draws the 1px border inside the padding (inner stroke): 32px tall with text only, 36px
  * with an icon. A CSS border sits outside the padding, so the height is a min-height with no
@@ -23,7 +23,7 @@ function Toggle({
     <TogglePrimitive
       data-slot="toggle"
       className={cn(
-        'group/toggle inline-flex min-h-spacing-32 shrink-0 items-center gap-spacing-4 rounded-radius-5 border border-border-control px-spacing-12 py-0 text-type-ui-m whitespace-nowrap text-text-primary',
+        'group/toggle inline-flex min-h-spacing-32 shrink-0 cursor-pointer items-center gap-spacing-4 rounded-radius-5 border border-border-control px-spacing-12 py-0 text-type-ui-m whitespace-nowrap text-text-primary',
         'hover:bg-surface-base data-pressed:border-border-strong data-pressed:bg-surface-base',
         'disabled:pointer-events-none disabled:opacity-50',
         icon && 'min-h-[36px] pl-spacing-8',
@@ -40,7 +40,7 @@ function Toggle({
           <MaterialIcon
             name={icon}
             filled
-            className="hidden group-data-pressed/toggle:inline-flex"
+            className="hidden text-icon-brand group-data-pressed/toggle:inline-flex"
           />
         </>
       )}
