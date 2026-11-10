@@ -3,6 +3,7 @@ import { UserMessage } from './UserMessage'
 import { AgentMessage } from './AgentMessage'
 import { FeedbackButtons } from './FeedbackButtons'
 import { ChatInput } from './ChatInput'
+import styles from './ChatArea.module.css'
 import type { ChatMessage } from '@/lib/adk'
 
 interface ChatAreaProps {
@@ -38,7 +39,7 @@ export function ChatArea({
       {/* Messages area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 md:p-6 chat-container pb-0"
+        className="flex-1 overflow-y-auto p-spacing-16 md:p-spacing-24 [scrollbar-gutter:stable] pb-0"
       >
         {messages.map((msg, index) => {
           const prevMsg = messages[index - 1] as ChatMessage | undefined
@@ -74,9 +75,9 @@ export function ChatArea({
         })}
 
         {isStreaming && (
-          <p className="flex items-center gap-2 text-gray-500 mt-2">
+          <p className="flex items-center gap-spacing-8 text-text-tertiary mt-spacing-8">
             正在思考中
-            <span className="typing-indicator ml-1">
+            <span className={`${styles.typing} ml-spacing-4`}>
               <span />
               <span />
               <span />
@@ -85,7 +86,7 @@ export function ChatArea({
         )}
 
         {/* Extra space at the bottom */}
-        <div className="h-4" />
+        <div className="h-spacing-16" />
       </div>
 
       {/* Input area */}

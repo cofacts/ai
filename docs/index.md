@@ -115,18 +115,30 @@ is only the overview.
 
 - **Tokens:** `design/tokens.json` (exported from Penpot) is the source. `pnpm tokens` generates
   `src/styles/tokens.css` (CSS variables + Tailwind `@theme`), `src/styles/tokens.generated.ts`
-  (names for `cn()`'s tailwind-merge, lists for Storybook).
-  CI runs `pnpm tokens:check`. Class = token name without its role prefix
-  (`surface-raised` → `bg-raised`, `type-body-m` → `text-body-m`); spacing is 1px per unit;
-  Tailwind's default palette and sizes are switched off.
+  (names for `cn()`'s tailwind-merge). Storybook's Tokens page reads `design/tokens.json` directly.
+  CI runs `pnpm tokens:check`. Every color token is a Tailwind color named like the
+  Penpot token, so any color utility takes it (`bg-surface-raised`, `text-text-primary`); typography, spacing
+  and radius keep their names too (`text-type-body-m`, `p-spacing-16`, `rounded-radius-5`);
+  Tailwind's default palette, font sizes, radii and shadows are switched off.
 - **Themes:** each semantic token is `light-dark(light, dark)`; `color-scheme` follows
   `prefers-color-scheme` unless `<html data-theme>` forces one. Components never use `dark:`.
 - **Global CSS:** `src/styles/global.css` holds only site-wide rules (tokens, body base, the
   focus ring).
-- **Transition:** Storybook (Foundations/Tokens) already uses the new system; the app still
-  loads the old `src/styles.css` until its components are replaced.
+- **Components:** `src/components/ui/` holds the Penpot Base components (Button, Badge,
+  Toggle, Input, Checkbox, Switch, RadioGroup, Select); icons (`MaterialIcon`, `BrandIcon`,
+  `StatusIcon`) are in `src/components/icons/`; shared Cofacts components such as
+  `FactCheckReplyTitle` live in `src/components/`. Each has a story with `parameters.penpot`.
 - **Data:** the browser never calls rumors-api; route files define server functions, and data
   flows through the TanStack Query cache (see the skill's `references/data-layer.md`).
+  `src/routes/(lists)/articles.tsx` is the working example; `src/server/cofacts.server.ts`
+  (`cofactsExec`) is server-only and enforced by import protection.
+- **Site shell:** `__root.tsx` renders the nav (`SiteNav`, and later the footer) around every
+  page, and the document scrolls with the nav stuck to the top. A route opts out of the nav or
+  footer with `staticData: { hideGlobalNav, hideGlobalFooter }`; `fillViewport` pins it to the
+  viewport height (`h-dvh`) so it scrolls inside its own panels. The flags are independent. The
+  Cofacts AI layout `_ai` sets `fillViewport` and `hideGlobalFooter`: the chat scrolls inside its
+  side panels, so a footer below it could never be reached. `_ai` is pathless so the AI pages
+  stay at `/` and `/session/*` for now; Track 5 moves it to `routes/ai/` (`/ai/*`).
 
 Design record: the kb doc
 [Phase 3 網站遷移與前端架構](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Phase%203%20網站遷移與前端架構.md).

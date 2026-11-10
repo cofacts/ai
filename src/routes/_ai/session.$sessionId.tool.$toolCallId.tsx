@@ -4,14 +4,14 @@ import { useChat } from '@/hooks/useChat'
 import { RightDrawer } from '@/components/RightDrawer'
 
 export const Route = createFileRoute(
-  '/_app/session/$sessionId/tool/$toolCallId',
+  '/_ai/session/$sessionId/tool/$toolCallId',
 )({
   component: ToolDrawer,
 })
 
 function ToolDrawer() {
   const { sessionId, toolCallId } = useParams({
-    from: '/_app/session/$sessionId/tool/$toolCallId',
+    from: '/_ai/session/$sessionId/tool/$toolCallId',
   })
   const navigate = useNavigate()
   const { toolInvocations } = useChat({ sessionId })

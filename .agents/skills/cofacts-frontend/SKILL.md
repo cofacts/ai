@@ -28,20 +28,21 @@ this skill is the current, executable form of it.
 
 ## Hard rules
 
-- **Tokens only.** Class = Penpot token name without its role prefix (`surface-raised` →
-  `bg-raised`, `type-body-m` → `text-body-m`); the full list with each class is in the generated
+- **Tokens only.** Color class = any Tailwind color utility + the Penpot token name, unchanged (`surface-raised` →
+  `bg-surface-raised`, `text-primary` → `text-text-primary`); typography `type-body-m` → `text-type-body-m`; the full list with each class is in the generated
   `src/styles/tokens.css` (comments name the class), and Storybook's Foundations/Tokens shows them. No arbitrary colors (`[#…]`,
   `style={{ color }}`), no primitive colors (`neutral-900`), no `dark:` variants (tokens flip by
   themselves), no bare font sizes (`text-16`) or `leading-*` / `font-semibold` — use a typography
-  class (`text-body-m`, `text-ui-s-bold`…). Spacing is 1px per unit: `p-16` is 16px.
-- **Brand yellow is a background, never text** (R2). `bg-accent` pairs with `text-on-accent`.
-- **Pair by name** (R4): `bg-dark` → `text-on-dark`, `bg-secondary` → `text-on-secondary`,
-  `bg-inverse` → `text-inverse`. A name that doesn't match is a bug.
-- **Status colors** (`text-status-*`, `bg-status-*`) only in `ReplyTypeLabel`, `VerdictPicker`
-  and status badges, always with text and a shape icon (R1).
+  class (`text-type-body-m`, `text-type-ui-s-bold`…). Spacing and radius tokens keep their names too:
+  `spacing-16` → `p-spacing-16`, `RADIUS-5` → `rounded-radius-5`. Bare numbers (`w-343`, `p-16`) don't exist,
+  except 0 (`p-0`, `inset-0`); use a token or an arbitrary value (`w-[343px]`).
+- **Brand yellow is a background, never text** (R2). `bg-surface-accent` pairs with `text-text-on-accent`.
+- **Pair by name** (R4): `bg-surface-dark` → `text-text-on-dark`, `bg-surface-secondary` → `text-text-on-secondary`,
+  `bg-surface-inverse` → `text-text-inverse`. A name that doesn't match is a bug.
 - **Disabled = default look + `opacity-50`**, plus `disabled` or `aria-disabled="true"` (R5).
 - **Focus is global.** Never add `focus-visible:ring-*` or per-component focus styles. Put
-  `data-surface="dark"` on fixed-dark containers.
+  `data-surface="dark"` on fixed-dark containers. The one exception is Select options (yellow
+  background instead of the ring; see `references/a11y.md`).
 - **Merge classes with `cn()`** (`@/lib/utils`), which knows the token names. Variants use cva.
 - **Components don't fetch data.** Shared components and `-components/` take typed props; only
   route components call query hooks. See `references/data-layer.md`.
@@ -59,16 +60,19 @@ this skill is the current, executable form of it.
    `-components/`; move it to `src/components/` when a second place needs it.
 3. **Build.** Map Penpot to classes with `references/mapping-rules.md`. Data per
    `references/data-layer.md`.
-4. **Stories.** One story per Penpot state board. Pages render a pure `XxxPageView` with
-   fixtures; callbacks use `fn()`. Put interaction and a11y checks (accessible names, what a
-   click or key does) in the story's `play` function: `pnpm test` renders every story in
-   Chromium and fails on a story that throws or a `play` whose `expect` fails.
+4. **Stories.** Components only: one story per Penpot variant; callbacks use `fn()`. Pages get
+   no stories — every state board must still be implemented, and is reviewed on the PR preview.
+   Put a component's interaction and a11y checks (accessible names, what a click or key does) in
+   the story's `play` function: `pnpm test` renders every story in Chromium and fails on a story
+   that throws or a `play` whose `expect` fails.
 5. **Verify** (all required):
    - `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test`, `pnpm tokens:check`, `pnpm build`
-   - Storybook at 375 and 1440, in light **and** dark, compared with Penpot `export_shape`
+   - Components in Storybook, pages on the PR preview: 375 and 1440, in light **and** dark,
+     compared with Penpot `export_shape`
    - keyboard walk-through; the checklist in `references/a11y.md`
-6. **PR.** Include the Penpot link, Storybook link, deviations from Penpot, the list of unbound
-   values for the designer, and the a11y checklist.
+6. **PR.** Include the Penpot link, the preview link (plus the Storybook link when components
+   changed), deviations from Penpot, the list of unbound values for the designer, and the a11y
+   checklist.
 
 ## Changing tokens
 

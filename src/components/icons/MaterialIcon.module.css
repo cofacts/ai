@@ -1,0 +1,42 @@
+/*
+ * One class for every MaterialIcon. In the components layer, so utilities passed to an icon
+ * (hidden, colors, positioning…) still override it; unlayered rules would beat them.
+ */
+@layer components {
+  .icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: var(--icon-size);
+    height: var(--icon-size);
+    overflow: visible;
+    user-select: none;
+    /* Not Google's .material-symbols-rounded class: it is unlayered and would beat utilities. */
+    font-family: 'Material Symbols Rounded';
+    font-size: calc(var(--icon-size) * var(--icon-scale, 1));
+    font-weight: normal;
+    font-style: normal;
+    font-feature-settings: 'liga';
+    font-variation-settings: 'FILL' 0;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    direction: ltr;
+  }
+
+  /* The name is generated content, not DOM text: find-in-page doesn't match it, copies leave it out. */
+  .icon::before {
+    content: attr(data-icon);
+  }
+
+  .icon[data-filled] {
+    font-variation-settings: 'FILL' 1;
+  }
+
+  /* Penpot draws arrow_drop_down larger than the font does. */
+  .icon[data-icon='arrow_drop_down'] {
+    --icon-scale: 1.6;
+  }
+}
