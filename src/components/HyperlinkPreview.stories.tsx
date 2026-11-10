@@ -32,7 +32,16 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /** Penpot Content/LinkCard. */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async ({ canvasElement, args }) => {
+    // The whole card is one link, and it says it opens in a new tab.
+    const link = within(canvasElement).getByRole('link')
+    await expect(link).toHaveAttribute('href', args.hyperlink.url)
+    await expect(link).toHaveAttribute('target', '_blank')
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    await expect(link).toHaveAccessibleName(/（另開新分頁）/)
+  },
+}
 
 /** Not in Penpot: rumors-api found no title or summary, so only the URL is left. */
 export const UrlOnly: Story = {
@@ -43,10 +52,26 @@ export const UrlOnly: Story = {
   },
 }
 
-/** The url is user-submitted: a non-http(s) one is shown as text, never as a link. */
+const unsafeUrls = ['javascript:alert(1)', 'data:text/html,hi', 'not a url']
+
+/** The url is user-submitted: one that is not http(s) shows as text, never as a link. */
 export const UnsafeUrl: Story = {
-  args: { hyperlink: { url: 'javascript:alert(1)', title: 'Not a link' } },
+  render: (args) => (
+    <div className="flex flex-col gap-spacing-16">
+      {unsafeUrls.map((url) => (
+        <HyperlinkPreview
+          key={url}
+          {...args}
+          hyperlink={{ url, title: 'Not a link' }}
+        />
+      ))}
+    </div>
+  ),
   play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).queryByRole('link')).toBeNull()
+    const canvas = within(canvasElement)
+    await expect(canvas.queryByRole('link')).toBeNull()
+    for (const url of unsafeUrls) {
+      await expect(canvas.getByText(url)).toBeVisible()
+    }
   },
 }
