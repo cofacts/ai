@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { expect, fn, userEvent, within } from 'storybook/test'
 
 import { viewportOptions } from '../../.storybook/viewports'
 import { FactCheckReply } from './FactCheckReply'
+import type { FactCheckReplyProps } from './FactCheckReply'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -10,6 +12,24 @@ const NOW = Date.parse('2026-11-06T12:00:00+08:00')
 /** Penpot's sample copy. */
 const longText =
   '假的。目前沒有研究可以證實，雨水會傳播武漢病毒的案例。病毒是很難透過長期無宿主的戶外環境下生存的，通常在戶外，空氣的傳送或是雲雨的傳送，並非單一平面的移動，還是有垂直上下的運動，以每公里高度降低5-6度來看，近期對岸遇上冷高壓，地面已經近乎個位數字或零度以下，幾公里上層的空氣溫度更低，病毒在這樣的環境下難以存活。\n\n此外，雨滴在形成與降落的過程中會經過稀釋，即使空氣中有少量病毒，落到地面的濃度也極低，不足以造成感染。防疫仍應以勤洗手、戴口罩、保持社交距離為主。'
+
+/**
+ * The parent owns the vote state in the app, so the story plays the parent: pressing a vote
+ * shows it, pressing it again takes it back. `onVote` is still called for the Actions panel.
+ */
+function Interactive(args: FactCheckReplyProps) {
+  const [ownVote, setOwnVote] = useState(args.feedback.ownVote)
+  return (
+    <FactCheckReply
+      {...args}
+      feedback={{ ...args.feedback, ownVote }}
+      onVote={(vote) => {
+        args.onVote?.(vote)
+        setOwnVote(vote === 'NEUTRAL' ? null : vote)
+      }}
+    />
+  )
+}
 
 const meta = {
   title: 'components/FactCheckReply',
@@ -30,6 +50,7 @@ const meta = {
       </div>
     ),
   ],
+  render: (args) => <Interactive {...args} />,
   args: {
     variant: 'default',
     replyType: 'RUMOR',
@@ -56,15 +77,29 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// ── Penpot Type = default, with each FactCheckReply-Title (collapsed) ──
+// ── Penpot Type = default, with each FactCheckReply-Title ──
 
-/** Penpot Type = default, Title Incorrect. */
+/**
+ * Penpot Type = default, Title Incorrect. Click 閱讀全文 to open the whole text; the button
+ * becomes 收合全文.
+ */
 export const Incorrect: Story = {
   play: async ({ canvasElement }) => {
-    const button = within(canvasElement).getByRole('button', {
-      name: '閱讀全文',
-    })
-    await expect(button).toHaveAttribute('aria-expanded', 'false')
+    const canvas = within(canvasElement)
+    // 「N 天前」 counts from the now prop, not from the clock.
+    await expect(canvas.getByText('1 天前')).toBeVisible()
+    // 資料佐證 is for with-link only.
+    await expect(canvas.queryByText('資料佐證')).toBeNull()
+
+    const open = canvas.getByRole('button', { name: '閱讀全文' })
+    await expect(open).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(open)
+    const close = canvas.getByRole('button', { name: '收合全文' })
+    await expect(close).toHaveAttribute('aria-expanded', 'true')
+    const text = document.getElementById(close.getAttribute('aria-controls')!)!
+    await expect(text.scrollHeight).toBeLessThanOrEqual(text.clientHeight + 1)
+    await userEvent.click(close)
+    await expect(canvas.getByRole('button', { name: '閱讀全文' })).toHaveFocus()
   },
 }
 
@@ -96,42 +131,25 @@ export const WithLink: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
     await expect(canvas.getByText('資料佐證')).toBeVisible()
+    // A URL in the reference text is a link.
+    await expect(
+      canvas.getByRole('link', {
+        name: 'https://www.kaineng.com.tw/knowledge-bedridden-care/',
+      }),
+    ).toHaveAttribute(
+      'href',
+      'https://www.kaineng.com.tw/knowledge-bedridden-care/',
+    )
+    // Each hyperlink gets a HyperlinkPreview.
+    await expect(
+      canvas.getByRole('link', { name: /憂心防疫前線人員口罩/ }),
+    ).toHaveAttribute('href', args.hyperlinks![0]!.url)
     await userEvent.click(canvas.getByRole('button', { name: '檢舉' }))
     await expect(args.onReport).toHaveBeenCalled()
   },
 }
 
-// ── 閱讀全文: expanded and collapsed ──
-
-/** 閱讀全文 opens the whole text; the button becomes 收合全文. */
-export const Expanded: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    await userEvent.click(canvas.getByRole('button', { name: '閱讀全文' }))
-    const button = canvas.getByRole('button', { name: '收合全文' })
-    await expect(button).toHaveAttribute('aria-expanded', 'true')
-    const text = document.getElementById(button.getAttribute('aria-controls')!)!
-    await expect(text.scrollHeight).toBeLessThanOrEqual(text.clientHeight + 1)
-  },
-}
-
-/** Expanded with the keyboard (Enter), then collapsed again (Space). */
-export const Collapsed: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement)
-    canvas.getByRole('button', { name: '閱讀全文' }).focus()
-    await userEvent.keyboard('{Enter}')
-    await expect(
-      canvas.getByRole('button', { name: '收合全文' }),
-    ).toHaveAttribute('aria-expanded', 'true')
-    await userEvent.keyboard(' ')
-    const button = canvas.getByRole('button', { name: '閱讀全文' })
-    await expect(button).toHaveAttribute('aria-expanded', 'false')
-    await expect(button).toHaveFocus()
-  },
-}
-
-// ── States Penpot doesn't draw ──
+// ── Not in Penpot ──
 
 /** A text that fits needs no 閱讀全文. */
 export const ShortText: Story = {
@@ -143,9 +161,14 @@ export const ShortText: Story = {
   },
 }
 
-/** The current user voted 有幫助: its thumb is solid in `icon-brand`. */
-export const Voted: Story = {
-  args: {
-    feedback: { positiveCount: 101, negativeCount: 100, ownVote: 'UPVOTE' },
+/** Not in Penpot: a createdAt that does not parse drops the date, not the card. */
+export const UnparseableDate: Story = {
+  tags: ['not-in-penpot'],
+  args: { createdAt: 'not a date' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('被引用 2 次')).toBeVisible()
+    await expect(canvas.queryByText(/回應於/)).toBeNull()
+    await expect(canvasElement.querySelector('time')).toBeNull()
   },
 }
