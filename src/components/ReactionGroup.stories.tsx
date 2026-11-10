@@ -1,8 +1,29 @@
+import { useState } from 'react'
 import { expect, fn, userEvent, within } from 'storybook/test'
 
 import { viewportOptions } from '../../.storybook/viewports'
 import { ReactionGroup } from './ReactionGroup'
+import type { ReactionGroupProps } from './ReactionGroup'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
+
+/**
+ * The parent owns the vote state in the app, so the story plays the parent: pressing a vote
+ * shows it, pressing it again takes it back, pressing the other one switches. `onVote` is still
+ * called, so the Actions panel shows what the component sent.
+ */
+function Interactive(args: ReactionGroupProps) {
+  const [ownVote, setOwnVote] = useState(args.ownVote)
+  return (
+    <ReactionGroup
+      {...args}
+      ownVote={ownVote}
+      onVote={(vote) => {
+        args.onVote?.(vote)
+        setOwnVote(vote === 'NEUTRAL' ? null : vote)
+      }}
+    />
+  )
+}
 
 const meta = {
   title: 'components/ReactionGroup',
@@ -11,6 +32,7 @@ const meta = {
     penpot: { component: 'Feedback/ReactionGroup' },
     viewport: { options: viewportOptions },
   },
+  render: (args) => <Interactive {...args} />,
   args: {
     type: 'reason',
     positiveCount: 100,
@@ -25,7 +47,7 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** Penpot Type = reason. Pressing a vote sends it. */
+/** Penpot Type = reason. Click the votes: pressed shows the strong border and yellow icon. */
 export const Reason: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
@@ -33,6 +55,10 @@ export const Reason: Story = {
     await expect(up).toHaveAttribute('aria-pressed', 'false')
     await userEvent.click(up)
     await expect(args.onVote).toHaveBeenLastCalledWith('UPVOTE')
+    await expect(up).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(up)
+    await expect(args.onVote).toHaveBeenLastCalledWith('NEUTRAL')
+    await expect(up).toHaveAttribute('aria-pressed', 'false')
     await userEvent.click(canvas.getByRole('button', { name: '看理由' }))
     await expect(args.onShowReasons).toHaveBeenCalled()
   },
@@ -46,33 +72,6 @@ export const Report: Story = {
       within(canvasElement).getByRole('button', { name: '檢舉' }),
     )
     await expect(args.onReport).toHaveBeenCalled()
-  },
-}
-
-/**
- * Not in Penpot: the user voted 有幫助. Base/Toggle active (strong border, yellow `icon-brand` icon).
- * Pressing it again takes the vote back.
- */
-export const VotedUp: Story = {
-  args: { ownVote: 'UPVOTE', positiveCount: 101 },
-  play: async ({ canvasElement, args }) => {
-    const up = within(canvasElement).getByRole('button', {
-      name: '有幫助 101',
-    })
-    await expect(up).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.click(up)
-    await expect(args.onVote).toHaveBeenLastCalledWith('NEUTRAL')
-  },
-}
-
-/** Not in Penpot: the user voted 沒幫助; pressing 有幫助 switches the vote. */
-export const VotedDown: Story = {
-  args: { ownVote: 'DOWNVOTE', negativeCount: 101 },
-  play: async ({ canvasElement, args }) => {
-    await userEvent.click(
-      within(canvasElement).getByRole('button', { name: '有幫助 100' }),
-    )
-    await expect(args.onVote).toHaveBeenLastCalledWith('UPVOTE')
   },
 }
 
