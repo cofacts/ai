@@ -9,7 +9,7 @@ export type Hyperlink = {
 }
 
 /**
- * Penpot Content/LinkCard: the preview of a link in a reply's references — title, a summary with
+ * [Penpot Content/LinkCard](https://design.penpot.app/?screen=workspace&team-id=1710bc7f-8249-8127-8007-d006475d6947&file-id=81f57451-85cc-819d-8008-71f291481dd2&page-id=86907e95-1cb8-8122-8008-4f4d51befa98&layout=layers&board-id=dcb2533c-c18c-80be-8008-6c1237e64815): the preview of a link in a reply's references — title, a summary with
  * a rule on its left, and the URL. The whole card is one link to `url` and opens in a new tab.
  *
  * Penpot's card has no picture, so rumors-api's `topImageUrl` isn't shown.

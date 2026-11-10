@@ -60,7 +60,7 @@ const lastSegment = cn(
 )
 
 /**
- * Penpot Feedback/ReactionGroup: 有幫助 / 沒幫助 counts as Base/Toggle (`aria-pressed`), then
+ * [Penpot Feedback/ReactionGroup](https://design.penpot.app/?screen=workspace&team-id=1710bc7f-8249-8127-8007-d006475d6947&file-id=81f57451-85cc-819d-8008-71f291481dd2&page-id=86907e95-1cb8-8122-8008-4f4d51befa98&layout=layers&board-id=f402ced6-616c-80b4-8008-6d275a72b495): 有幫助 / 沒幫助 counts as Base/Toggle (`aria-pressed`), then
  * 看理由 or 檢舉. Presentational only: the reasons list, the reason form after a vote and the
  * report dialog belong to `ReplyFeedback`, which wraps this and handles the callbacks.
  *
@@ -92,7 +92,11 @@ export function ReactionGroup({
         disabled={voteDisabled}
         className={voteSegment}
       >
-        <MaterialIcon name="thumb_up" filled />
+        <MaterialIcon
+          name="thumb_up"
+          filled
+          className="group-data-pressed/toggle:text-icon-brand"
+        />
         <span className="sr-only">有幫助</span>
         {positiveCount}
       </Toggle>
@@ -102,7 +106,11 @@ export function ReactionGroup({
         disabled={voteDisabled}
         className={voteSegment}
       >
-        <MaterialIcon name="thumb_down" filled />
+        <MaterialIcon
+          name="thumb_down"
+          filled
+          className="group-data-pressed/toggle:text-icon-brand"
+        />
         <span className="sr-only">沒幫助</span>
         {negativeCount}
       </Toggle>

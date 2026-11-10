@@ -69,7 +69,7 @@ export const MobileDark: Story = {
 }
 
 /**
- * Not in Penpot: the user voted 有幫助. Base/Toggle active (strong border, solid icon).
+ * Not in Penpot: the user voted 有幫助. Base/Toggle active (strong border, yellow `icon-brand` icon).
  * Pressing it again takes the vote back.
  */
 export const VotedUp: Story = {
