@@ -46,7 +46,7 @@ const segment =
   'relative inline-flex min-h-[36px] flex-1 shrink cursor-pointer items-center justify-center border border-border-control bg-surface-base py-0 text-type-ui-m whitespace-nowrap text-text-primary not-first:-ml-px first:rounded-l-radius-5 last:rounded-r-radius-5 hover:bg-surface-raised focus-visible:z-10 disabled:pointer-events-none disabled:opacity-50 md:flex-none md:shrink-0'
 
 /**
- * Penpot Feedback/ReactionGroup: 有幫助 / 沒幫助 with their counts, then
+ * [Penpot Feedback/ReactionGroup](https://design.penpot.app/?screen=workspace&team-id=1710bc7f-8249-8127-8007-d006475d6947&file-id=81f57451-85cc-819d-8008-71f291481dd2&page-id=86907e95-1cb8-8122-8008-4f4d51befa98&layout=layers&board-id=f402ced6-616c-80b4-8008-6d275a72b495): 有幫助 / 沒幫助 with their counts, then
  * 看理由 or 檢舉. Presentational only: the reasons list, the reason form after a vote and the
  * report dialog belong to `ReplyFeedback`, which wraps this and handles the callbacks.
  *
