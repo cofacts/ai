@@ -32,7 +32,9 @@ const meta = {
     penpot: { component: 'Feedback/ReactionGroup' },
     viewport: { options: viewportOptions },
   },
-  render: (args) => <Interactive {...args} />,
+  render: (args) => (
+    <Interactive key={`${args.type}-${args.ownVote ?? 'none'}`} {...args} />
+  ),
   args: {
     type: 'reason',
     positiveCount: 100,
@@ -52,13 +54,30 @@ export const Reason: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
     const up = canvas.getByRole('button', { name: '有幫助 100' })
+    const down = canvas.getByRole('button', { name: '沒幫助 100' })
+
     await expect(up).toHaveAttribute('aria-pressed', 'false')
+    await expect(down).toHaveAttribute('aria-pressed', 'false')
+
+    // Upvote
     await userEvent.click(up)
     await expect(args.onVote).toHaveBeenLastCalledWith('UPVOTE')
     await expect(up).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.click(up)
-    await expect(args.onVote).toHaveBeenLastCalledWith('NEUTRAL')
+    await expect(down).toHaveAttribute('aria-pressed', 'false')
+
+    // Switch to downvote
+    await userEvent.click(down)
+    await expect(args.onVote).toHaveBeenLastCalledWith('DOWNVOTE')
+    await expect(down).toHaveAttribute('aria-pressed', 'true')
     await expect(up).toHaveAttribute('aria-pressed', 'false')
+
+    // Retract downvote
+    await userEvent.click(down)
+    await expect(args.onVote).toHaveBeenLastCalledWith('NEUTRAL')
+    await expect(down).toHaveAttribute('aria-pressed', 'false')
+    await expect(up).toHaveAttribute('aria-pressed', 'false')
+
+    // View reasons
     await userEvent.click(canvas.getByRole('button', { name: '看理由' }))
     await expect(args.onShowReasons).toHaveBeenCalled()
   },

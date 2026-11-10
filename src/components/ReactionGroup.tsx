@@ -39,7 +39,7 @@ export type ReactionGroupProps = {
  * looks the same. A fill would also paint over the focus ring of the segment before it.
  */
 const segment =
-  'flex-1 rounded-none md:flex-none first:rounded-l-radius-5 last:rounded-r-radius-5'
+  'flex-1 shrink rounded-none md:flex-none md:shrink-0 first:rounded-l-radius-5 last:rounded-r-radius-5'
 
 /**
  * A vote Toggle. Penpot's Thumb Up / Thumb Down icons are the solid glyphs in every state
@@ -55,7 +55,7 @@ const voteSegment = cn(segment, 'min-h-[36px] pl-spacing-8')
  * for it; it gets Toggle's hover so the row reacts alike.
  */
 const lastSegment = cn(
-  'inline-flex min-h-[36px] shrink-0 items-center justify-center gap-spacing-8 rounded-radius-5 border border-border-control px-spacing-12 py-0 text-type-ui-m whitespace-nowrap text-text-primary hover:bg-surface-base',
+  'inline-flex min-h-[36px] cursor-pointer items-center justify-center gap-spacing-8 border border-border-control px-spacing-12 py-0 text-type-ui-m whitespace-nowrap text-text-primary hover:bg-surface-base',
   segment,
 )
 
