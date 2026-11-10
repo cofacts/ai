@@ -32,7 +32,9 @@ const meta = {
     penpot: { component: 'Feedback/ReactionGroup' },
     viewport: { options: viewportOptions },
   },
-  render: (args) => <Interactive {...args} />,
+  render: (args) => (
+    <Interactive key={`${args.type}-${args.ownVote ?? 'none'}`} {...args} />
+  ),
   args: {
     type: 'reason',
     positiveCount: 100,
@@ -52,14 +54,33 @@ export const Reason: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
     const up = canvas.getByRole('button', { name: '有幫助 100' })
+    const down = canvas.getByRole('button', { name: '沒幫助 100' })
+
     await expect(up).toHaveAttribute('aria-pressed', 'false')
+    await expect(down).toHaveAttribute('aria-pressed', 'false')
+
+    // Upvote
     await userEvent.click(up)
     await expect(args.onVote).toHaveBeenLastCalledWith('UPVOTE')
     await expect(up).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.click(up)
-    await expect(args.onVote).toHaveBeenLastCalledWith('NEUTRAL')
+    await expect(down).toHaveAttribute('aria-pressed', 'false')
+
+    // Switch to downvote
+    await userEvent.click(down)
+    await expect(args.onVote).toHaveBeenLastCalledWith('DOWNVOTE')
+    await expect(down).toHaveAttribute('aria-pressed', 'true')
     await expect(up).toHaveAttribute('aria-pressed', 'false')
-    await userEvent.click(canvas.getByRole('button', { name: '看理由' }))
+
+    // Retract downvote
+    await userEvent.click(down)
+    await expect(args.onVote).toHaveBeenLastCalledWith('NEUTRAL')
+    await expect(down).toHaveAttribute('aria-pressed', 'false')
+    await expect(up).toHaveAttribute('aria-pressed', 'false')
+
+    // View reasons: a plain button, not a toggle
+    const reasons = canvas.getByRole('button', { name: '看理由' })
+    await expect(reasons).not.toHaveAttribute('aria-pressed')
+    await userEvent.click(reasons)
     await expect(args.onShowReasons).toHaveBeenCalled()
   },
 }
@@ -78,9 +99,16 @@ export const Report: Story = {
 /** Votes disabled (R5: default look at 50% opacity, `disabled`). */
 export const VoteDisabled: Story = {
   args: { voteDisabled: true },
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement)
     await expect(
-      within(canvasElement).getByRole('button', { name: '有幫助 100' }),
+      canvas.getByRole('button', { name: '有幫助 100' }),
     ).toBeDisabled()
+    await expect(
+      canvas.getByRole('button', { name: '沒幫助 100' }),
+    ).toBeDisabled()
+    // Only the votes are disabled: 看理由 still works.
+    await userEvent.click(canvas.getByRole('button', { name: '看理由' }))
+    await expect(args.onShowReasons).toHaveBeenCalled()
   },
 }
