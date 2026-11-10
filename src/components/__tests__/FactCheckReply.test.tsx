@@ -31,6 +31,15 @@ describe('FactCheckReply', () => {
     expect(render()).toContain('1 天前')
   })
 
+  it.each([
+    ['RUMOR', '含有不實訊息'],
+    ['NOT_RUMOR', '含有正確訊息'],
+    ['OPINIONATED', '含有個人意見'],
+    ['NOT_ARTICLE', '不在查證範圍'],
+  ] as const)('shows the %s result in the title', (replyType, title) => {
+    expect(render({ replyType })).toContain(title)
+  })
+
   it('drops the date part, not the card, when createdAt is unparseable', () => {
     const html = render({ createdAt: 'not a date' })
     expect(html).not.toContain('回應於')

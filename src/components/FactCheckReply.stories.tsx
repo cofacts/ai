@@ -77,13 +77,13 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-// ── Penpot Type = default, with each FactCheckReply-Title ──
+// ── Penpot Type = default ──
 
 /**
- * Penpot Type = default, Title Incorrect. Click 閱讀全文 to open the whole text; the button
- * becomes 收合全文.
+ * Penpot Type = default. Click 閱讀全文 to open the whole text; the button becomes 收合全文. The
+ * four results (Incorrect, Correct, …) are FactCheckReply-Title's variants, shown in its stories.
  */
-export const Incorrect: Story = {
+export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     const open = canvas.getByRole('button', { name: '閱讀全文' })
@@ -97,14 +97,6 @@ export const Incorrect: Story = {
     await expect(canvas.getByRole('button', { name: '閱讀全文' })).toHaveFocus()
   },
 }
-
-export const Correct: Story = { args: { replyType: 'NOT_RUMOR' } }
-
-export const PersonalOpinion: Story = {
-  args: { replyType: 'OPINIONATED' },
-}
-
-export const NotVerifiable: Story = { args: { replyType: 'NOT_ARTICLE' } }
 
 // ── Penpot Type = with-link ──
 
