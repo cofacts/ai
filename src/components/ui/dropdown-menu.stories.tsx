@@ -1,4 +1,4 @@
-import { expect, within } from 'storybook/test'
+import { expect, waitFor, within } from 'storybook/test'
 
 import {
   DropdownMenu,
@@ -66,8 +66,10 @@ export const AvatarMenu: Story = {
   ),
   play: async ({ canvas, userEvent }) => {
     await userEvent.click(canvas.getByRole('button', { name: '苗 的帳號選單' }))
-    await expect(
-      await within(document.body).findByRole('menuitem', { name: '登出' }),
-    ).toBeVisible()
+    const item = await within(document.body).findByRole('menuitem', {
+      name: '登出',
+    })
+    // The popup fades in: wait for it to be visible, not just present.
+    await waitFor(() => expect(item).toBeVisible())
   },
 }
