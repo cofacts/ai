@@ -5,8 +5,9 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
 /**
- * Penpot Base/Toggle (e.g. 收藏). `<button aria-pressed>`; pressed shows a strong border and the
- * icon's solid version in the brand color (bookmark → filled yellow bookmark).
+ * [Penpot Base/Toggle](https://design.penpot.app/?screen=workspace&team-id=1710bc7f-8249-8127-8007-d006475d6947&file-id=81f57451-85cc-819d-8008-71f291481dd2&page-id=86907e95-1cb8-8122-8008-4f4d51befa98&layout=layers&board-id=d3600d97-74cb-80be-8008-50ec79e9e8f9)
+ * (e.g. 收藏). `<button aria-pressed>`; pressed shows a strong border and the icon's solid
+ * version in the brand color (bookmark → filled yellow bookmark).
  *
  * Penpot draws the 1px border inside the padding (inner stroke): 32px tall with text only, 36px
  * with an icon. A CSS border sits outside the padding, so the height is a min-height with no
