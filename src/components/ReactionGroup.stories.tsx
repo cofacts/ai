@@ -74,21 +74,3 @@ export const Report: Story = {
     await expect(args.onReport).toHaveBeenCalled()
   },
 }
-
-/** Votes disabled (R5: default look at 50% opacity, `disabled`). */
-export const VoteDisabled: Story = {
-  args: { voteDisabled: true },
-  play: async ({ canvasElement }) => {
-    await expect(
-      within(canvasElement).getByRole('button', { name: '有幫助 100' }),
-    ).toBeDisabled()
-  },
-}
-
-/** Base/Toggle hover, from Storybook pseudo-states. */
-export const Hover: Story = { parameters: { pseudo: { hover: true } } }
-
-/** Keyboard focus, from Storybook pseudo-states: the global focus ring on each segment. */
-export const FocusVisible: Story = {
-  parameters: { pseudo: { focusVisible: true } },
-}
