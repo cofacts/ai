@@ -23,8 +23,8 @@ function Toggle({
     <TogglePrimitive
       data-slot="toggle"
       className={cn(
-        'group/toggle inline-flex min-h-spacing-32 shrink-0 items-center gap-spacing-4 rounded-radius-5 border border-border-control px-spacing-12 py-0 text-type-ui-m whitespace-nowrap text-text-primary',
-        'hover:bg-surface-base data-pressed:border-border-strong data-pressed:bg-surface-base',
+        'group/toggle inline-flex min-h-spacing-32 shrink-0 cursor-pointer items-center gap-spacing-4 rounded-radius-5 border border-border-control px-spacing-12 py-0 text-type-ui-m whitespace-nowrap text-text-primary',
+        'hover:bg-surface-raised data-pressed:border-border-strong data-pressed:bg-surface-base',
         'disabled:pointer-events-none disabled:opacity-50',
         icon && 'min-h-[36px] pl-spacing-8',
         className,
