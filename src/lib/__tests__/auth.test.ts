@@ -26,6 +26,13 @@ describe('clearUserScopedCache', () => {
       value: 1,
       comment: 'nice',
     })
+    const contributionKeys = [
+      ['GetContributionSummary'],
+      ['GetContributionTimeline'],
+      ['GetContributionTasks'],
+      ['GetMoreRateTasks', { after: 'c1' }],
+    ]
+    for (const key of contributionKeys) queryClient.setQueryData(key, {})
 
     clearUserScopedCache(queryClient)
 
@@ -36,6 +43,9 @@ describe('clearUserScopedCache', () => {
     expect(
       queryClient.getQueryData(['feedback', 'trace-1', 'user-1']),
     ).toBeUndefined()
+    for (const key of contributionKeys) {
+      expect(queryClient.getQueryData(key)).toBeUndefined()
+    }
   })
 
   test('leaves unrelated caches untouched', () => {
