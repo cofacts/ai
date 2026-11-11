@@ -235,12 +235,16 @@ itself.
 - Bad, because the same post reported twice under two URL forms (a share link and an
   address-bar link) is two articles. Search finds both, so a reporter who reads the candidate
   list will pick the existing one; only "都不是" splits them.
-- Bad, because finding the same link depends on rumors-api's `more_like_this` over the page
-  content url-resolver scraped. When the linked page is gone — a removed YouTube video, say,
-  which returns YouTube's generic description — an exact duplicate can be missed, with unrelated
-  messages shown instead or none at all. With none, the automatic filing reuses that article (its
-  id is a hash of the text) while the outcome still says 第一個發現他. Fixing that belongs in
-  rumors-api / url-resolver, not this form.
+- Bad, because the outcome trusts the search to have found any existing article with the same
+  text. If it misses one, the automatic filing reuses that article (its id is a hash of the text)
+  while the outcome still says 第一個發現他. This has not been observed: searching the exact text
+  of 53 link-only articles on production (12 recent, 12 from early 2023, and 29 YouTube links
+  from 2019–2021, the likeliest to be dead) found each article itself every time, since the
+  link's own words satisfy the 90% match whatever url-resolver now returns for the page. The ways
+  left are untested: two reporters filing the same new link before Elasticsearch indexes the
+  first, or an article readable by id but filtered out of `ListArticles`. Telling the two cases
+  apart for certain needs `CreateArticle` to report whether it created the article, which belongs
+  in rumors-api.
 - Bad, because reloading in the moment between a successful automatic filing and its navigation
   re-runs the search, auto-picks the reporter's own new article and shows `requested`. The extra
   +1 is the same user's, so it does not double-count.
