@@ -160,7 +160,7 @@ The following scripts can also be run using pnpm:
 - `dev:agent` - Starts only the ADK agent server
 - `build` - Builds the application for production
 - `preview` - Previews the production build
-- `test` - Runs unit tests using Vitest
+- `test` - Runs the Vitest unit tests, and renders every Storybook story (running its `play` function) in headless Chromium. Run `pnpm exec playwright install chromium` once before the first run.
 - `lint` - Runs ESLint for code linting
 - `format` - Formats code using Prettier
 - `check` - Runs both Prettier and ESLint (format and lint)

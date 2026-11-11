@@ -1,4 +1,4 @@
-import { expect, within } from 'storybook/test'
+import { expect, waitFor, within } from 'storybook/test'
 
 import { Button } from './button'
 import {
@@ -43,10 +43,10 @@ export const Default: Story = {
   play: async ({ canvas, userEvent }) => {
     await userEvent.click(canvas.getByRole('button', { name: '登入' }))
     // The dialog is portaled to <body>, outside the story's canvas.
-    await expect(
-      await within(document.body).findByRole('dialog', {
-        name: '登入 Cofacts',
-      }),
-    ).toBeVisible()
+    const dialog = await within(document.body).findByRole('dialog', {
+      name: '登入 Cofacts',
+    })
+    // The dialog fades in: wait for it to be visible, not just present.
+    await waitFor(() => expect(dialog).toBeVisible())
   },
 }

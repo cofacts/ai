@@ -62,6 +62,9 @@ this skill is the current, executable form of it.
    `references/data-layer.md`.
 4. **Stories.** Components only: one story per Penpot variant; callbacks use `fn()`. Pages get
    no stories — every state board must still be implemented, and is reviewed on the PR preview.
+   Put a component's interaction and a11y checks (accessible names, what a click or key does) in
+   the story's `play` function: `pnpm test` renders every story in Chromium and fails on a story
+   that throws or a `play` whose `expect` fails.
 5. **Verify** (all required):
    - `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test`, `pnpm tokens:check`, `pnpm build`
    - Components in Storybook, pages on the PR preview: 375 and 1440, in light **and** dark,
