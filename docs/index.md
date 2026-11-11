@@ -132,6 +132,9 @@ is only the overview.
   flows through the TanStack Query cache (see the skill's `references/data-layer.md`).
   `src/routes/(lists)/articles.tsx` is the working example; `src/server/cofacts.server.ts`
   (`cofactsExec`) is server-only and enforced by import protection.
+  `/contributions` (我的貢獻, linked from the avatar menu) is the first per-user page: its
+  server functions live in `src/server/contributions.functions.ts` and read the session's own
+  reports, replies and ratings from rumors-api (`selfOnly`), plus suggestions for what to do next.
 - **Site shell:** `__root.tsx` renders the nav (`SiteNav`, and later the footer) around every
   page, and the document scrolls with the nav stuck to the top. A route opts out of the nav or
   footer with `staticData: { hideGlobalNav, hideGlobalFooter }`; `fillViewport` pins it to the

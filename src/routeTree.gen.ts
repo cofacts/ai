@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AiRouteImport } from './routes/_ai'
+import { Route as ContributionsIndexRouteImport } from './routes/contributions/index'
 import { Route as AiIndexRouteImport } from './routes/_ai/index'
 import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
 import { Route as listsArticlesRouteImport } from './routes/(lists)/articles'
@@ -19,6 +20,11 @@ import { Route as AiSessionSessionIdToolToolCallIdRouteImport } from './routes/_
 
 const AiRoute = AiRouteImport.update({
   id: '/_ai',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContributionsIndexRoute = ContributionsIndexRouteImport.update({
+  id: '/contributions/',
+  path: '/contributions/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AiIndexRoute = AiIndexRouteImport.update({
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AiIndexRoute
   '/articles': typeof listsArticlesRoute
   '/api/run-sse': typeof ApiRunSseRoute
+  '/contributions/': typeof ContributionsIndexRoute
   '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
@@ -65,6 +72,7 @@ export interface FileRoutesByTo {
   '/articles': typeof listsArticlesRoute
   '/api/run-sse': typeof ApiRunSseRoute
   '/': typeof AiIndexRoute
+  '/contributions': typeof ContributionsIndexRoute
   '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
@@ -75,6 +83,7 @@ export interface FileRoutesById {
   '/(lists)/articles': typeof listsArticlesRoute
   '/api/run-sse': typeof ApiRunSseRoute
   '/_ai/': typeof AiIndexRoute
+  '/contributions/': typeof ContributionsIndexRoute
   '/_ai/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/_ai/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
@@ -85,6 +94,7 @@ export interface FileRouteTypes {
     | '/'
     | '/articles'
     | '/api/run-sse'
+    | '/contributions/'
     | '/session/$sessionId'
     | '/api/auth/callback'
     | '/session/$sessionId/tool/$toolCallId'
@@ -93,6 +103,7 @@ export interface FileRouteTypes {
     | '/articles'
     | '/api/run-sse'
     | '/'
+    | '/contributions'
     | '/session/$sessionId'
     | '/api/auth/callback'
     | '/session/$sessionId/tool/$toolCallId'
@@ -102,6 +113,7 @@ export interface FileRouteTypes {
     | '/(lists)/articles'
     | '/api/run-sse'
     | '/_ai/'
+    | '/contributions/'
     | '/_ai/session/$sessionId'
     | '/api/auth/callback'
     | '/_ai/session/$sessionId/tool/$toolCallId'
@@ -111,6 +123,7 @@ export interface RootRouteChildren {
   AiRoute: typeof AiRouteWithChildren
   listsArticlesRoute: typeof listsArticlesRoute
   ApiRunSseRoute: typeof ApiRunSseRoute
+  ContributionsIndexRoute: typeof ContributionsIndexRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
 }
 
@@ -121,6 +134,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contributions/': {
+      id: '/contributions/'
+      path: '/contributions'
+      fullPath: '/contributions/'
+      preLoaderRoute: typeof ContributionsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_ai/': {
@@ -195,6 +215,7 @@ const rootRouteChildren: RootRouteChildren = {
   AiRoute: AiRouteWithChildren,
   listsArticlesRoute: listsArticlesRoute,
   ApiRunSseRoute: ApiRunSseRoute,
+  ContributionsIndexRoute: ContributionsIndexRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
 }
 export const routeTree = rootRouteImport

@@ -41,6 +41,7 @@ export function clearUserScopedCache(queryClient: QueryClient) {
   queryClient.removeQueries({ queryKey: ['sessions'] })
   queryClient.removeQueries({ queryKey: chatCacheKey() })
   queryClient.removeQueries({ queryKey: ['feedback'] })
+  queryClient.removeQueries({ queryKey: ['GetMyContributions'] })
 }
 
 interface AuthState {

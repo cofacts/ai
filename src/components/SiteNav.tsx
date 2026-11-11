@@ -30,6 +30,7 @@ export const NAV_LINKS = {
   about: { label: '關於', href: 'https://cofacts.tw/about' },
   contact: { label: '聯絡我們', href: 'mailto:cofacts@googlegroups.com' },
   report: { label: '回報可疑訊息', href: 'https://cofacts.tw/report' },
+  contributions: { label: '我的貢獻', href: '/contributions' },
   line: { label: '加LINE查謠言', href: 'https://line.me/R/ti/p/@cofacts' },
   search: { href: 'https://cofacts.tw/search' },
 } as const
@@ -285,6 +286,22 @@ export function SiteNav({
               <BrandIcon name="line" size={22} />
               {NAV_LINKS.line.label}
             </a>
+            {user ? (
+              <NavAnchor
+                href={NAV_LINKS.contributions.href}
+                className={cn(
+                  buttonVariants({
+                    variant: 'on-dark',
+                    size: 'lg',
+                    withIcon: true,
+                  }),
+                  'w-full',
+                )}
+              >
+                <MaterialIcon name="trending_up" />
+                {NAV_LINKS.contributions.label}
+              </NavAnchor>
+            ) : null}
             {user === undefined ? null : user ? (
               <Button
                 variant="on-dark"
@@ -398,6 +415,12 @@ function AccountControl({
           </span>
         </div>
         <DropdownMenuSeparator />
+        <DropdownMenuItem
+          render={<NavAnchor href={NAV_LINKS.contributions.href} />}
+        >
+          <MaterialIcon name="trending_up" />
+          {NAV_LINKS.contributions.label}
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={onLogout}>登出</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
