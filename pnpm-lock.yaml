@@ -177,9 +177,6 @@ importers:
       storybook:
         specifier: 10.6.2
         version: 10.6.2(@types/react@19.2.14)(prettier@3.8.1)(react@19.2.4)
-      storybook-addon-pseudo-states:
-        specifier: 10.6.2
-        version: 10.6.2(storybook@10.6.2(@types/react@19.2.14)(prettier@3.8.1)(react@19.2.4))
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
@@ -5183,11 +5180,6 @@ packages:
   stdin-discarder@0.2.2:
     resolution: {integrity: sha512-UhDfHmA92YAlNnCfhmq0VeNL5bDbiZGg7sZ2IvPsXubGkiNa9EC+tUTsjBRsYUAz87btI6/1wf4XoVvQ3uRnmQ==}
     engines: {node: '>=18'}
-
-  storybook-addon-pseudo-states@10.6.2:
-    resolution: {integrity: sha512-JXzmpXTFTjN//Z9xzxTc74Bqf+n86YH8MlJhj3pe8c7FvGoTQfFwWni81sk8Cj/tTAkh3QPfU9LeFAYjAUZUsg==}
-    peerDependencies:
-      storybook: ^10.6.2
 
   storybook@10.6.2:
     resolution: {integrity: sha512-qHDINMiapxFUxYb+xC3j8u7Y+85X3u+/PlytE/wmnyg+bU0agCW3jUmWP4vIh2MioO2jTK/2B3Lcw6IpRFzQBA==}
@@ -11283,10 +11275,6 @@ snapshots:
   std-env@3.10.0: {}
 
   stdin-discarder@0.2.2: {}
-
-  storybook-addon-pseudo-states@10.6.2(storybook@10.6.2(@types/react@19.2.14)(prettier@3.8.1)(react@19.2.4)):
-    dependencies:
-      storybook: 10.6.2(@types/react@19.2.14)(prettier@3.8.1)(react@19.2.4)
 
   storybook@10.6.2(@types/react@19.2.14)(prettier@3.8.1)(react@19.2.4):
     dependencies:

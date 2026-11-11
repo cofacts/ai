@@ -5,12 +5,10 @@ const config: StorybookConfig = {
   stories: ['../src/**/*.stories.@(ts|tsx)'],
   // `addon-vitest` runs every story (and its play function) as a Vitest test: the `storybook`
   // project in vite.config.ts.
-  // pseudo-states: Penpot draws no hover or focus boards, so stories force :hover / :focus-visible
-  // with `parameters.pseudo` to show them. a11y: axe checks in the Accessibility panel.
+  // `addon-a11y` runs axe checks: the Accessibility panel.
   addons: [
     '@storybook/addon-docs',
     '@storybook/addon-vitest',
-    'storybook-addon-pseudo-states',
     '@storybook/addon-a11y',
   ],
   framework: {
