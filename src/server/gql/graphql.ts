@@ -77,7 +77,6 @@ export type ReportOutcomeArticleQuery = {
 export type SearchSuspiciousMessagesQueryVariables = Exact<{
   like: string
   first: number
-  minimumShouldMatch?: string | null | undefined
 }>
 
 export type SearchSuspiciousMessagesQuery = {
@@ -89,6 +88,7 @@ export type SearchSuspiciousMessagesQuery = {
         articleType: ArticleTypeEnum
         replyCount: number
         replyRequestCount: number | null
+        hyperlinks: Array<{ title: string | null } | null> | null
       }
     }>
   } | null
@@ -383,14 +383,6 @@ export const SearchSuspiciousMessagesDocument = {
             type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
           },
         },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'minimumShouldMatch' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
       ],
       selectionSet: {
         kind: 'SelectionSet',
@@ -417,17 +409,6 @@ export const SearchSuspiciousMessagesDocument = {
                             value: {
                               kind: 'Variable',
                               name: { kind: 'Name', value: 'like' },
-                            },
-                          },
-                          {
-                            kind: 'ObjectField',
-                            name: { kind: 'Name', value: 'minimumShouldMatch' },
-                            value: {
-                              kind: 'Variable',
-                              name: {
-                                kind: 'Name',
-                                value: 'minimumShouldMatch',
-                              },
                             },
                           },
                         ],
@@ -500,6 +481,19 @@ export const SearchSuspiciousMessagesDocument = {
                               name: {
                                 kind: 'Name',
                                 value: 'replyRequestCount',
+                              },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'hyperlinks' },
+                              selectionSet: {
+                                kind: 'SelectionSet',
+                                selections: [
+                                  {
+                                    kind: 'Field',
+                                    name: { kind: 'Name', value: 'title' },
+                                  },
+                                ],
                               },
                             },
                           ],

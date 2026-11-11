@@ -41,11 +41,10 @@ function lastCall(): { query: string; variables: Record<string, unknown> } {
 }
 
 describe('searchSuspiciousMessages', () => {
-  test('demands a near-exact match, because the query is always a link', async () => {
-    // Measured on dev: at rumors-api's prose default this query returns 54
-    // unrelated Facebook posts scoring an identical 225.5, because every share
-    // link shares every token but the id. At 90% it returns the one right
-    // article, or none.
+  test("lists with rumors-api's default threshold, as the LINE bot does", async () => {
+    // A higher minimumShouldMatch leaves only exact-URL hits: on production,
+    // 90% missed 1gz4wbw2dldxz, the same tweet with `?a=…&s=46` and text glued
+    // on, which the default finds through its identical scraped title/summary.
     mockedExec.mockResolvedValueOnce({ ListArticles: { edges: [] } })
 
     await searchSuspiciousMessages({
@@ -55,8 +54,7 @@ describe('searchSuspiciousMessages', () => {
     const { variables } = lastCall()
     expect(variables).toEqual({
       like: 'https://www.facebook.com/share/p/1HSNRpimmH/',
-      first: 5,
-      minimumShouldMatch: '90%',
+      first: 6,
     })
   })
 
@@ -118,6 +116,45 @@ describe('searchSuspiciousMessages', () => {
       ['same', true],
       ['path-case', false],
     ])
+  })
+
+  test('ranks the rest by text similarity to the link, as the LINE bot does', async () => {
+    // Search ranks by relevance score, which can put another post from the
+    // same site ahead of the same post shared with tracking parameters.
+    const link = 'https://x.com/atensnut/status/2120196706352390258'
+    mockedExec.mockResolvedValueOnce({
+      ListArticles: {
+        edges: [
+          { node: { id: 'image', text: null } },
+          {
+            node: {
+              id: 'other',
+              text: 'https://x.com/someone/status/2119876543210987654',
+            },
+          },
+          { node: { id: 'variant', text: `${link}?s=46影片` } },
+          { node: { id: 'same', text: `${link}\n` } },
+        ],
+      },
+    })
+
+    const candidates = await searchSuspiciousMessages({ data: link })
+
+    expect(candidates.map((c) => c.node.id)).toEqual([
+      'same',
+      'variant',
+      'other',
+      'image',
+    ])
+    expect(candidates.map((c) => c.identical)).toEqual([
+      true,
+      false,
+      false,
+      false,
+    ])
+    // Whitespace is ignored, so the same link scores 1.
+    expect(candidates[0]?.similarity).toBe(1)
+    expect(candidates[3]?.similarity).toBe(0)
   })
 
   test('survives a null connection', async () => {
