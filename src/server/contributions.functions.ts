@@ -713,7 +713,11 @@ export const moreRateTasksQuery = (after: string) =>
   queryOptions({
     queryKey: ['GetMoreRateTasks', { after }],
     queryFn: () => getMoreRateTasks({ data: { after } }),
-    staleTime: 5 * 60_000,
+    // Fetched imperatively (fetchQuery) and never rendered from the cache: always ask
+    // rumors-api again, so replies rated since (ownVote) aren't offered again after the user
+    // leaves the page and comes back. Same reason as gcTime: 0 on the tasks query.
+    staleTime: 0,
+    gcTime: 0,
   })
 
 export const voteOnReply = createServerFn({ method: 'POST' })
