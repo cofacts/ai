@@ -69,27 +69,23 @@ declare module '@tanstack/react-router' {
 
 type ReportOutcome = NonNullable<HistoryState['outcome']>
 
-/** How many candidates a person can actually read before giving up. */
-const CANDIDATE_LIMIT = 5
-
 /**
- * How much of the pasted link has to match.
+ * How many candidates to list. The search itself uses rumors-api's default
+ * `minimumShouldMatch`, as rumors-line-bot's `searchText` does (it also lists
+ * 4): listing is the loose threshold, and the strict one is `identical` below,
+ * which decides whether to skip the list.
  *
- * The report form only accepts a URL, so `like` is always a bare link — and
- * rumors-api's default (`10<70%`) is tuned for prose and actively wrong for
- * one. A URL tokenises into `https`, `www`, `facebook`, `com`, `share` and one
- * unique id, and every Facebook link shares all but the last of those, so on
- * dev, searching for a share link nobody has reported returns 54 unrelated
- * Facebook posts, all scoring an identical 225.5. A candidate list of
- * confident-looking noise is worse than an empty one: it invites the reporter
- * to +1 somebody else's message.
- *
- * At 90% the unique id has to match too, which turns the query into the
- * question actually being asked — "has anyone posted this same link?" — and it
- * answers correctly in both directions: 1 hit for a link that is in the
- * database, 0 for one that is not. 80% is already back in the noise (50 hits).
+ * Don't pin a higher `minimumShouldMatch` for links. rumors-api folds the
+ * scraped title and summary into `like` next to the link, so every
+ * `more_like_this` clause sees terms that no single field of an article holds:
+ * from 80% up nothing matches through them at all, and the only hit left is
+ * the exact `hyperlinks.url` match. That misses the same post shared with
+ * tracking parameters (`?s=46`) or text glued on, which the default finds by
+ * its identical scraped title and summary. The price is unrelated posts from
+ * the same site for a link nobody has reported; each card shows the scraped
+ * title so the reporter can tell them apart before picking.
  */
-const BARE_LINK_MIN_SHOULD_MATCH = '90%'
+const CANDIDATE_LIMIT = 4
 
 export type SearchCandidate = NonNullable<
   NonNullable<SearchSuspiciousMessagesQuery['ListArticles']>['edges']
@@ -140,18 +136,9 @@ export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
   .handler(async ({ data: like }): Promise<Array<SearchCandidate>> => {
     const data = await cofactsExec(
       graphql(`
-        query SearchSuspiciousMessages(
-          $like: String!
-          $first: Int!
-          $minimumShouldMatch: String
-        ) {
+        query SearchSuspiciousMessages($like: String!, $first: Int!) {
           ListArticles(
-            filter: {
-              moreLikeThis: {
-                like: $like
-                minimumShouldMatch: $minimumShouldMatch
-              }
-            }
+            filter: { moreLikeThis: { like: $like } }
             orderBy: [{ _score: DESC }]
             first: $first
           ) {
@@ -162,6 +149,9 @@ export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
                 articleType
                 replyCount
                 replyRequestCount
+                hyperlinks {
+                  title
+                }
               }
             }
           }
@@ -170,7 +160,6 @@ export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
       {
         like,
         first: CANDIDATE_LIMIT,
-        minimumShouldMatch: BARE_LINK_MIN_SHOULD_MATCH,
       },
     )
     const searched = sameLink(like)
@@ -496,6 +485,7 @@ function CandidateView({
         <SuspiciousMessageCard
           key={candidate.node.id}
           text={candidate.node.text}
+          linkTitle={candidate.node.hyperlinks?.find((h) => h?.title)?.title}
           articleType={candidate.node.articleType}
           factCheckCount={candidate.node.replyCount}
           communityDemandCount={candidate.node.replyRequestCount}

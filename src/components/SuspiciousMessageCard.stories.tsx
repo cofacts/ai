@@ -85,3 +85,14 @@ export const LongLink: Story = {
     onSelect: fn(),
   },
 }
+
+/** Candidate form for a bare link: the scraped title is what tells candidates apart. */
+export const CandidateLinkWithTitle: Story = {
+  args: {
+    text: 'https://x.com/atensnut/status/2120196706352390258?a=fC7jzydZO9v08-5ETgU&s=46影片',
+    linkTitle: 'Juanita Broaddrick (@atensnut) on X',
+    viewHref: 'https://cofacts.tw/article/example',
+    onSelect: fn(),
+    communityDemandCount: 1,
+  },
+}

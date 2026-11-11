@@ -41,11 +41,10 @@ function lastCall(): { query: string; variables: Record<string, unknown> } {
 }
 
 describe('searchSuspiciousMessages', () => {
-  test('demands a near-exact match, because the query is always a link', async () => {
-    // Measured on dev: at rumors-api's prose default this query returns 54
-    // unrelated Facebook posts scoring an identical 225.5, because every share
-    // link shares every token but the id. At 90% it returns the one right
-    // article, or none.
+  test("lists with rumors-api's default threshold, as the LINE bot does", async () => {
+    // A higher minimumShouldMatch leaves only exact-URL hits: on production,
+    // 90% missed 1gz4wbw2dldxz, the same tweet with `?a=…&s=46` and text glued
+    // on, which the default finds through its identical scraped title/summary.
     mockedExec.mockResolvedValueOnce({ ListArticles: { edges: [] } })
 
     await searchSuspiciousMessages({
@@ -55,8 +54,7 @@ describe('searchSuspiciousMessages', () => {
     const { variables } = lastCall()
     expect(variables).toEqual({
       like: 'https://www.facebook.com/share/p/1HSNRpimmH/',
-      first: 5,
-      minimumShouldMatch: '90%',
+      first: 4,
     })
   })
 

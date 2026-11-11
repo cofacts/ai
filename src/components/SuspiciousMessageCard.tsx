@@ -15,6 +15,12 @@ import { cn } from '@/lib/utils'
  */
 type SuspiciousMessageCardProps = {
   text: string | null
+  /**
+   * The title scraped from the message's link, if any. A link alone rarely says
+   * what it points at, and a search for a link also lists other posts from the
+   * same site, so the title is what tells the candidates apart.
+   */
+  linkTitle?: string | null
   articleType: string
   /** 0 means nobody has answered it yet — the branch that offers a +1. */
   factCheckCount: number
@@ -35,6 +41,7 @@ type SuspiciousMessageCardProps = {
 
 export function SuspiciousMessageCard({
   text,
+  linkTitle,
   articleType,
   factCheckCount,
   communityDemandCount,
@@ -49,6 +56,11 @@ export function SuspiciousMessageCard({
   const textId = useId()
   const body = (
     <>
+      {linkTitle && (
+        <p className="text-left text-type-ui-s-bold line-clamp-2 wrap-anywhere text-text-primary">
+          {linkTitle}
+        </p>
+      )}
       <p
         id={textId}
         className="flex-1 text-left text-type-caption line-clamp-4 whitespace-pre-wrap wrap-anywhere text-text-secondary"

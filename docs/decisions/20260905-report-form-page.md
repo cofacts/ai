@@ -176,30 +176,34 @@ typing or on blur, where it would move the submit button under a click or tap �
 or cleared while they edit. Pulling a link out of shared text is the Web Share Target's job
 ([#139](https://github.com/cofacts/ai/pull/139)), not this field's.
 
-### Searching a link needs a different threshold from searching prose
+### Two thresholds, as in the LINE bot: list loosely, skip the list strictly
 
-Every query from this page is a bare link, and rumors-api's `minimumShouldMatch` default of
-`10<70%` is tuned for prose: a URL tokenises into `https`, `www`, `facebook`, `com`, `share` and
-one unique id, and every Facebook link shares all but the last of those. Measured against
-`dev-api.cofacts.tw`:
+rumors-line-bot's `searchText` lists the top 4 of `ListArticles(moreLikeThis:)` at rumors-api's
+default `minimumShouldMatch` (`10<70%`), and only skips the list (picks for the user, hides
+"none of these") when the top hit's string similarity is ≥ 0.95. This page does the same: the
+list uses the default threshold and the top 4, and skipping it takes the exact equality described
+under `/report/check` above.
 
-| query                              | minimumShouldMatch | result                                             |
-| ---------------------------------- | ------------------ | -------------------------------------------------- |
-| share link **not** in the database | default            | **54 unrelated Facebook posts**, all scoring 225.5 |
-| share link **not** in the database | 90%                | 0                                                  |
-| share link **in** the database     | 90%                | exactly 1, the right one                           |
-| share link **in** the database     | 80%                | 50                                                 |
-| prose                              | default            | 1, the right one                                   |
+The first version of this page pinned the list itself at 90%, because a bare Facebook share link
+nobody had reported returned 54 unrelated Facebook posts on dev at the default (17 on production,
+measured 2026-11-11). That broke matching. `moreLikeThis` resolves the URLs in the query through
+url-resolver and folds the scraped title and summary into `like` next to the link, so each
+`more_like_this` clause (on `text`, and on `hyperlinks.title/summary`) sees terms no single field
+of an article holds. From 80% up, nothing matches through them at all, and the only hit left is
+the separate exact match of the resolved URL against `hyperlinks.url`. Measured on production:
 
-So the query is pinned at 90%, which asks the question actually being asked — has anyone posted
-this same link? A candidate list of confident-looking noise is worse than an empty one, because
-it invites the reporter to +1 a stranger's unrelated message.
+| query (like)                                        | minimumShouldMatch | result                                                                                      |
+| --------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------- |
+| `https://x.com/atensnut/status/2120196706352390258` | 90%, 80%           | only `17374hy10c27j` (same text), score 1: the exact-URL clause                             |
+| same                                                | default, 70%       | also `1gz4wbw2dldxz`, the same tweet as `…?a=…&s=46影片`, through its scraped title/summary |
+| a Facebook share link not in the database           | 90%, 80%, 75%      | 0                                                                                           |
+| same                                                | 70%                | 17 unrelated articles                                                                       |
 
-This is worth knowing about `ListArticles(moreLikeThis:)` generally: it already resolves the
-URLs in the query through url-resolver, folds the resulting title/summary into the `like` set,
-searches `hyperlinks.title/summary` as well as `text`, and separately matches the resolved URL —
-canonical form included — against other articles' hyperlinks. None of that rescues a link it
-cannot resolve, which is why the threshold still has to change.
+So at 90% a reporter of the clean link was told nobody had reported it, and a duplicate article
+was filed. A missed duplicate is the failure this page exists to prevent; unrelated candidates
+are not, as long as the reporter can tell them apart before picking. Each candidate card
+therefore shows the title url-resolver scraped for its link, and picking still needs a
+deliberate 就是這則.
 
 ### The reason field uses the LINE bot's wording
 
@@ -252,7 +256,7 @@ itself.
 ## Confirmation
 
 - `src/routes/report/__tests__/` covers the handlers of the report routes: the search
-  threshold, the signed-out refusal that never reaches the API, the reason trimmed to `null`, and
+  using the default threshold, the signed-out refusal that never reaches the API, the reason trimmed to `null`, and
   `reference` always being `URL`.
 - `src/server/__tests__/cofactsSite.test.ts` covers deriving the site host from the API host —
   every deployment points at `dev-api.cofacts.tw`, so a `cofacts.tw` link would 404.
