@@ -35,6 +35,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef } from 'react'
+import stringSimilarity from 'string-similarity'
 
 import { ReportShell } from './-components/ReportShell'
 import { REASON_DRAFT, URL_DRAFT } from './-lib'
@@ -104,6 +105,15 @@ export type SearchCandidate = NonNullable<
    * different posts. Identical candidates come first.
    */
   identical: boolean
+  /**
+   * How alike its text and the searched link are, 0–1: string-similarity's
+   * Dice score with whitespace removed, as rumors-line-bot's `searchText`
+   * computes it. Only for ordering, after `identical`: it puts the same post
+   * with tracking parameters (`?s=46`) ahead of other posts from the same
+   * site, which the search's relevance score does not reliably do. It never
+   * decides that two links are the same message.
+   */
+  similarity: number
 }
 
 /**
@@ -164,13 +174,22 @@ export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
       },
     )
     const searched = sameLink(like)
+    const compactLike = like.replace(/\s/g, '')
     return (data.ListArticles?.edges ?? [])
       .map((edge) => ({
         ...edge,
         articleUrl: getArticleUrl(edge.node.id),
         identical: sameLink(edge.node.text ?? '') === searched,
+        similarity: stringSimilarity.compareTwoStrings(
+          (edge.node.text ?? '').replace(/\s/g, ''),
+          compactLike,
+        ),
       }))
-      .sort((a, b) => Number(b.identical) - Number(a.identical))
+      .sort(
+        (a, b) =>
+          Number(b.identical) - Number(a.identical) ||
+          b.similarity - a.similarity,
+      )
   })
 
 /** `reason` is the reporter's own words. Never a summary written for them. */

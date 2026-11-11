@@ -118,6 +118,45 @@ describe('searchSuspiciousMessages', () => {
     ])
   })
 
+  test('ranks the rest by text similarity to the link, as the LINE bot does', async () => {
+    // Search ranks by relevance score, which can put another post from the
+    // same site ahead of the same post shared with tracking parameters.
+    const link = 'https://x.com/atensnut/status/2120196706352390258'
+    mockedExec.mockResolvedValueOnce({
+      ListArticles: {
+        edges: [
+          { node: { id: 'image', text: null } },
+          {
+            node: {
+              id: 'other',
+              text: 'https://x.com/someone/status/2119876543210987654',
+            },
+          },
+          { node: { id: 'variant', text: `${link}?s=46影片` } },
+          { node: { id: 'same', text: `${link}\n` } },
+        ],
+      },
+    })
+
+    const candidates = await searchSuspiciousMessages({ data: link })
+
+    expect(candidates.map((c) => c.node.id)).toEqual([
+      'same',
+      'variant',
+      'other',
+      'image',
+    ])
+    expect(candidates.map((c) => c.identical)).toEqual([
+      true,
+      false,
+      false,
+      false,
+    ])
+    // Whitespace is ignored, so the same link scores 1.
+    expect(candidates[0]?.similarity).toBe(1)
+    expect(candidates[3]?.similarity).toBe(0)
+  })
+
   test('survives a null connection', async () => {
     mockedExec.mockResolvedValueOnce({ ListArticles: null })
     expect(await searchSuspiciousMessages({ data: 'foo' })).toEqual([])

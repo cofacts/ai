@@ -183,7 +183,13 @@ default `minimumShouldMatch` (`10<70%`), and only skips the list (picks for the 
 "none of these") when the top hit's string similarity is ≥ 0.95. This page does the same: the
 list uses the default threshold but shows the top 6, since a web page has room for more cards than
 a LINE carousel, and skipping it takes the exact equality described
-under `/report/check` above.
+under `/report/check` above. Below the identical ones, candidates are ordered as the LINE bot
+orders them, by `string-similarity`'s Dice score between the whitespace-stripped texts. That puts
+the same post shared with tracking parameters ahead of other posts from the same site (0.77
+against 0.48 for the x.com example below), which rumors-api's relevance score does not reliably
+do. The score only orders the list: an earlier version also treated ≥ 0.95 as the same message,
+as the LINE bot does, and was reverted because two links one post-id digit apart score about
+0.96.
 
 The first version of this page pinned the list itself at 90%, because a bare Facebook share link
 nobody had reported returned 54 unrelated Facebook posts on dev at the default (17 on production,
