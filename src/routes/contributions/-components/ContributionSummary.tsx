@@ -1,4 +1,4 @@
-import type { ContributionsData } from '@/lib/contributions'
+import type { ContributionSummaryData } from '@/lib/contributions'
 import type { SiteNavUser } from '@/components/SiteNav'
 import { UserAvatar } from '@/components/UserAvatar'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
@@ -20,7 +20,7 @@ export function ContributionSummary({
   upvotesReceived,
 }: {
   profile: SiteNavUser
-} & Pick<ContributionsData, 'user' | 'totals' | 'upvotesReceived'>) {
+} & Pick<ContributionSummaryData, 'user' | 'totals' | 'upvotesReceived'>) {
   const { total, currentLevel, nextLevel } = user.points
   const progress =
     nextLevel && nextLevel > currentLevel

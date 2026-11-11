@@ -1,17 +1,24 @@
 // Server functions for the 我的貢獻 page (/contributions): what the logged-in user has
-// contributed to Cofacts, and what they could do next. The page reads it through
-// `myContributionsQuery`; a vote from a task card goes through `voteOnReply`.
+// contributed to Cofacts, and what they could do next. The page loads them in the browser, each
+// block on its own, so one failing query doesn't take the others down:
 //
-// Two rumors-api round trips, run in parallel:
-// - GetMyContributions: the user's level and daily contribution counts, and their latest
-//   reports (reply requests), replies and reply ratings, all via `selfOnly`.
-// - GetContributionSuggestions: needs the user id (the session JWT's subject): ratings other
-//   users gave the user's replies, messages with replies that need ratings, and messages
-//   nobody has replied to yet.
+// - getContributionSummary (`contributionSummaryQuery`): level, points, totals, 「有幫助」 votes
+//   received, and the daily counts behind the running-total chart.
+// - getContributionTimeline (`contributionTimelineQuery`, infinite): the user's reports, replies
+//   and ratings, newest first. rumors-api has no combined list, so each page fetches the next
+//   items of the three `selfOnly` lists and merges them here (`mergeTimelinePage`).
+// - getContributionTasks (`contributionTasksQuery`) and getMoreRateTasks: candidates for the
+//   task cards (rate a reply, write one). The page keeps a pool and asks for more rating
+//   candidates as the user rates.
+// - voteOnReply: a rating from a task card.
+//
+// Each read returns null when there is no usable session (no cookie, a JWT that doesn't verify,
+// or rumors-api rejecting it: `GetUser` is then null). Failures from rumors-api are logged, since
+// Cloud Run has no other trace of them, and rethrown so the block shows its error state.
 
 import { createServerFn } from '@tanstack/react-start'
 import { getCookie } from '@tanstack/react-start/server'
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 
 import { graphql } from './gql'
 import { verifySessionToken } from './jwt'
@@ -19,25 +26,39 @@ import { SESSION_COOKIE_NAME } from './sessionCookie'
 import type { ReplyType } from '@/components/icons/StatusIcon'
 import type {
   ContributionEntry,
-  ContributionTask,
-  ContributionsData,
+  ContributionSummaryData,
+  ContributionTasksData,
   FeedbackVoteValue,
+  RateTask,
+  TimelineCursor,
+  TimelineEdge,
+  TimelinePage,
+  WriteTask,
 } from '@/lib/contributions'
 import { cofactsExec } from '@/server/cofacts.server'
 import { replyTypes } from '@/components/icons/StatusIcon'
 import {
+  TIMELINE_PAGE_SIZE,
   buildCumulativeSeries,
-  mergeTimeline,
+  initialTimelineCursor,
+  mergeTimelinePage,
+  parseTimelineCursor,
   seriesStart,
+  sortRateTasks,
 } from '@/lib/contributions'
 
-/** Items per list fetched for the timeline; the page shows the newest 20 of them merged. */
-const LIST_SIZE = 10
 /** Text is cut here before it is sent to the browser; cards show 2–3 lines. */
 const SNIPPET = 140
+/** The user's latest reports checked for replies to rate. */
+const OWN_REPORTS = 10
+/** Rating candidates fetched per `toRate` page. */
+const RATE_PAGE = 12
+/** Pool caps sent to the page. */
+const RATE_POOL = 10
+const WRITE_POOL = 4
 
-const MyContributionsDocument = graphql(`
-  query GetMyContributions($since: String!, $first: Int!) {
+const ContributionSummaryDocument = graphql(`
+  query GetContributionSummary($since: String!, $userId: String!) {
     GetUser {
       id
       level
@@ -51,13 +72,44 @@ const MyContributionsDocument = graphql(`
         count
       }
     }
+    myReports: ListReplyRequests(filter: { selfOnly: true }) {
+      totalCount
+    }
+    myReplies: ListReplies(filter: { selfOnly: true }) {
+      totalCount
+    }
+    myFeedbacks: ListArticleReplyFeedbacks(filter: { selfOnly: true }) {
+      totalCount
+    }
+    upvotesReceived: ListArticleReplyFeedbacks(
+      filter: { authorId: $userId, vote: [UPVOTE] }
+    ) {
+      totalCount
+    }
+  }
+`)
+
+const ContributionTimelineDocument = graphql(`
+  query GetContributionTimeline(
+    $first: Int!
+    $reportsAfter: String
+    $repliesAfter: String
+    $feedbacksAfter: String
+    $withReports: Boolean!
+    $withReplies: Boolean!
+    $withFeedbacks: Boolean!
+  ) {
+    GetUser {
+      id
+    }
     myReports: ListReplyRequests(
       filter: { selfOnly: true }
       orderBy: [{ createdAt: DESC }]
       first: $first
-    ) {
-      totalCount
+      after: $reportsAfter
+    ) @include(if: $withReports) {
       edges {
+        cursor
         node {
           id
           reason
@@ -67,16 +119,6 @@ const MyContributionsDocument = graphql(`
             text
             articleType
             replyCount
-            articleReplies(status: NORMAL) {
-              replyId
-              userId
-              ownVote
-              feedbackCount
-              replyType
-              reply {
-                text
-              }
-            }
           }
         }
       }
@@ -85,9 +127,10 @@ const MyContributionsDocument = graphql(`
       filter: { selfOnly: true }
       orderBy: [{ createdAt: DESC }]
       first: $first
-    ) {
-      totalCount
+      after: $repliesAfter
+    ) @include(if: $withReplies) {
       edges {
+        cursor
         node {
           id
           text
@@ -104,9 +147,10 @@ const MyContributionsDocument = graphql(`
       filter: { selfOnly: true }
       orderBy: [{ createdAt: DESC }]
       first: $first
-    ) {
-      totalCount
+      after: $feedbacksAfter
+    ) @include(if: $withFeedbacks) {
       edges {
+        cursor
         node {
           id
           vote
@@ -122,12 +166,66 @@ const MyContributionsDocument = graphql(`
   }
 `)
 
-const ContributionSuggestionsDocument = graphql(`
-  query GetContributionSuggestions($userId: String!) {
-    upvotesReceived: ListArticleReplyFeedbacks(
-      filter: { authorId: $userId, vote: [UPVOTE] }
+// Messages with replies that need ratings, which the user didn't reply to themselves.
+graphql(`
+  fragment RateCandidates on ArticleConnection {
+    edges {
+      cursor
+      node {
+        id
+        text
+        articleType
+        replyRequests {
+          userId
+        }
+        articleReplies(status: NORMAL) {
+          replyId
+          userId
+          ownVote
+          feedbackCount
+          replyType
+          reply {
+            text
+          }
+        }
+      }
+    }
+  }
+`)
+
+const ContributionTasksDocument = graphql(`
+  query GetContributionTasks(
+    $userId: String!
+    $ownReports: Int!
+    $rateFirst: Int!
+  ) {
+    GetUser {
+      id
+    }
+    myReports: ListReplyRequests(
+      filter: { selfOnly: true }
+      orderBy: [{ createdAt: DESC }]
+      first: $ownReports
     ) {
-      totalCount
+      edges {
+        node {
+          article {
+            id
+            text
+            articleType
+            articleReplies(status: NORMAL) {
+              replyId
+              userId
+              ownVote
+              feedbackCount
+              replyType
+              reply {
+                text
+              }
+            }
+          }
+        }
+      }
     }
     toRate: ListArticles(
       filter: {
@@ -137,27 +235,9 @@ const ContributionSuggestionsDocument = graphql(`
         articleRepliesFrom: { userId: $userId, exists: false }
       }
       orderBy: [{ lastRequestedAt: DESC }]
-      first: 6
+      first: $rateFirst
     ) {
-      edges {
-        node {
-          id
-          text
-          replyRequests {
-            userId
-          }
-          articleReplies(status: NORMAL) {
-            replyId
-            userId
-            ownVote
-            feedbackCount
-            replyType
-            reply {
-              text
-            }
-          }
-        }
-      }
+      ...RateCandidates
     }
     toWrite: ListArticles(
       filter: {
@@ -182,6 +262,27 @@ const ContributionSuggestionsDocument = graphql(`
   }
 `)
 
+const MoreRateTasksDocument = graphql(`
+  query GetMoreRateTasks($userId: String!, $rateFirst: Int!, $after: String!) {
+    GetUser {
+      id
+    }
+    toRate: ListArticles(
+      filter: {
+        articleTypes: [TEXT]
+        replyCount: { GTE: 1 }
+        hasArticleReplyWithMorePositiveFeedback: false
+        articleRepliesFrom: { userId: $userId, exists: false }
+      }
+      orderBy: [{ lastRequestedAt: DESC }]
+      first: $rateFirst
+      after: $after
+    ) {
+      ...RateCandidates
+    }
+  }
+`)
+
 const VoteOnReplyDocument = graphql(`
   mutation VoteOnReply(
     $articleId: String!
@@ -199,6 +300,30 @@ const VoteOnReplyDocument = graphql(`
   }
 `)
 
+/** The session's user id, or null when there is no session or its JWT doesn't verify. */
+async function sessionUserId(): Promise<string | null> {
+  const token = getCookie(SESSION_COOKIE_NAME)
+  if (!token) return null
+  try {
+    return (await verifySessionToken(token)).userId
+  } catch {
+    return null
+  }
+}
+
+/** `cofactsExec`, logging a failure with rumors-api's message before rethrowing it. */
+async function exec<TResult, TVariables>(
+  operation: string,
+  ...args: Parameters<typeof cofactsExec<TResult, TVariables>>
+): Promise<TResult> {
+  try {
+    return await cofactsExec(...args)
+  } catch (err) {
+    console.error(`[contributions] ${operation} failed:`, err)
+    throw err
+  }
+}
+
 function snippet(text: string | null | undefined, articleType?: string | null) {
   const trimmed = (text ?? '').trim()
   if (!trimmed) {
@@ -215,6 +340,82 @@ function asReplyType(type: string | null | undefined): ReplyType | null {
     ? (type as ReplyType)
     : null
 }
+
+// --- node → ContributionEntry ----------------------------------------------------------------
+
+function reportEntry(node: {
+  id: string
+  reason?: string | null
+  createdAt?: string | null
+  article: {
+    id: string
+    text?: string | null
+    articleType?: string | null
+    replyCount: number
+  }
+}): ContributionEntry | null {
+  if (!node.createdAt) return null
+  return {
+    kind: 'report',
+    id: node.id,
+    createdAt: node.createdAt,
+    articleId: node.article.id,
+    articleText: snippet(node.article.text, node.article.articleType),
+    reason: node.reason?.trim() ? snippet(node.reason) : '',
+    replyCount: node.article.replyCount,
+  }
+}
+
+function replyEntry(node: {
+  id: string
+  text?: string | null
+  type?: string | null
+  createdAt?: string | null
+  articleReplies: ReadonlyArray<{
+    articleId?: string | null
+    positiveFeedbackCount: number
+  }>
+}): ContributionEntry | null {
+  const replyType = asReplyType(node.type)
+  if (!node.createdAt || !replyType) return null
+  return {
+    kind: 'reply',
+    id: node.id,
+    createdAt: node.createdAt,
+    articleId: node.articleReplies[0]?.articleId ?? null,
+    replyText: snippet(node.text),
+    replyType,
+    upvotes: node.articleReplies.reduce(
+      (sum, ar) => sum + ar.positiveFeedbackCount,
+      0,
+    ),
+  }
+}
+
+function feedbackEntry(node: {
+  id: string
+  vote?: string | null
+  createdAt?: string | null
+  article?: {
+    id: string
+    text?: string | null
+    articleType?: string | null
+  } | null
+}): ContributionEntry | null {
+  const { vote, createdAt, article } = node
+  if (!createdAt || !article || (vote !== 'UPVOTE' && vote !== 'DOWNVOTE'))
+    return null
+  return {
+    kind: 'feedback',
+    id: node.id,
+    createdAt,
+    articleId: article.id,
+    articleText: snippet(article.text, article.articleType),
+    vote,
+  }
+}
+
+// --- task candidates -------------------------------------------------------------------------
 
 type ArticleReplyLike = {
   replyId: string | null
@@ -252,139 +453,181 @@ function reportedByUser(
   return (replyRequests ?? []).some((rr) => rr?.userId === userId)
 }
 
-export const getMyContributions = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<ContributionsData | null> => {
-    const token = getCookie(SESSION_COOKIE_NAME)
-    if (!token) return null
+/** A rating card for `article`, or null when it has no reply the user could rate. */
+function rateTask(
+  article: {
+    id: string
+    text?: string | null
+    articleType?: string | null
+    articleReplies?: ReadonlyArray<ArticleReplyLike | null> | null
+  },
+  reason: RateTask['reason'],
+  userId: string,
+): RateTask | null {
+  const toRate = pickReplyToRate(article.articleReplies, userId)
+  if (!toRate?.reply) return null
+  return {
+    kind: 'rate',
+    reason,
+    articleId: article.id,
+    articleText: snippet(article.text, article.articleType),
+    replyId: toRate.replyId,
+    replyText: snippet(toRate.reply.text),
+    replyType: asReplyType(toRate.replyType)!,
+    feedbackCount: toRate.feedbackCount ?? 0,
+  }
+}
 
-    let userId: string
-    try {
-      ;({ userId } = await verifySessionToken(token))
-    } catch {
-      return null
-    }
-
-    const now = new Date()
-    const [mineResult, suggestionsResult] = await Promise.allSettled([
-      cofactsExec(MyContributionsDocument, {
-        since: seriesStart(now),
-        first: LIST_SIZE,
-      }),
-      cofactsExec(ContributionSuggestionsDocument, { userId }),
-    ])
-    // Logged so a failure shows up in Cloud Run logs with rumors-api's message; the error
-    // page itself only says the data couldn't be loaded.
-    if (mineResult.status === 'rejected') {
-      console.error(
-        '[contributions] GetMyContributions failed:',
-        mineResult.reason,
-      )
-      throw mineResult.reason
-    }
-    const mine = mineResult.value
-    // Suggestions are extras: without them the page still shows the user's own contributions.
-    if (suggestionsResult.status === 'rejected') {
-      console.error(
-        '[contributions] GetContributionSuggestions failed:',
-        suggestionsResult.reason,
-      )
-    }
-    const suggestions =
-      suggestionsResult.status === 'fulfilled' ? suggestionsResult.value : null
-    const user = mine.GetUser
-    // rumors-api rejected the session: cofactsExec cleared the cookie and ran anonymously.
-    if (!user) return null
-
-    const reports: Array<ContributionEntry> = []
-    const rateTasks: Array<ContributionTask> = []
-    for (const edge of mine.myReports?.edges ?? []) {
-      const { id, reason, createdAt, article } = edge.node
-      if (!createdAt) continue
-      reports.push({
-        kind: 'report',
-        id,
-        createdAt,
-        articleId: article.id,
-        articleText: snippet(article.text, article.articleType),
-        reason: reason?.trim() ? snippet(reason) : '',
-        replyCount: article.replyCount,
-      })
-      // Someone replied to a message the user reported: the most personal thing to rate.
-      const toRate = pickReplyToRate(article.articleReplies, user.id)
-      if (toRate && toRate.reply) {
-        rateTasks.push({
-          kind: 'rate',
-          reason: 'reported',
-          articleId: article.id,
-          articleText: snippet(article.text, article.articleType),
-          replyId: toRate.replyId,
-          replyText: snippet(toRate.reply.text),
-          replyType: asReplyType(toRate.replyType)!,
-          feedbackCount: toRate.feedbackCount ?? 0,
-        })
+type RateCandidateEdges =
+  | ReadonlyArray<{
+      cursor: string
+      node: Parameters<typeof rateTask>[0] & {
+        replyRequests?: ReadonlyArray<{ userId: string | null } | null> | null
       }
-    }
+    }>
+  | null
+  | undefined
 
-    const replies: Array<ContributionEntry> = []
-    for (const edge of mine.myReplies?.edges ?? []) {
-      const { id, text, type, createdAt, articleReplies } = edge.node
-      const replyType = asReplyType(type)
-      if (!createdAt || !replyType) continue
-      replies.push({
-        kind: 'reply',
-        id,
-        createdAt,
-        articleId: articleReplies[0]?.articleId ?? null,
-        replyText: snippet(text),
-        replyType,
-        upvotes: articleReplies.reduce(
-          (sum, ar) => sum + ar.positiveFeedbackCount,
-          0,
-        ),
-      })
-    }
+/** Rating cards from a `toRate` page, and the cursor for the next page (null at the end). */
+function rateCandidates(edges: RateCandidateEdges, userId: string) {
+  const list = edges ?? []
+  const rate = list.flatMap(({ node }) => {
+    // An older report than the user's latest few: still the user's own message.
+    const task = rateTask(
+      node,
+      reportedByUser(node.replyRequests, userId) ? 'reported' : 'needs-rating',
+      userId,
+    )
+    return task ? [task] : []
+  })
+  return {
+    rate,
+    rateAfter: list.length < RATE_PAGE ? null : (list.at(-1)?.cursor ?? null),
+  }
+}
 
-    const feedbacks: Array<ContributionEntry> = []
-    for (const edge of mine.myFeedbacks?.edges ?? []) {
-      const { id, vote, createdAt, article } = edge.node
-      if (!createdAt || !article || (vote !== 'UPVOTE' && vote !== 'DOWNVOTE'))
-        continue
-      feedbacks.push({
-        kind: 'feedback',
-        id,
-        createdAt,
-        articleId: article.id,
-        articleText: snippet(article.text, article.articleType),
-        vote,
-      })
-    }
+// --- server functions ------------------------------------------------------------------------
 
-    for (const edge of suggestions?.toRate?.edges ?? []) {
-      const article = edge.node
-      if (rateTasks.some((t) => t.articleId === article.id)) continue
-      const toRate = pickReplyToRate(article.articleReplies, user.id)
-      if (!toRate || !toRate.reply) continue
-      rateTasks.push({
-        kind: 'rate',
-        // An older report than the timeline's latest few: still the user's own message.
-        reason: reportedByUser(article.replyRequests, user.id)
-          ? 'reported'
-          : 'needs-rating',
-        articleId: article.id,
-        articleText: snippet(article.text),
-        replyId: toRate.replyId,
-        replyText: snippet(toRate.reply.text),
-        replyType: asReplyType(toRate.replyType)!,
-        feedbackCount: toRate.feedbackCount ?? 0,
-      })
-    }
+export const getContributionSummary = createServerFn({
+  method: 'GET',
+}).handler(async (): Promise<ContributionSummaryData | null> => {
+  const userId = await sessionUserId()
+  if (!userId) return null
+
+  const now = new Date()
+  const result = await exec(
+    'GetContributionSummary',
+    ContributionSummaryDocument,
+    { since: seriesStart(now), userId },
+  )
+  const user = result.GetUser
+  // rumors-api rejected the session: cofactsExec cleared the cookie and ran anonymously.
+  if (!user) return null
+
+  const totals = {
+    reports: result.myReports?.totalCount ?? 0,
+    replies: result.myReplies?.totalCount ?? 0,
+    feedbacks: result.myFeedbacks?.totalCount ?? 0,
+  }
+  return {
+    user: {
+      level: user.level,
+      points: {
+        total: user.points.total,
+        currentLevel: user.points.currentLevel,
+        nextLevel: user.points.nextLevel,
+      },
+    },
+    totals,
+    upvotesReceived: result.upvotesReceived?.totalCount ?? 0,
+    series: buildCumulativeSeries(
+      (user.contributions ?? []).flatMap((c) =>
+        c?.date ? [{ date: c.date, count: c.count ?? 0 }] : [],
+      ),
+      totals.reports + totals.replies + totals.feedbacks,
+      now,
+    ),
+  }
+})
+
+export const getContributionTimeline = createServerFn({ method: 'GET' })
+  .inputValidator((input: { cursor: TimelineCursor | null }) => ({
+    cursor: parseTimelineCursor(
+      (input as { cursor?: unknown } | null | undefined)?.cursor,
+    ),
+  }))
+  .handler(async ({ data }): Promise<TimelinePage | null> => {
+    const userId = await sessionUserId()
+    if (!userId) return null
+
+    const cursor = data.cursor ?? initialTimelineCursor()
+    const result = await exec(
+      'GetContributionTimeline',
+      ContributionTimelineDocument,
+      {
+        first: TIMELINE_PAGE_SIZE,
+        reportsAfter: cursor.reports.after,
+        repliesAfter: cursor.replies.after,
+        feedbacksAfter: cursor.feedbacks.after,
+        withReports: !cursor.reports.done,
+        withReplies: !cursor.replies.done,
+        withFeedbacks: !cursor.feedbacks.done,
+      },
+    )
+    if (!result.GetUser) return null
+
+    const edges = <TNode>(
+      list: ReadonlyArray<{ cursor: string; node: TNode }> | null | undefined,
+      toEntry: (node: TNode) => ContributionEntry | null,
+    ): Array<TimelineEdge> =>
+      (list ?? []).map((edge) => ({
+        cursor: edge.cursor,
+        entry: toEntry(edge.node),
+      }))
+
+    return mergeTimelinePage(cursor, {
+      reports: edges(result.myReports?.edges, reportEntry),
+      replies: edges(result.myReplies?.edges, replyEntry),
+      feedbacks: edges(result.myFeedbacks?.edges, feedbackEntry),
+    })
+  })
+
+export const getContributionTasks = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<ContributionTasksData | null> => {
+    const userId = await sessionUserId()
+    if (!userId) return null
+
+    const result = await exec(
+      'GetContributionTasks',
+      ContributionTasksDocument,
+      { userId, ownReports: OWN_REPORTS, rateFirst: RATE_PAGE },
+    )
+    if (!result.GetUser) return null
+
+    // Someone replied to a message the user reported: the most personal thing to rate.
+    const own = (result.myReports?.edges ?? []).flatMap(({ node }) => {
+      const task = rateTask(node.article, 'reported', userId)
+      return task ? [task] : []
+    })
+    const more = rateCandidates(result.toRate?.edges, userId)
+
+    const seen = new Set<string>()
+    const rate = sortRateTasks(
+      [...own, ...more.rate].filter((task) => {
+        if (seen.has(task.articleId)) return false
+        seen.add(task.articleId)
+        return true
+      }),
+    ).slice(0, RATE_POOL)
 
     // Whoever submits a message also has a reply request on it, so this also skips messages the
     // user submitted: they are already in the timeline, and the user is waiting for an answer.
-    const writeTasks: Array<ContributionTask> = (
-      suggestions?.toWrite?.edges ?? []
-    )
-      .filter(({ node }) => !reportedByUser(node.replyRequests, user.id))
+    const write: Array<WriteTask> = (result.toWrite?.edges ?? [])
+      .filter(
+        ({ node }) =>
+          !reportedByUser(node.replyRequests, userId) && !seen.has(node.id),
+      )
+      .slice(0, WRITE_POOL)
       .map(({ node }) => ({
         kind: 'write',
         articleId: node.id,
@@ -392,52 +635,69 @@ export const getMyContributions = createServerFn({ method: 'GET' }).handler(
         replyRequestCount: node.replyRequestCount ?? 0,
       }))
 
-    // Two rating cards for each writing card: rating is the easy first step (meeting notes:
-    // 卡牌 vs 寫字), and replies on the user's own reports come first.
-    const tasks: Array<ContributionTask> = []
-    const rates = rateTasks.slice(0, 4)
-    const writes = writeTasks.slice(0, 2)
-    while (rates.length || writes.length) {
-      tasks.push(...rates.splice(0, 2))
-      tasks.push(...writes.splice(0, 1))
-    }
-
-    const totals = {
-      reports: mine.myReports?.totalCount ?? 0,
-      replies: mine.myReplies?.totalCount ?? 0,
-      feedbacks: mine.myFeedbacks?.totalCount ?? 0,
-    }
-
-    return {
-      user: {
-        level: user.level,
-        points: {
-          total: user.points.total,
-          currentLevel: user.points.currentLevel,
-          nextLevel: user.points.nextLevel,
-        },
-      },
-      totals,
-      upvotesReceived: suggestions?.upvotesReceived?.totalCount ?? 0,
-      series: buildCumulativeSeries(
-        (user.contributions ?? []).flatMap((c) =>
-          c?.date ? [{ date: c.date, count: c.count ?? 0 }] : [],
-        ),
-        totals.reports + totals.replies + totals.feedbacks,
-        now,
-      ),
-      timeline: mergeTimeline([reports, replies, feedbacks]),
-      tasks,
-    }
+    return { rate, write, rateAfter: more.rateAfter }
   },
 )
 
-/** Per user: `clearUserScopedCache` removes it on logout. */
-export const myContributionsQuery = queryOptions({
-  queryKey: ['GetMyContributions'],
-  queryFn: () => getMyContributions(),
+export const getMoreRateTasks = createServerFn({ method: 'GET' })
+  .inputValidator((input: { after: string }) => {
+    const after = (input as { after?: unknown } | null | undefined)?.after
+    if (typeof after !== 'string' || !after) {
+      throw new Error('after is required')
+    }
+    return { after }
+  })
+  .handler(
+    async ({
+      data,
+    }): Promise<Pick<ContributionTasksData, 'rate' | 'rateAfter'> | null> => {
+      const userId = await sessionUserId()
+      if (!userId) return null
+
+      const result = await exec('GetMoreRateTasks', MoreRateTasksDocument, {
+        userId,
+        rateFirst: RATE_PAGE,
+        after: data.after,
+      })
+      if (!result.GetUser) return null
+
+      const { rate, rateAfter } = rateCandidates(result.toRate?.edges, userId)
+      return { rate: sortRateTasks(rate), rateAfter }
+    },
+  )
+
+// Per user: `clearUserScopedCache` removes all of these on logout.
+
+export const contributionSummaryQuery = queryOptions({
+  queryKey: ['GetContributionSummary'],
+  queryFn: () => getContributionSummary(),
   staleTime: 60_000,
 })
+
+export const contributionTimelineQuery = infiniteQueryOptions({
+  queryKey: ['GetContributionTimeline'],
+  queryFn: ({ pageParam }) =>
+    getContributionTimeline({ data: { cursor: pageParam } }),
+  initialPageParam: null as TimelineCursor | null,
+  getNextPageParam: (last) => last?.nextCursor ?? undefined,
+  staleTime: 60_000,
+  refetchOnWindowFocus: false,
+})
+
+/** Not refetched after a vote: the page keeps its own pool, so cards don't reshuffle. */
+export const contributionTasksQuery = queryOptions({
+  queryKey: ['GetContributionTasks'],
+  queryFn: () => getContributionTasks(),
+  staleTime: 5 * 60_000,
+  refetchOnWindowFocus: false,
+})
+
+export const moreRateTasksQuery = (after: string) =>
+  queryOptions({
+    queryKey: ['GetMoreRateTasks', { after }],
+    queryFn: () => getMoreRateTasks({ data: { after } }),
+    staleTime: 5 * 60_000,
+  })
 
 export const voteOnReply = createServerFn({ method: 'POST' })
   .inputValidator(
@@ -459,8 +719,13 @@ export const voteOnReply = createServerFn({ method: 'POST' })
     },
   )
   .handler(async ({ data }) => {
-    const result = await cofactsExec(VoteOnReplyDocument, data)
-    return {
-      ownVote: result.CreateOrUpdateArticleReplyFeedback?.ownVote ?? null,
+    try {
+      const result = await cofactsExec(VoteOnReplyDocument, data)
+      return {
+        ownVote: result.CreateOrUpdateArticleReplyFeedback?.ownVote ?? null,
+      }
+    } catch (err) {
+      console.error('[contributions] VoteOnReply failed:', err)
+      throw err
     }
   })

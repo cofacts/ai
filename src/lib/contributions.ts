@@ -74,7 +74,8 @@ export interface CumulativePoint {
   added: number
 }
 
-export interface ContributionsData {
+/** Top of the page: level, totals and the running-total chart. */
+export interface ContributionSummaryData {
   user: {
     level: number
     points: { total: number; currentLevel: number; nextLevel: number | null }
@@ -83,8 +84,6 @@ export interface ContributionsData {
   /** 「有幫助」 votes other users gave the user's replies. */
   upvotesReceived: number
   series: Array<CumulativePoint>
-  timeline: Array<ContributionEntry>
-  tasks: Array<ContributionTask>
 }
 
 export const SERIES_WEEKS = 12
@@ -145,35 +144,326 @@ export function buildCumulativeSeries(
   })
 }
 
-/** Newest first, at most `limit`. */
-export function mergeTimeline(
-  lists: ReadonlyArray<ReadonlyArray<ContributionEntry>>,
-  limit = 20,
-): Array<ContributionEntry> {
-  return lists
-    .flat()
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, limit)
+// ---------------------------------------------------------------------------------------------
+// Timeline: one newest-first list merged from three rumors-api lists, page by page.
+
+/** Where one rumors-api list stands: the edge cursor to continue after, and whether it ran out. */
+export interface ListCursor {
+  after: string | null
+  done: boolean
+}
+
+/** Where each of the timeline's three lists stands; the page param of the infinite query. */
+export interface TimelineCursor {
+  reports: ListCursor
+  replies: ListCursor
+  feedbacks: ListCursor
+}
+
+export type TimelineList = keyof TimelineCursor
+
+export const TIMELINE_LISTS: ReadonlyArray<TimelineList> = [
+  'reports',
+  'replies',
+  'feedbacks',
+]
+
+/** Entries per timeline page; also how many items are fetched from each list per page. */
+export const TIMELINE_PAGE_SIZE = 20
+
+export const initialTimelineCursor = (): TimelineCursor => ({
+  reports: { after: null, done: false },
+  replies: { after: null, done: false },
+  feedbacks: { after: null, done: false },
+})
+
+/**
+ * One edge as rumors-api returned it, newest first. `entry` is null for an item the page can't
+ * show (no date, unknown reply type): it is still consumed, so the cursor moves past it.
+ */
+export interface TimelineEdge {
+  cursor: string
+  entry: ContributionEntry | null
+}
+
+export interface TimelinePage {
+  entries: Array<ContributionEntry>
+  /** null when all three lists ran out. */
+  nextCursor: TimelineCursor | null
+}
+
+/**
+ * Merges what each unfinished list returned (up to `pageSize` edges each, fetched after
+ * `cursor`) into the next `pageSize` entries, newest first. Any entry among the next `pageSize`
+ * overall is among the next `pageSize` of its own list, so this is exact. Each list's cursor
+ * moves to the last edge taken from it; edges not taken are fetched again next page. A list is
+ * done when it returned fewer than `pageSize` edges and all of them were taken.
+ */
+export function mergeTimelinePage(
+  cursor: TimelineCursor,
+  fetched: Partial<Record<TimelineList, ReadonlyArray<TimelineEdge>>>,
+  pageSize = TIMELINE_PAGE_SIZE,
+): TimelinePage {
+  // Stable sort over the lists in order: within one list, the taken entries are a prefix.
+  const candidates = TIMELINE_LISTS.flatMap((list) =>
+    cursor[list].done
+      ? []
+      : (fetched[list] ?? []).flatMap((edge, index) =>
+          edge.entry ? [{ list, index, entry: edge.entry }] : [],
+        ),
+  ).sort(
+    (a, b) => Date.parse(b.entry.createdAt) - Date.parse(a.entry.createdAt),
+  )
+  const taken = candidates.slice(0, pageSize)
+
+  const next = {} as TimelineCursor
+  for (const list of TIMELINE_LISTS) {
+    if (cursor[list].done) {
+      next[list] = cursor[list]
+      continue
+    }
+    const edges = fetched[list] ?? []
+    const usable = candidates.filter((c) => c.list === list)
+    const takenHere = taken.filter((c) => c.list === list)
+    // All usable entries taken: unusable edges after them are consumed too.
+    const lastIndex =
+      takenHere.length === usable.length
+        ? edges.length - 1
+        : (takenHere.at(-1)?.index ?? -1)
+    next[list] = {
+      after: lastIndex >= 0 ? edges[lastIndex]!.cursor : cursor[list].after,
+      done: edges.length < pageSize && lastIndex === edges.length - 1,
+    }
+  }
+
+  return {
+    entries: taken.map((c) => c.entry),
+    nextCursor: TIMELINE_LISTS.every((list) => next[list].done) ? null : next,
+  }
+}
+
+function isListCursor(value: unknown): value is ListCursor {
+  if (typeof value !== 'object' || value === null) return false
+  const { after, done } = value as Record<string, unknown>
+  return (
+    (after === null || typeof after === 'string') && typeof done === 'boolean'
+  )
+}
+
+/** Checks a timeline page param from the browser; throws when it isn't one. */
+export function parseTimelineCursor(input: unknown): TimelineCursor | null {
+  if (input === null || input === undefined) return null
+  if (typeof input !== 'object') throw new Error('Invalid timeline cursor')
+  const record = input as Record<string, unknown>
+  const cursor = {} as TimelineCursor
+  for (const list of TIMELINE_LISTS) {
+    const value = record[list]
+    if (!isListCursor(value))
+      throw new Error(`Invalid timeline cursor: ${list}`)
+    cursor[list] = { after: value.after, done: value.done }
+  }
+  return cursor
+}
+
+// ---------------------------------------------------------------------------------------------
+// Task cards: a pool of candidates, laid out in slots between timeline entries.
+
+export type RateTask = Extract<ContributionTask, { kind: 'rate' }>
+export type WriteTask = Extract<ContributionTask, { kind: 'write' }>
+
+export interface ContributionTasksData {
+  /** Rating candidates, replies on the user's own reports first. */
+  rate: Array<RateTask>
+  write: Array<WriteTask>
+  /** Edge cursor to fetch more rating candidates after; null when there are no more. */
+  rateAfter: string | null
+}
+
+/** `key` used for a task in lists and after a vote. */
+export function taskKey(task: ContributionTask): string {
+  return task.kind === 'rate'
+    ? `rate:${task.articleId}:${task.replyId}`
+    : `write:${task.articleId}`
+}
+
+/** Replies on messages the user reported first, then the rest; order kept within each group. */
+export function sortRateTasks(tasks: ReadonlyArray<RateTask>): Array<RateTask> {
+  return [
+    ...tasks.filter((t) => t.reason === 'reported'),
+    ...tasks.filter((t) => t.reason !== 'reported'),
+  ]
+}
+
+/** `pool` followed by the tasks of `incoming` on messages not already in it. */
+export function mergeRatePool(
+  pool: ReadonlyArray<RateTask>,
+  incoming: ReadonlyArray<RateTask>,
+): Array<RateTask> {
+  const articles = new Set(pool.map((t) => t.articleId))
+  const merged = [...pool]
+  for (const task of incoming) {
+    if (articles.has(task.articleId)) continue
+    articles.add(task.articleId)
+    merged.push(task)
+  }
+  return merged
+}
+
+/**
+ * The first layout of task cards: slots in the order R R W R R W …, from the first `rates`
+ * rating and `writes` writing candidates (two ratings per writing card: rating is the easy first
+ * step). A slot is a list of task keys; it starts with one and grows as the user rates.
+ */
+export function composeTaskSlots(
+  tasks: Pick<ContributionTasksData, 'rate' | 'write'>,
+  rates = 4,
+  writes = 2,
+): Array<Array<string>> {
+  const r = tasks.rate.slice(0, rates)
+  const w = tasks.write.slice(0, writes)
+  const slots: Array<Array<string>> = []
+  while (r.length || w.length) {
+    for (const task of r.splice(0, 2)) slots.push([taskKey(task)])
+    for (const task of w.splice(0, 1)) slots.push([taskKey(task)])
+  }
+  return slots
+}
+
+/** What happened after the user rated a task card. */
+export interface VotedTask {
+  vote: FeedbackVoteValue
+  /** A new card was added under it / there are no candidates left / still looking. */
+  next: 'added' | 'exhausted' | 'pending'
+}
+
+/** Task-card state on the page; only the page changes it, so cards never move on their own. */
+export interface TaskSlotsState {
+  rate: Array<RateTask>
+  write: Array<WriteTask>
+  rateAfter: string | null
+  slots: Array<Array<string>>
+  voted: Record<string, VotedTask>
+  /** Voted keys still waiting for a new card, oldest first. */
+  waiting: Array<string>
+}
+
+export function initTaskSlots(tasks: ContributionTasksData): TaskSlotsState {
+  return {
+    rate: tasks.rate,
+    write: tasks.write,
+    rateAfter: tasks.rateAfter,
+    slots: composeTaskSlots(tasks),
+    voted: {},
+    waiting: [],
+  }
+}
+
+function shownKeys(state: TaskSlotsState) {
+  return new Set(state.slots.flat())
+}
+
+/** Rating candidates in the pool that no slot shows yet. */
+export function unshownRateTasks(state: TaskSlotsState): Array<RateTask> {
+  const shown = shownKeys(state)
+  return state.rate.filter((t) => !shown.has(taskKey(t)))
+}
+
+/** Gives waiting voted cards a new card under them, while candidates last. */
+function fillWaiting(state: TaskSlotsState): TaskSlotsState {
+  if (!state.waiting.length) return state
+  const candidates = unshownRateTasks(state)
+  const slots = state.slots.map((slot) => [...slot])
+  const voted = { ...state.voted }
+  const waiting: Array<string> = []
+  for (const key of state.waiting) {
+    const slot = slots.find((s) => s.includes(key))
+    if (!slot || !voted[key]) continue
+    const candidate = candidates.shift()
+    if (candidate) {
+      slot.splice(slot.indexOf(key) + 1, 0, taskKey(candidate))
+      voted[key] = { ...voted[key], next: 'added' }
+    } else if (state.rateAfter === null) {
+      voted[key] = { ...voted[key], next: 'exhausted' }
+    } else {
+      waiting.push(key)
+    }
+  }
+  return { ...state, slots, voted, waiting }
+}
+
+/** The user rated card `key`: record it, and put the next candidate directly under it. */
+export function recordVote(
+  state: TaskSlotsState,
+  key: string,
+  vote: FeedbackVoteValue,
+): TaskSlotsState {
+  if (state.voted[key]) return state
+  return fillWaiting({
+    ...state,
+    voted: { ...state.voted, [key]: { vote, next: 'pending' } },
+    waiting: [...state.waiting, key],
+  })
+}
+
+/**
+ * More rating candidates arrived (fetched after `from`). Ignored when the pool moved on since
+ * (`from` is no longer the cursor), so a late response can't add stale candidates.
+ */
+export function addRateTasks(
+  state: TaskSlotsState,
+  from: string,
+  more: { rate: ReadonlyArray<RateTask>; rateAfter: string | null },
+): TaskSlotsState {
+  if (state.rateAfter !== from) return state
+  return fillWaiting({
+    ...state,
+    rate: mergeRatePool(state.rate, more.rate),
+    rateAfter: more.rateAfter,
+  })
+}
+
+/**
+ * The tasks query returned new data (a refetch): take the new pool, but keep what the user sees.
+ * Cards stay in place; a card whose task left the pool is dropped unless the user rated it.
+ */
+export function syncTaskSlots(
+  state: TaskSlotsState,
+  tasks: ContributionTasksData,
+): TaskSlotsState {
+  const votedTasks = state.rate.filter((t) => state.voted[taskKey(t)])
+  const rate = mergeRatePool(votedTasks, tasks.rate)
+  const known = new Set([...rate, ...tasks.write].map(taskKey))
+  const slots = state.slots
+    .map((slot) => slot.filter((key) => state.voted[key] || known.has(key)))
+    .filter((slot) => slot.length > 0)
+  return fillWaiting({
+    ...state,
+    rate,
+    write: tasks.write,
+    rateAfter: tasks.rateAfter,
+    slots,
+  })
 }
 
 export type FeedItem =
   | { type: 'entry'; entry: ContributionEntry }
-  | { type: 'task'; task: ContributionTask }
+  | { type: 'slot'; key: string; tasks: Array<ContributionTask> }
 
 /**
- * The timeline with tasks mixed in: the first task on top, then one after every `every` entries.
- * Tasks left over go at the end, so none is dropped.
+ * The timeline with task slots mixed in: the first slot on top, then one after every `every`
+ * entries. Slots left over go at the end, so none is dropped; empty slots are skipped.
  */
 export function interleave(
   entries: ReadonlyArray<ContributionEntry>,
-  tasks: ReadonlyArray<ContributionTask>,
+  slots: ReadonlyArray<ReadonlyArray<ContributionTask>>,
   every = 3,
 ): Array<FeedItem> {
-  const queue = [...tasks]
+  const queue = slots.filter((slot) => slot.length > 0)
   const items: Array<FeedItem> = []
   const next = () => {
-    const task = queue.shift()
-    if (task) items.push({ type: 'task', task })
+    const tasks = queue.shift()
+    if (tasks)
+      items.push({ type: 'slot', key: taskKey(tasks[0]!), tasks: [...tasks] })
   }
   next()
   entries.forEach((entry, i) => {
@@ -182,11 +472,4 @@ export function interleave(
   })
   while (queue.length) next()
   return items
-}
-
-/** `key` used for a task in lists and after a vote. */
-export function taskKey(task: ContributionTask): string {
-  return task.kind === 'rate'
-    ? `rate:${task.articleId}:${task.replyId}`
-    : `write:${task.articleId}`
 }

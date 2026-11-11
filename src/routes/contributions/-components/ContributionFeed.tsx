@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import type {
@@ -6,6 +6,8 @@ import type {
   ContributionKind,
   ContributionTask,
   FeedbackVoteValue,
+  RateTask,
+  VotedTask,
 } from '@/lib/contributions'
 import type { ReplyType } from '@/components/icons/StatusIcon'
 import type { MaterialSymbol } from '@/components/icons/material-symbols'
@@ -40,33 +42,55 @@ const dateFormat = new Intl.DateTimeFormat('zh-TW', {
 })
 
 export type VoteHandler = (
-  task: Extract<ContributionTask, { kind: 'rate' }>,
+  task: RateTask,
   vote: FeedbackVoteValue,
 ) => Promise<void>
 
 /**
- * 我的貢獻 timeline: what the user did, newest first, with cards for what they could do next in
- * between (one on top, then one every three entries). Contributions only add up; nothing here
- * goes away when the user is inactive.
+ * 我的貢獻 timeline: what the user did, newest first, with slots of cards for what they could do
+ * next in between (one slot on top, then one every three entries). A rated card collapses to a
+ * line and the next card appears right under it, so the user can keep rating without
+ * scrolling. Older entries load as the user reaches the end. Contributions only add up; nothing
+ * here goes away when the user is inactive.
  */
 export function ContributionFeed({
   entries,
-  tasks,
+  slots,
+  voted,
   onVote,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
+  loadMoreFailed = false,
+  timelineError,
+  tasksError,
 }: {
   entries: ReadonlyArray<ContributionEntry>
-  tasks: ReadonlyArray<ContributionTask>
+  /** Task cards, slot by slot; a slot shows its cards together. */
+  slots: ReadonlyArray<ReadonlyArray<ContributionTask>>
+  /** Rated cards by `taskKey`. */
+  voted: Readonly<Record<string, VotedTask>>
   onVote: VoteHandler
+  hasMore: boolean
+  isLoadingMore: boolean
+  onLoadMore: () => void
+  /** Loading the next page failed; the button retries. */
+  loadMoreFailed?: boolean
+  /** Shown in place of the entries when the timeline couldn't load. */
+  timelineError?: ReactNode
+  /** Shown above the list when the task cards couldn't load. */
+  tasksError?: ReactNode
 }) {
   const [filter, setFilter] = useState<Filter>('all')
   const items =
     filter === 'all'
-      ? interleave(entries, tasks)
+      ? interleave(entries, slots)
       : filter === 'task'
-        ? tasks.map((task) => ({ type: 'task' as const, task }))
+        ? interleave([], slots)
         : entries
             .filter((e) => e.kind === filter)
             .map((entry) => ({ type: 'entry' as const, entry }))
+  const showsEntries = filter !== 'task' && !timelineError
 
   return (
     <section
@@ -92,18 +116,36 @@ export function ContributionFeed({
         ))}
       </div>
 
+      {filter !== 'task' && timelineError}
+      {(filter === 'all' || filter === 'task') && tasksError}
+
       {items.length === 0 ? (
-        <p className="rounded-radius-10 bg-surface-raised p-spacing-16 text-type-body-m text-text-secondary">
-          {filter === 'task'
-            ? '目前沒有推薦給你的事，晚點再回來看看。'
-            : '這裡還沒有紀錄。回報一則可疑訊息、評價一則查核回應，都會出現在這裡。'}
-        </p>
+        !timelineError &&
+        !(filter === 'task' && tasksError) && (
+          <p className="rounded-radius-10 bg-surface-raised p-spacing-16 text-type-body-m text-text-secondary">
+            {filter === 'task'
+              ? '目前沒有推薦給你的事，晚點再回來看看。'
+              : hasMore
+                ? '已載入的紀錄裡沒有這一類，可以再載入更早的紀錄。'
+                : '這裡還沒有紀錄。回報一則可疑訊息、評價一則查核回應，都會出現在這裡。'}
+          </p>
+        )
       ) : (
         <ol className="flex flex-col">
           {items.map((item) =>
-            item.type === 'task' ? (
-              <li key={taskKey(item.task)} className="py-spacing-8">
-                <TaskCard task={item.task} onVote={onVote} />
+            item.type === 'slot' ? (
+              <li
+                key={item.key}
+                className="flex flex-col gap-spacing-8 py-spacing-8"
+              >
+                {item.tasks.map((task) => (
+                  <TaskCard
+                    key={taskKey(task)}
+                    task={task}
+                    voted={voted[taskKey(task)]}
+                    onVote={onVote}
+                  />
+                ))}
               </li>
             ) : (
               <li
@@ -116,7 +158,87 @@ export function ContributionFeed({
           )}
         </ol>
       )}
+
+      {showsEntries && (
+        <LoadMore
+          hasMore={hasMore}
+          isLoading={isLoadingMore}
+          failed={loadMoreFailed}
+          // Only the full timeline loads by itself: a filter matching few entries would
+          // otherwise page through the whole history.
+          auto={filter === 'all'}
+          showEnd={entries.length > 0}
+          onLoadMore={onLoadMore}
+        />
+      )}
     </section>
+  )
+}
+
+/**
+ * 「載入更多」 at the end of the list. With `auto`, it also loads when the end scrolls into view;
+ * the button stays for keyboard users and for when that doesn't fire.
+ */
+function LoadMore({
+  hasMore,
+  isLoading,
+  failed,
+  auto,
+  showEnd,
+  onLoadMore,
+}: {
+  hasMore: boolean
+  isLoading: boolean
+  failed: boolean
+  auto: boolean
+  showEnd: boolean
+  onLoadMore: () => void
+}) {
+  const sentinel = useRef<HTMLDivElement>(null)
+  const latest = useRef(onLoadMore)
+  useEffect(() => {
+    latest.current = onLoadMore
+  })
+
+  useEffect(() => {
+    const el = sentinel.current
+    // After a failure, wait for the button so a broken page isn't retried in a loop.
+    if (!el || !auto || !hasMore || isLoading || failed) return
+    if (typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      (records) => {
+        if (records.some((r) => r.isIntersecting)) latest.current()
+      },
+      { rootMargin: '0px 0px 400px 0px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [auto, hasMore, isLoading, failed])
+
+  if (!hasMore) {
+    return showEnd ? (
+      <p className="py-spacing-8 text-center text-type-caption text-text-tertiary">
+        沒有更早的紀錄了
+      </p>
+    ) : null
+  }
+
+  return (
+    <div ref={sentinel} className="flex flex-col items-center gap-spacing-8">
+      {failed && (
+        <p role="alert" className="text-type-ui-s text-text-secondary">
+          更早的紀錄沒有載入成功，請再試一次。
+        </p>
+      )}
+      <Button
+        variant="outline"
+        disabled={isLoading}
+        aria-busy={isLoading}
+        onClick={onLoadMore}
+      >
+        {isLoading ? '載入中…' : '載入更多'}
+      </Button>
+    </div>
   )
 }
 
@@ -238,14 +360,31 @@ function Quote({ label, children }: { label: ReactNode; children: ReactNode }) {
   )
 }
 
-type VoteState = 'idle' | 'pending' | FeedbackVoteValue | 'error'
+type VoteState = 'idle' | 'pending' | 'error'
 
-/** Something to do next, on the yellow card: rate a reply (one tap) or write one. */
+const VOTE_TEXT: Record<FeedbackVoteValue, string> = {
+  UPVOTE: '有幫助',
+  DOWNVOTE: '沒有幫助',
+}
+
+const NEXT_TEXT: Record<VotedTask['next'], string> = {
+  added: '下面還有一則可以評價。',
+  exhausted: '目前沒有其他待評價的回應了。',
+  pending: '正在找下一則可以評價的回應…',
+}
+
+/**
+ * Something to do next, on the yellow card: rate a reply (one tap) or write one. Once rated it
+ * collapses to one line, so the next card takes its place. The status region stays mounted, so
+ * screen readers hear 「已記下」 and whether there is another card.
+ */
 function TaskCard({
   task,
+  voted,
   onVote,
 }: {
   task: ContributionTask
+  voted: VotedTask | undefined
   onVote: VoteHandler
 }) {
   const [state, setState] = useState<VoteState>('idle')
@@ -255,11 +394,43 @@ function TaskCard({
     setState('pending')
     try {
       await onVote(task, value)
-      setState(value)
+      setState('idle')
     } catch {
       setState('error')
     }
   }
+
+  const status =
+    task.kind === 'rate' ? (
+      <div role="status">
+        {voted && (
+          <div className="flex flex-col gap-spacing-2 rounded-radius-10 bg-surface-raised px-spacing-16 py-spacing-12">
+            <p className="flex min-w-0 items-center gap-spacing-8">
+              <MaterialIcon
+                name="check_circle"
+                filled
+                className="shrink-0 text-icon-default"
+              />
+              <span className="shrink-0 text-type-ui-s-bold text-text-primary">
+                已記下：{VOTE_TEXT[voted.vote]}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-type-body-s text-text-secondary">
+                {task.articleText}
+              </span>
+              <a
+                href={articleHref(task.articleId)}
+                className="shrink-0 text-type-ui-s text-text-link underline"
+              >
+                補充說明
+              </a>
+            </p>
+            <p className="pl-[32px] text-type-caption text-text-secondary">
+              {NEXT_TEXT[voted.next]}
+            </p>
+          </div>
+        )}
+      </div>
+    ) : null
 
   const heading =
     task.kind === 'write'
@@ -275,83 +446,75 @@ function TaskCard({
         : `目前只有 ${task.feedbackCount} 個評價`
 
   return (
-    <article
-      aria-label={heading}
-      className="flex flex-col gap-spacing-12 rounded-radius-10 bg-surface-accent-subtle p-spacing-16 text-text-on-accent"
-    >
-      <header className="flex items-start gap-spacing-8">
-        <MaterialIcon
-          name={task.kind === 'write' ? 'edit' : 'thumb_up'}
-          className="mt-spacing-2"
-        />
-        <span className="flex flex-col gap-spacing-4">
-          <span className="text-type-ui-m-bold">{heading}</span>
-          <span className="text-type-body-s">{why}</span>
-        </span>
-      </header>
-
-      <Quote label="可疑訊息">{task.articleText}</Quote>
-
-      {task.kind === 'rate' && (
-        <Quote label={<ReplyTypeLabel type={task.replyType} />}>
-          {task.replyText}
-        </Quote>
-      )}
-
-      {task.kind === 'write' ? (
-        <div className="flex flex-wrap gap-spacing-8">
-          <a
-            href={articleHref(task.articleId)}
-            className={cn(
-              buttonVariants({ variant: 'secondary', withIcon: true }),
-            )}
-          >
-            <MaterialIcon name="edit" />
-            撰寫查核回應
-          </a>
-        </div>
-      ) : state === 'UPVOTE' || state === 'DOWNVOTE' ? (
-        <p
-          role="status"
-          className="flex items-center gap-spacing-4 text-type-ui-s-bold"
+    <div className="flex flex-col">
+      {status}
+      {/* The status region stays mounted across the vote, so it is announced. */}
+      {!voted && (
+        <article
+          aria-label={heading}
+          className="flex flex-col gap-spacing-12 rounded-radius-10 bg-surface-accent-subtle p-spacing-16 text-text-on-accent"
         >
-          <MaterialIcon name="check_circle" filled />
-          已記下你的評價（{state === 'UPVOTE' ? '有幫助' : '沒有幫助'}），謝謝！
-          <a
-            href={articleHref(task.articleId)}
-            className="ml-auto text-type-ui-s underline"
-          >
-            補充說明
-          </a>
-        </p>
-      ) : (
-        <div className="flex flex-col gap-spacing-8">
-          <div className="grid grid-cols-2 gap-spacing-8">
-            {(
-              [
-                ['UPVOTE', 'thumb_up', '有幫助'],
-                ['DOWNVOTE', 'thumb_down', '沒有幫助'],
-              ] as const
-            ).map(([value, icon, label]) => (
-              <Button
-                key={value}
-                variant="outline"
-                iconStart={icon}
-                className="bg-surface-base"
-                disabled={state === 'pending'}
-                onClick={() => void vote(value)}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-          {state === 'error' && (
-            <p role="alert" className="text-type-ui-s">
-              沒有送出成功，請再試一次。
-            </p>
+          <header className="flex items-start gap-spacing-8">
+            <MaterialIcon
+              name={task.kind === 'write' ? 'edit' : 'thumb_up'}
+              className="mt-spacing-2"
+            />
+            <span className="flex flex-col gap-spacing-4">
+              <span className="text-type-ui-m-bold">{heading}</span>
+              <span className="text-type-body-s">{why}</span>
+            </span>
+          </header>
+
+          <Quote label="可疑訊息">{task.articleText}</Quote>
+
+          {task.kind === 'rate' && (
+            <Quote label={<ReplyTypeLabel type={task.replyType} />}>
+              {task.replyText}
+            </Quote>
           )}
-        </div>
+
+          {task.kind === 'write' ? (
+            <div className="flex flex-wrap gap-spacing-8">
+              <a
+                href={articleHref(task.articleId)}
+                className={cn(
+                  buttonVariants({ variant: 'secondary', withIcon: true }),
+                )}
+              >
+                <MaterialIcon name="edit" />
+                撰寫查核回應
+              </a>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-spacing-8">
+              <div className="grid grid-cols-2 gap-spacing-8">
+                {(
+                  [
+                    ['UPVOTE', 'thumb_up'],
+                    ['DOWNVOTE', 'thumb_down'],
+                  ] as const
+                ).map(([value, icon]) => (
+                  <Button
+                    key={value}
+                    variant="outline"
+                    iconStart={icon}
+                    className="bg-surface-base"
+                    disabled={state === 'pending'}
+                    onClick={() => void vote(value)}
+                  >
+                    {VOTE_TEXT[value]}
+                  </Button>
+                ))}
+              </div>
+              {state === 'error' && (
+                <p role="alert" className="text-type-ui-s">
+                  沒有送出成功，請再試一次。
+                </p>
+              )}
+            </div>
+          )}
+        </article>
       )}
-    </article>
+    </div>
   )
 }
