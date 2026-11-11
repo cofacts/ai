@@ -143,6 +143,9 @@ const ContributionSuggestionsDocument = graphql(`
         node {
           id
           text
+          replyRequests {
+            userId
+          }
           articleReplies(status: NORMAL) {
             replyId
             userId
@@ -163,13 +166,16 @@ const ContributionSuggestionsDocument = graphql(`
         replyRequestCount: { GTE: 2 }
       }
       orderBy: [{ lastRequestedAt: DESC }]
-      first: 3
+      first: 6
     ) {
       edges {
         node {
           id
           text
           replyRequestCount
+          replyRequests {
+            userId
+          }
         }
       }
     }
@@ -233,6 +239,17 @@ function pickReplyToRate(
         !!asReplyType(ar.replyType),
     )
     .sort((a, b) => (a.feedbackCount ?? 0) - (b.feedbackCount ?? 0))[0]
+}
+
+/** Whether `userId` reported (asked about) the message these reply requests belong to. */
+function reportedByUser(
+  replyRequests:
+    | ReadonlyArray<{ userId: string | null } | null>
+    | null
+    | undefined,
+  userId: string,
+) {
+  return (replyRequests ?? []).some((rr) => rr?.userId === userId)
 }
 
 export const getMyContributions = createServerFn({ method: 'GET' }).handler(
@@ -349,7 +366,10 @@ export const getMyContributions = createServerFn({ method: 'GET' }).handler(
       if (!toRate || !toRate.reply) continue
       rateTasks.push({
         kind: 'rate',
-        reason: 'needs-rating',
+        // An older report than the timeline's latest few: still the user's own message.
+        reason: reportedByUser(article.replyRequests, user.id)
+          ? 'reported'
+          : 'needs-rating',
         articleId: article.id,
         articleText: snippet(article.text),
         replyId: toRate.replyId,
@@ -359,14 +379,18 @@ export const getMyContributions = createServerFn({ method: 'GET' }).handler(
       })
     }
 
+    // Whoever submits a message also has a reply request on it, so this also skips messages the
+    // user submitted: they are already in the timeline, and the user is waiting for an answer.
     const writeTasks: Array<ContributionTask> = (
       suggestions?.toWrite?.edges ?? []
-    ).map(({ node }) => ({
-      kind: 'write',
-      articleId: node.id,
-      articleText: snippet(node.text),
-      replyRequestCount: node.replyRequestCount ?? 0,
-    }))
+    )
+      .filter(({ node }) => !reportedByUser(node.replyRequests, user.id))
+      .map(({ node }) => ({
+        kind: 'write',
+        articleId: node.id,
+        articleText: snippet(node.text),
+        replyRequestCount: node.replyRequestCount ?? 0,
+      }))
 
     // Two rating cards for each writing card: rating is the easy first step (meeting notes:
     // 卡牌 vs 寫字), and replies on the user's own reports come first.

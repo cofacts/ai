@@ -125,6 +125,7 @@ export type GetContributionSuggestionsQuery = {
       node: {
         id: string
         text: string | null
+        replyRequests: Array<{ userId: string | null } | null> | null
         articleReplies: Array<{
           replyId: string
           userId: string
@@ -142,6 +143,7 @@ export type GetContributionSuggestionsQuery = {
         id: string
         text: string | null
         replyRequestCount: number | null
+        replyRequests: Array<{ userId: string | null } | null> | null
       }
     }>
   } | null
@@ -979,6 +981,19 @@ export const GetContributionSuggestionsDocument = {
                             },
                             {
                               kind: 'Field',
+                              name: { kind: 'Name', value: 'replyRequests' },
+                              selectionSet: {
+                                kind: 'SelectionSet',
+                                selections: [
+                                  {
+                                    kind: 'Field',
+                                    name: { kind: 'Name', value: 'userId' },
+                                  },
+                                ],
+                              },
+                            },
+                            {
+                              kind: 'Field',
                               name: { kind: 'Name', value: 'articleReplies' },
                               arguments: [
                                 {
@@ -1110,7 +1125,7 @@ export const GetContributionSuggestionsDocument = {
               {
                 kind: 'Argument',
                 name: { kind: 'Name', value: 'first' },
-                value: { kind: 'IntValue', value: '3' },
+                value: { kind: 'IntValue', value: '6' },
               },
             ],
             selectionSet: {
@@ -1141,6 +1156,19 @@ export const GetContributionSuggestionsDocument = {
                               name: {
                                 kind: 'Name',
                                 value: 'replyRequestCount',
+                              },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'replyRequests' },
+                              selectionSet: {
+                                kind: 'SelectionSet',
+                                selections: [
+                                  {
+                                    kind: 'Field',
+                                    name: { kind: 'Name', value: 'userId' },
+                                  },
+                                ],
                               },
                             },
                           ],
