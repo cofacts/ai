@@ -73,11 +73,12 @@ function ContributionsPage() {
     })
   }
 
-  // null from any part: rumors-api rejected the session, which is now cleared.
+  // null from any part (also a later timeline page): rumors-api rejected the session, which is
+  // now cleared.
   const sessionRejected =
     summary.data === null ||
     tasks.data === null ||
-    timeline.data?.pages[0] === null
+    !!timeline.data?.pages.some((page) => page === null)
 
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-spacing-24 px-spacing-20 py-spacing-32 lg:px-spacing-48">
@@ -124,6 +125,7 @@ function ContributionsPage() {
                   />
                 ) : undefined
               }
+              tasksLoading={tasks.isPending}
               tasksError={
                 tasks.isError ? (
                   <LoadError

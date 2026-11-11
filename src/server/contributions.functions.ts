@@ -6,7 +6,7 @@
 //   received, and the daily counts behind the running-total chart.
 // - getContributionTimeline (`contributionTimelineQuery`, infinite): the user's reports, replies
 //   and ratings, newest first. rumors-api has no combined list, so each page fetches the next
-//   items of the three `selfOnly` lists and merges them here (`mergeTimelinePage`).
+//   items of the three `selfOnly` lists and merges them here (`loadTimelinePage`).
 // - getContributionTasks (`contributionTasksQuery`) and getMoreRateTasks: candidates for the
 //   task cards (rate a reply, write one). The page keeps a pool and asks for more rating
 //   candidates as the user rates.
@@ -41,7 +41,7 @@ import {
   TIMELINE_PAGE_SIZE,
   buildCumulativeSeries,
   initialTimelineCursor,
-  mergeTimelinePage,
+  loadTimelinePage,
   parseTimelineCursor,
   seriesStart,
   sortRateTasks,
@@ -53,8 +53,10 @@ const SNIPPET = 140
 const OWN_REPORTS = 10
 /** Rating candidates fetched per `toRate` page. */
 const RATE_PAGE = 12
-/** Pool caps sent to the page. */
-const RATE_POOL = 10
+/**
+ * Writing candidates sent to the page. Rating candidates aren't capped: the page shows only the
+ * first few and keeps the rest (`rateAfter` continues after the last one) for when the user rates.
+ */
 const WRITE_POOL = 4
 
 const ContributionSummaryDocument = graphql(`
@@ -560,36 +562,47 @@ export const getContributionTimeline = createServerFn({ method: 'GET' })
     const userId = await sessionUserId()
     if (!userId) return null
 
-    const cursor = data.cursor ?? initialTimelineCursor()
-    const result = await exec(
-      'GetContributionTimeline',
-      ContributionTimelineDocument,
-      {
-        first: TIMELINE_PAGE_SIZE,
-        reportsAfter: cursor.reports.after,
-        repliesAfter: cursor.replies.after,
-        feedbacksAfter: cursor.feedbacks.after,
-        withReports: !cursor.reports.done,
-        withReplies: !cursor.replies.done,
-        withFeedbacks: !cursor.feedbacks.done,
-      },
-    )
-    if (!result.GetUser) return null
-
-    const edges = <TNode>(
+    const edges = <TNode extends { createdAt?: string | null }>(
       list: ReadonlyArray<{ cursor: string; node: TNode }> | null | undefined,
       toEntry: (node: TNode) => ContributionEntry | null,
     ): Array<TimelineEdge> =>
       (list ?? []).map((edge) => ({
         cursor: edge.cursor,
+        createdAt: edge.node.createdAt ?? null,
         entry: toEntry(edge.node),
       }))
 
-    return mergeTimelinePage(cursor, {
-      reports: edges(result.myReports?.edges, reportEntry),
-      replies: edges(result.myReplies?.edges, replyEntry),
-      feedbacks: edges(result.myFeedbacks?.edges, feedbackEntry),
-    })
+    // Set from inside the fetch callback (a later round can find the session rejected).
+    const session = { rejected: false }
+    const page = await loadTimelinePage(
+      data.cursor ?? initialTimelineCursor(),
+      async (cursor) => {
+        const result = await exec(
+          'GetContributionTimeline',
+          ContributionTimelineDocument,
+          {
+            first: TIMELINE_PAGE_SIZE,
+            reportsAfter: cursor.reports.after,
+            repliesAfter: cursor.replies.after,
+            feedbacksAfter: cursor.feedbacks.after,
+            withReports: !cursor.reports.done,
+            withReplies: !cursor.replies.done,
+            withFeedbacks: !cursor.feedbacks.done,
+          },
+        )
+        if (!result.GetUser) {
+          session.rejected = true
+          // Every list "done": no further round is fetched.
+          return {}
+        }
+        return {
+          reports: edges(result.myReports?.edges, reportEntry),
+          replies: edges(result.myReplies?.edges, replyEntry),
+          feedbacks: edges(result.myFeedbacks?.edges, feedbackEntry),
+        }
+      },
+    )
+    return session.rejected ? null : page
   })
 
 export const getContributionTasks = createServerFn({ method: 'GET' }).handler(
@@ -618,7 +631,7 @@ export const getContributionTasks = createServerFn({ method: 'GET' }).handler(
         seen.add(task.articleId)
         return true
       }),
-    ).slice(0, RATE_POOL)
+    )
 
     // Whoever submits a message also has a reply request on it, so this also skips messages the
     // user submitted: they are already in the timeline, and the user is waiting for an answer.
@@ -690,6 +703,10 @@ export const contributionTasksQuery = queryOptions({
   queryFn: () => getContributionTasks(),
   staleTime: 5 * 60_000,
   refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+  // Coming back to the page fetches a fresh pool (cards rated meanwhile are left out by
+  // rumors-api) instead of showing a cached one with rated cards still votable.
+  gcTime: 0,
 })
 
 export const moreRateTasksQuery = (after: string) =>
@@ -706,7 +723,12 @@ export const voteOnReply = createServerFn({ method: 'POST' })
       replyId: string
       vote: FeedbackVoteValue
     }) => {
-      if (!input.articleId || !input.replyId) {
+      if (
+        typeof input.articleId !== 'string' ||
+        !input.articleId ||
+        typeof input.replyId !== 'string' ||
+        !input.replyId
+      ) {
         throw new Error('articleId and replyId are required')
       }
       // A caller is not bound by the type at runtime: check the value rumors-api will store.

@@ -7,6 +7,7 @@ import {
   initTaskSlots,
   initialTimelineCursor,
   interleave,
+  loadTimelinePage,
   mergeRatePool,
   mergeTimelinePage,
   mondayOf,
@@ -23,6 +24,7 @@ import type {
   ContributionEntry,
   ContributionTask,
   RateTask,
+  TimelineCursor,
   TimelineEdge,
   WriteTask,
 } from '../contributions'
@@ -116,19 +118,26 @@ const rk = (articleId: string) => taskKey(rate(articleId))
 const ids = (tasks: ReadonlyArray<ContributionTask>) =>
   tasks.map((t) => t.articleId)
 
-/** `count` edges of `kind`, one per day going back from `start` (day of month), newest first. */
+const octDay = (day: number) =>
+  `2026-10-${String(day).padStart(2, '0')}T00:00:00Z`
+
+/** Edges with ids `${prefix}${day}`, one per given day of October 2026 (newest first). */
 function edges(
   prefix: string,
   days: ReadonlyArray<number>,
 ): Array<TimelineEdge> {
   return days.map((day) => ({
     cursor: `${prefix}${day}`,
-    entry: report(
-      `${prefix}${day}`,
-      `2026-10-${String(day).padStart(2, '0')}T00:00:00Z`,
-    ),
+    createdAt: octDay(day),
+    entry: report(`${prefix}${day}`, octDay(day)),
   }))
 }
+/** An edge the page can't show (e.g. a neutral rating); `day` null for one without a date. */
+const hidden = (cursor: string, day: number | null): TimelineEdge => ({
+  cursor,
+  createdAt: day === null ? null : octDay(day),
+  entry: null,
+})
 const entryIds = (entries: ReadonlyArray<ContributionEntry>) =>
   entries.map((e) => e.id)
 
@@ -224,7 +233,7 @@ describe('mergeTimelinePage', () => {
       {
         reports: [
           ...edges('q', [30]),
-          { cursor: 'bad', entry: null },
+          hidden('bad', null),
           ...edges('q', [10]),
         ],
         replies: edges('r', [20, 19]),
@@ -239,13 +248,129 @@ describe('mergeTimelinePage', () => {
     const trailing = mergeTimelinePage(
       initialTimelineCursor(),
       {
-        reports: [...edges('q', [30]), { cursor: 'bad', entry: null }],
+        reports: [...edges('q', [30]), hidden('bad', null)],
         replies: [],
         feedbacks: [],
       },
       3,
     )
     expect(trailing.nextCursor).toBeNull()
+  })
+
+  it('counts edges it cannot show by their date, so pages stay in order', () => {
+    // The verifier's case: a hidden reply (a neutral rating, say) newer than the feedbacks.
+    const first = mergeTimelinePage(
+      initialTimelineCursor(),
+      {
+        reports: [],
+        replies: [...edges('r', [28]), hidden('rh', 26)],
+        feedbacks: edges('f', [20, 10]),
+      },
+      2,
+    )
+    // r28 and the hidden reply fill the page: f20 must wait, as r25 may come before it.
+    expect(entryIds(first.entries)).toEqual(['r28'])
+    expect(first.nextCursor?.replies).toEqual({ after: 'rh', done: false })
+    expect(first.nextCursor?.feedbacks).toEqual({ after: null, done: false })
+
+    const second = mergeTimelinePage(
+      first.nextCursor!,
+      { replies: edges('r', [25]), feedbacks: edges('f', [20, 10]) },
+      2,
+    )
+    expect(entryIds(second.entries)).toEqual(['r25', 'f20'])
+    const third = mergeTimelinePage(
+      second.nextCursor!,
+      { feedbacks: edges('f', [10]) },
+      2,
+    )
+    expect(entryIds(third.entries)).toEqual(['f10'])
+    expect(third.nextCursor).toBeNull()
+  })
+
+  it('places an edge without a date after the dated edges of its batch', () => {
+    const page = mergeTimelinePage(
+      initialTimelineCursor(),
+      {
+        reports: [hidden('undated', null), ...edges('q', [30, 5])],
+        replies: edges('r', [20]),
+        feedbacks: [],
+      },
+      3,
+    )
+    // Not taken first: q30, r20 and q5 are newer than "after the batch's oldest".
+    expect(entryIds(page.entries)).toEqual(['q30', 'r20', 'q5'])
+    // Passed over by the cursor (it can't be shown anyway).
+    expect(page.nextCursor?.reports).toEqual({ after: 'q5', done: false })
+  })
+})
+
+describe('loadTimelinePage', () => {
+  /** A fake rumors-api: each list is an array of edges; fetches `pageSize` after the cursor. */
+  function api(
+    lists: Partial<
+      Record<'reports' | 'replies' | 'feedbacks', Array<TimelineEdge>>
+    >,
+    pageSize: number,
+  ) {
+    let calls = 0
+    const fetchLists = (cursor: TimelineCursor) => {
+      calls++
+      const out: Partial<Record<keyof TimelineCursor, Array<TimelineEdge>>> = {}
+      for (const list of ['reports', 'replies', 'feedbacks'] as const) {
+        if (cursor[list].done) continue
+        const all = lists[list] ?? []
+        const start =
+          cursor[list].after === null
+            ? 0
+            : all.findIndex((e) => e.cursor === cursor[list].after) + 1
+        out[list] = all.slice(start, start + pageSize)
+      }
+      return Promise.resolve(out)
+    }
+    return { fetchLists, calls: () => calls }
+  }
+
+  it('fetches again when a page took only edges it cannot show', async () => {
+    const { fetchLists, calls } = api(
+      {
+        reports: [hidden('h1', 30), hidden('h2', 29), ...edges('q', [28, 27])],
+      },
+      2,
+    )
+    const page = await loadTimelinePage(initialTimelineCursor(), fetchLists, 2)
+    expect(entryIds(page.entries)).toEqual(['q28', 'q27'])
+    expect(calls()).toBe(2)
+  })
+
+  it('gives up after maxRounds, returning an empty page that can continue', async () => {
+    const { fetchLists, calls } = api(
+      {
+        reports: [
+          hidden('h1', 30),
+          hidden('h2', 29),
+          hidden('h3', 28),
+          ...edges('q', [27]),
+        ],
+      },
+      1,
+    )
+    const page = await loadTimelinePage(
+      initialTimelineCursor(),
+      fetchLists,
+      1,
+      2,
+    )
+    expect(page.entries).toEqual([])
+    expect(page.nextCursor?.reports.after).toBe('h2')
+    expect(calls()).toBe(2)
+  })
+
+  it('stops when everything ran out', async () => {
+    const { fetchLists, calls } = api({ reports: [hidden('h1', 30)] }, 2)
+    const page = await loadTimelinePage(initialTimelineCursor(), fetchLists, 2)
+    expect(page).toEqual({ entries: [], nextCursor: null })
+    expect(calls()).toBe(1)
   })
 })
 
@@ -383,18 +508,33 @@ describe('task slots after votes', () => {
     expect(recordVote(state, rk('1'), 'DOWNVOTE')).toBe(state)
   })
 
-  it('keeps cards in place on a refetch, dropping only unrated ones that left the pool', () => {
-    let state = initTaskSlots(pool)
-    state = recordVote(state, rk('1'), 'UPVOTE') // adds 5 under 1
-    state = syncTaskSlots(state, {
-      // 1 is rated (gone from rumors-api's list), 2 and 5 are gone too.
-      rate: [rate('3'), rate('4'), rate('8')],
-      write: [write('w1')],
-      rateAfter: null,
+  it('keeps every card and the gathered pool on a refetch, adding only new candidates', () => {
+    // The verifier's case: votes, a second page of candidates, then a refetch of page 1.
+    let state = initTaskSlots({
+      rate: ['a', 'b', 'c', 'd', 'e'].map((id) => rate(id)),
+      write: [write('w1'), write('w2'), write('w3')],
+      rateAfter: 'C1',
     })
-    expect(state.slots).toEqual([[rk('1')], ['write:w1'], [rk('3')], [rk('4')]])
-    expect(ids(state.rate)).toEqual(['1', '3', '4', '8'])
-    expect(state.voted[rk('1')]?.next).toBe('added')
+    state = recordVote(state, rk('a'), 'UPVOTE') // e goes under a
+    state = recordVote(state, rk('b'), 'UPVOTE') // waits for page 2
+    state = addRateTasks(state, 'C1', {
+      rate: [rate('e'), rate('f'), rate('g')],
+      rateAfter: 'C2',
+    })
+    expect(state.slots[1]).toEqual([rk('b'), rk('f')])
+    const before = state.slots
+
+    state = syncTaskSlots(state, {
+      // a and b were rated, f came from page 2: none of them is in the refetched page 1.
+      rate: ['c', 'd', 'e', 'x'].map((id) => rate(id)),
+      write: [write('w1'), write('w4')],
+      rateAfter: 'C1',
+    })
+    expect(state.slots).toEqual(before)
+    expect(ids(state.rate)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'x'])
+    expect(ids(state.write)).toEqual(['w1', 'w2', 'w3', 'w4'])
+    expect(state.rateAfter).toBe('C2')
+    expect(state.voted[rk('b')]?.next).toBe('added')
   })
 })
 

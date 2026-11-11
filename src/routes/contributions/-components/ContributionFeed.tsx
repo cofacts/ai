@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Skeleton } from './LoadState'
 import type { ReactNode } from 'react'
 
 import type {
@@ -63,6 +64,7 @@ export function ContributionFeed({
   onLoadMore,
   loadMoreFailed = false,
   timelineError,
+  tasksLoading = false,
   tasksError,
 }: {
   entries: ReadonlyArray<ContributionEntry>
@@ -78,6 +80,8 @@ export function ContributionFeed({
   loadMoreFailed?: boolean
   /** Shown in place of the entries when the timeline couldn't load. */
   timelineError?: ReactNode
+  /** The task cards are still loading: a placeholder takes the first slot's place. */
+  tasksLoading?: boolean
   /** Shown above the list when the task cards couldn't load. */
   tasksError?: ReactNode
 }) {
@@ -118,10 +122,14 @@ export function ContributionFeed({
 
       {filter !== 'task' && timelineError}
       {(filter === 'all' || filter === 'task') && tasksError}
+      {/* The first slot sits on top, so this is where it will appear. */}
+      {(filter === 'all' || filter === 'task') && tasksLoading && (
+        <Skeleton label="正在載入推薦你做的事" blocks={['h-[240px]']} />
+      )}
 
       {items.length === 0 ? (
         !timelineError &&
-        !(filter === 'task' && tasksError) && (
+        !(filter === 'task' && (tasksError || tasksLoading)) && (
           <p className="rounded-radius-10 bg-surface-raised p-spacing-16 text-type-body-m text-text-secondary">
             {filter === 'task'
               ? '目前沒有推薦給你的事，晚點再回來看看。'
@@ -388,14 +396,27 @@ function TaskCard({
   onVote: VoteHandler
 }) {
   const [state, setState] = useState<VoteState>('idle')
+  const row = useRef<HTMLDivElement>(null)
+  const focusRow = useRef(false)
+
+  // The focused button goes away when the card collapses: move focus to the result line (not to
+  // the next card), as after any successful action.
+  useEffect(() => {
+    if (voted && focusRow.current) {
+      focusRow.current = false
+      row.current?.focus()
+    }
+  }, [voted])
 
   const vote = async (value: FeedbackVoteValue) => {
     if (task.kind !== 'rate') return
+    focusRow.current = true
     setState('pending')
     try {
       await onVote(task, value)
       setState('idle')
     } catch {
+      focusRow.current = false
       setState('error')
     }
   }
@@ -404,7 +425,11 @@ function TaskCard({
     task.kind === 'rate' ? (
       <div role="status">
         {voted && (
-          <div className="flex flex-col gap-spacing-2 rounded-radius-10 bg-surface-raised px-spacing-16 py-spacing-12">
+          <div
+            ref={row}
+            tabIndex={-1}
+            className="flex flex-col gap-spacing-2 rounded-radius-10 bg-surface-raised px-spacing-16 py-spacing-12"
+          >
             <p className="flex min-w-0 items-center gap-spacing-8">
               <MaterialIcon
                 name="check_circle"

@@ -190,6 +190,7 @@ function ContributionsView({
   votes = [],
   hasMore = false,
   isLoadingMore = false,
+  tasksLoading = false,
   onLoadMore,
   onVote,
 }: {
@@ -199,10 +200,15 @@ function ContributionsView({
   votes?: Array<[articleId: string, vote: FeedbackVoteValue]>
   hasMore?: boolean
   isLoadingMore?: boolean
+  /** The task cards haven't loaded yet. */
+  tasksLoading?: boolean
   onLoadMore: () => void
   onVote: (task: RateTask, vote: FeedbackVoteValue) => Promise<void>
 }) {
-  const { slots, voted, onVoted } = useTaskSlots(tasks, noMoreRateTasks)
+  const { slots, voted, onVoted } = useTaskSlots(
+    tasksLoading ? undefined : tasks,
+    noMoreRateTasks,
+  )
 
   useEffect(() => {
     for (const [articleId, vote] of votes) {
@@ -237,6 +243,7 @@ function ContributionsView({
         hasMore={hasMore}
         isLoadingMore={isLoadingMore}
         onLoadMore={onLoadMore}
+        tasksLoading={tasksLoading}
       />
     </main>
   )
@@ -314,4 +321,9 @@ export const HasMore: Story = {
 /** Loading the next page. */
 export const LoadingMore: Story = {
   args: { hasMore: true, isLoadingMore: true },
+}
+
+/** The task cards are still loading: a placeholder where the first card will be. */
+export const TasksLoading: Story = {
+  args: { tasksLoading: true },
 }

@@ -178,11 +178,14 @@ export const initialTimelineCursor = (): TimelineCursor => ({
 })
 
 /**
- * One edge as rumors-api returned it, newest first. `entry` is null for an item the page can't
- * show (no date, unknown reply type): it is still consumed, so the cursor moves past it.
+ * One edge as rumors-api returned it, newest first. `createdAt` is the item's own date, used for
+ * merging even when the page can't show the item; `entry` is null for such an item (a neutral
+ * rating, a removed message, an unknown reply type). It is still consumed, so the cursor moves
+ * past it.
  */
 export interface TimelineEdge {
   cursor: string
+  createdAt: string | null
   entry: ContributionEntry | null
 }
 
@@ -194,27 +197,53 @@ export interface TimelinePage {
 
 /**
  * Merges what each unfinished list returned (up to `pageSize` edges each, fetched after
- * `cursor`) into the next `pageSize` entries, newest first. Any entry among the next `pageSize`
- * overall is among the next `pageSize` of its own list, so this is exact. Each list's cursor
- * moves to the last edge taken from it; edges not taken are fetched again next page. A list is
- * done when it returned fewer than `pageSize` edges and all of them were taken.
+ * `cursor`) into the next page, newest first.
+ *
+ * The merge runs on raw edges, shown or not: it takes the newest `pageSize` edges of all lists,
+ * moves each list's cursor past the last edge taken from it, then drops the edges the page can't
+ * show. Every item of the next `pageSize` overall is among the next `pageSize` of its own list,
+ * so across pages entries come out newest first, none skipped or repeated. An edge without a
+ * date is placed after the dated edges of its batch, so it never reorders them. A page may hold
+ * fewer than `pageSize` entries, or none, when edges it took can't be shown; `loadTimelinePage`
+ * fetches again in that case. A list is done when it returned fewer than `pageSize` edges and
+ * all of them were taken.
  */
 export function mergeTimelinePage(
   cursor: TimelineCursor,
   fetched: Partial<Record<TimelineList, ReadonlyArray<TimelineEdge>>>,
   pageSize = TIMELINE_PAGE_SIZE,
 ): TimelinePage {
-  // Stable sort over the lists in order: within one list, the taken entries are a prefix.
-  const candidates = TIMELINE_LISTS.flatMap((list) =>
-    cursor[list].done
-      ? []
-      : (fetched[list] ?? []).flatMap((edge, index) =>
-          edge.entry ? [{ list, index, entry: edge.entry }] : [],
-        ),
-  ).sort(
-    (a, b) => Date.parse(b.entry.createdAt) - Date.parse(a.entry.createdAt),
-  )
-  const taken = candidates.slice(0, pageSize)
+  const edgesOf = (list: TimelineList) =>
+    cursor[list].done ? [] : (fetched[list] ?? [])
+
+  const raw = TIMELINE_LISTS.flatMap((list) => {
+    const edges = edgesOf(list)
+    const times = edges.map((e) => Date.parse(e.createdAt ?? ''))
+    const dated = times.filter((t) => !Number.isNaN(t))
+    // Undated: as old as the oldest dated edge of the batch, and placed after it.
+    const oldest = dated.length ? Math.min(...dated) : Infinity
+    return edges.map((edge, index) => {
+      const undated = Number.isNaN(times[index])
+      return {
+        list,
+        index,
+        edge,
+        undated,
+        time: undated ? oldest : times[index]!,
+      }
+    })
+  })
+  // Newest first. Ties: lists in order; within a list, dated edges before undated ones, then
+  // edge order.
+  raw.sort((a, b) => {
+    if (a.time !== b.time) return a.time > b.time ? -1 : 1
+    return (
+      TIMELINE_LISTS.indexOf(a.list) - TIMELINE_LISTS.indexOf(b.list) ||
+      Number(a.undated) - Number(b.undated) ||
+      a.index - b.index
+    )
+  })
+  const taken = raw.slice(0, pageSize)
 
   const next = {} as TimelineCursor
   for (const list of TIMELINE_LISTS) {
@@ -222,24 +251,45 @@ export function mergeTimelinePage(
       next[list] = cursor[list]
       continue
     }
-    const edges = fetched[list] ?? []
-    const usable = candidates.filter((c) => c.list === list)
-    const takenHere = taken.filter((c) => c.list === list)
-    // All usable entries taken: unusable edges after them are consumed too.
-    const lastIndex =
-      takenHere.length === usable.length
-        ? edges.length - 1
-        : (takenHere.at(-1)?.index ?? -1)
+    const edges = edgesOf(list)
+    const takenHere = taken.filter((t) => t.list === list)
+    // Dated edges are taken in order, so only undated ones can be passed over: they are dropped.
+    const lastIndex = Math.max(-1, ...takenHere.map((t) => t.index))
     next[list] = {
       after: lastIndex >= 0 ? edges[lastIndex]!.cursor : cursor[list].after,
-      done: edges.length < pageSize && lastIndex === edges.length - 1,
+      done: edges.length < pageSize && takenHere.length === edges.length,
     }
   }
 
   return {
-    entries: taken.map((c) => c.entry),
+    entries: taken.flatMap((t) => (t.edge.entry ? [t.edge.entry] : [])),
     nextCursor: TIMELINE_LISTS.every((list) => next[list].done) ? null : next,
   }
+}
+
+/**
+ * Fetches and merges the timeline page after `cursor`. When every edge a page took was one the
+ * page can't show, it fetches again from where that left off (up to `maxRounds` fetches), so
+ * the browser rarely gets an empty page that still says there is more.
+ */
+export async function loadTimelinePage(
+  cursor: TimelineCursor,
+  fetchLists: (
+    cursor: TimelineCursor,
+  ) => Promise<Partial<Record<TimelineList, ReadonlyArray<TimelineEdge>>>>,
+  pageSize = TIMELINE_PAGE_SIZE,
+  maxRounds = 3,
+): Promise<TimelinePage> {
+  let page = mergeTimelinePage(cursor, await fetchLists(cursor), pageSize)
+  for (
+    let round = 1;
+    round < maxRounds && page.entries.length === 0 && page.nextCursor;
+    round++
+  ) {
+    const from: TimelineCursor = page.nextCursor
+    page = mergeTimelinePage(from, await fetchLists(from), pageSize)
+  }
+  return page
 }
 
 function isListCursor(value: unknown): value is ListCursor {
@@ -423,25 +473,22 @@ export function addRateTasks(
 }
 
 /**
- * The tasks query returned new data (a refetch): take the new pool, but keep what the user sees.
- * Cards stay in place; a card whose task left the pool is dropped unless the user rated it.
+ * The tasks query returned new data (a refetch): keep everything the user sees and the pool
+ * gathered so far (including pages fetched after the first), and only add new candidates from
+ * the refetch. Cards never move or disappear.
  */
 export function syncTaskSlots(
   state: TaskSlotsState,
   tasks: ContributionTasksData,
 ): TaskSlotsState {
-  const votedTasks = state.rate.filter((t) => state.voted[taskKey(t)])
-  const rate = mergeRatePool(votedTasks, tasks.rate)
-  const known = new Set([...rate, ...tasks.write].map(taskKey))
-  const slots = state.slots
-    .map((slot) => slot.filter((key) => state.voted[key] || known.has(key)))
-    .filter((slot) => slot.length > 0)
+  const writeArticles = new Set(state.write.map((t) => t.articleId))
   return fillWaiting({
     ...state,
-    rate,
-    write: tasks.write,
-    rateAfter: tasks.rateAfter,
-    slots,
+    rate: mergeRatePool(state.rate, tasks.rate),
+    write: [
+      ...state.write,
+      ...tasks.write.filter((t) => !writeArticles.has(t.articleId)),
+    ],
   })
 }
 
