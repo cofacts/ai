@@ -1,4 +1,4 @@
-import { expect, within } from 'storybook/test'
+import { expect, waitFor, within } from 'storybook/test'
 
 import { Checkbox } from './checkbox'
 import { Field, FieldError, FieldLegend, FieldSet } from './field'
@@ -182,8 +182,8 @@ export const Selects: Story = {
   play: async ({ canvas, userEvent }) => {
     await userEvent.click(canvas.getAllByRole('combobox', { name: '排序' })[0]!)
     // The popup is portaled to <body>, outside the story's canvas.
-    await expect(
-      await within(document.body).findByRole('listbox'),
-    ).toBeVisible()
+    const listbox = await within(document.body).findByRole('listbox')
+    // The popup fades in: wait for it to be visible, not just present.
+    await waitFor(() => expect(listbox).toBeVisible())
   },
 }

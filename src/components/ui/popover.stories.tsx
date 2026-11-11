@@ -1,4 +1,4 @@
-import { expect, within } from 'storybook/test'
+import { expect, waitFor, within } from 'storybook/test'
 
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
@@ -42,6 +42,8 @@ export const Default: Story = {
   ),
   play: async ({ canvas, userEvent }) => {
     await userEvent.click(canvas.getByRole('button', { name: '沒有幫助' }))
-    await expect(await within(document.body).findByRole('dialog')).toBeVisible()
+    const popover = await within(document.body).findByRole('dialog')
+    // The popup fades in: wait for it to be visible, not just present.
+    await waitFor(() => expect(popover).toBeVisible())
   },
 }

@@ -1,4 +1,7 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
+import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
 import { devtools } from '@tanstack/devtools-vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
@@ -23,7 +26,38 @@ const config = defineConfig({
     viteReact(),
   ],
   test: {
-    setupFiles: ['./vitest.setup.ts'],
+    projects: [
+      {
+        extends: true,
+        test: { name: 'unit', setupFiles: ['./vitest.setup.ts'] },
+      },
+      // Every story renders in Chromium and runs its play function; a story that throws or a
+      // play function whose expect() fails is a failing test.
+      {
+        // The app's server plugins (TanStack Start, Nitro, devtools) aren't needed to render a
+        // story; these three are what the components need.
+        plugins: [
+          viteTsConfigPaths({ projects: ['./tsconfig.json'] }),
+          tailwindcss(),
+          viteReact(),
+          storybookTest({
+            configDir: path.join(
+              path.dirname(fileURLToPath(import.meta.url)),
+              '.storybook',
+            ),
+          }),
+        ],
+        test: {
+          name: 'storybook',
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: 'playwright',
+            instances: [{ browser: 'chromium' }],
+          },
+        },
+      },
+    ],
     // Enabled with `pnpm test --coverage`. cobertura.xml feeds the changed-lines
     // report in CI.
     coverage: {
