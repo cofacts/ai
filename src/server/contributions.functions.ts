@@ -248,13 +248,32 @@ export const getMyContributions = createServerFn({ method: 'GET' }).handler(
     }
 
     const now = new Date()
-    const [mine, suggestions] = await Promise.all([
+    const [mineResult, suggestionsResult] = await Promise.allSettled([
       cofactsExec(MyContributionsDocument, {
         since: seriesStart(now),
         first: LIST_SIZE,
       }),
       cofactsExec(ContributionSuggestionsDocument, { userId }),
     ])
+    // Logged so a failure shows up in Cloud Run logs with rumors-api's message; the error
+    // page itself only says the data couldn't be loaded.
+    if (mineResult.status === 'rejected') {
+      console.error(
+        '[contributions] GetMyContributions failed:',
+        mineResult.reason,
+      )
+      throw mineResult.reason
+    }
+    const mine = mineResult.value
+    // Suggestions are extras: without them the page still shows the user's own contributions.
+    if (suggestionsResult.status === 'rejected') {
+      console.error(
+        '[contributions] GetContributionSuggestions failed:',
+        suggestionsResult.reason,
+      )
+    }
+    const suggestions =
+      suggestionsResult.status === 'fulfilled' ? suggestionsResult.value : null
     const user = mine.GetUser
     // rumors-api rejected the session: cofactsExec cleared the cookie and ran anonymously.
     if (!user) return null
@@ -323,7 +342,7 @@ export const getMyContributions = createServerFn({ method: 'GET' }).handler(
       })
     }
 
-    for (const edge of suggestions.toRate?.edges ?? []) {
+    for (const edge of suggestions?.toRate?.edges ?? []) {
       const article = edge.node
       if (rateTasks.some((t) => t.articleId === article.id)) continue
       const toRate = pickReplyToRate(article.articleReplies, user.id)
@@ -341,7 +360,7 @@ export const getMyContributions = createServerFn({ method: 'GET' }).handler(
     }
 
     const writeTasks: Array<ContributionTask> = (
-      suggestions.toWrite?.edges ?? []
+      suggestions?.toWrite?.edges ?? []
     ).map(({ node }) => ({
       kind: 'write',
       articleId: node.id,
@@ -375,7 +394,7 @@ export const getMyContributions = createServerFn({ method: 'GET' }).handler(
         },
       },
       totals,
-      upvotesReceived: suggestions.upvotesReceived?.totalCount ?? 0,
+      upvotesReceived: suggestions?.upvotesReceived?.totalCount ?? 0,
       series: buildCumulativeSeries(
         (user.contributions ?? []).flatMap((c) =>
           c?.date ? [{ date: c.date, count: c.count ?? 0 }] : [],
