@@ -181,7 +181,8 @@ or cleared while they edit. Pulling a link out of shared text is the Web Share T
 rumors-line-bot's `searchText` lists the top 4 of `ListArticles(moreLikeThis:)` at rumors-api's
 default `minimumShouldMatch` (`10<70%`), and only skips the list (picks for the user, hides
 "none of these") when the top hit's string similarity is ≥ 0.95. This page does the same: the
-list uses the default threshold and the top 4, and skipping it takes the exact equality described
+list uses the default threshold but shows the top 6, since a web page has room for more cards than
+a LINE carousel, and skipping it takes the exact equality described
 under `/report/check` above.
 
 The first version of this page pinned the list itself at 90%, because a bare Facebook share link

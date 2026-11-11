@@ -54,7 +54,7 @@ describe('searchSuspiciousMessages', () => {
     const { variables } = lastCall()
     expect(variables).toEqual({
       like: 'https://www.facebook.com/share/p/1HSNRpimmH/',
-      first: 4,
+      first: 6,
     })
   })
 

@@ -70,10 +70,11 @@ declare module '@tanstack/react-router' {
 type ReportOutcome = NonNullable<HistoryState['outcome']>
 
 /**
- * How many candidates to list. The search itself uses rumors-api's default
- * `minimumShouldMatch`, as rumors-line-bot's `searchText` does (it also lists
- * 4): listing is the loose threshold, and the strict one is `identical` below,
- * which decides whether to skip the list.
+ * How many candidates to list. More than rumors-line-bot's 4, since a web page
+ * has room for more cards than a LINE carousel. The search itself uses
+ * rumors-api's default `minimumShouldMatch`, as the LINE bot's `searchText`
+ * does: listing is the loose threshold, and the strict one is `identical`
+ * below, which decides whether to skip the list.
  *
  * Don't pin a higher `minimumShouldMatch` for links. rumors-api folds the
  * scraped title and summary into `like` next to the link, so every
@@ -85,7 +86,7 @@ type ReportOutcome = NonNullable<HistoryState['outcome']>
  * the same site for a link nobody has reported; each card shows the scraped
  * title so the reporter can tell them apart before picking.
  */
-const CANDIDATE_LIMIT = 4
+const CANDIDATE_LIMIT = 6
 
 export type SearchCandidate = NonNullable<
   NonNullable<SearchSuspiciousMessagesQuery['ListArticles']>['edges']
