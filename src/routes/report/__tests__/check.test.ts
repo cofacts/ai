@@ -126,6 +126,18 @@ describe('searchSuspiciousMessages', () => {
   })
 })
 
+describe('searchSuspiciousMessages input', () => {
+  test.each(['', '   \n'])(
+    'refuses an empty link (%j) before any request',
+    async (like) => {
+      await expect(
+        searchSuspiciousMessages({ data: like }),
+      ).rejects.toThrowError(/Nothing to search for/)
+      expect(mockedExec).not.toHaveBeenCalled()
+    },
+  )
+})
+
 describe('requestFactCheck', () => {
   test('sends the reason trimmed, and null rather than an empty one', async () => {
     mockedExec.mockResolvedValue({ CreateOrUpdateReplyRequest: { id: 'a1' } })
@@ -183,6 +195,17 @@ describe('createArticleReport', () => {
       reason: '看起來像業配',
     })
   })
+
+  test.each(['', '   \n'])(
+    'refuses an empty link (%j) before any request',
+    async (url) => {
+      await expect(createArticleReport({ data: { url } })).rejects.toThrowError(
+        /Nothing to report/,
+      )
+      expect(mockedExec).not.toHaveBeenCalled()
+      expect(mockedAuth).not.toHaveBeenCalled()
+    },
+  )
 
   test('sends null rather than an empty reason', async () => {
     mockedExec.mockResolvedValueOnce({ CreateArticle: { id: 'new1' } })

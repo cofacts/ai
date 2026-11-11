@@ -129,9 +129,13 @@ export function sameLink(text: string): string {
 // POST, not GET: a GET server function puts its input in the request URL, and
 // with it the reporter's link in every request log on the way.
 export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
+  // Shape only (text, not empty): the URL rule itself is the form's. See the
+  // ADR on why the server functions don't re-check it.
   .inputValidator((like: string) => {
     if (typeof like !== 'string') throw new Error('url must be text')
-    return like.trim()
+    const trimmed = like.trim()
+    if (!trimmed) throw new Error('Nothing to search for')
+    return trimmed
   })
   .handler(async ({ data: like }): Promise<Array<SearchCandidate>> => {
     const data = await cofactsExec(
@@ -228,7 +232,10 @@ export const createArticleReport = createServerFn({ method: 'POST' })
       if (reason != null && typeof reason !== 'string') {
         throw new Error('reason must be text')
       }
-      return { url: url.trim(), reason }
+      // Shape only, as in the search: an empty article is never meaningful.
+      const trimmed = url.trim()
+      if (!trimmed) throw new Error('Nothing to report')
+      return { url: trimmed, reason }
     },
   )
   .handler(async ({ data }): Promise<{ articleId: string }> => {

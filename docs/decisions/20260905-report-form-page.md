@@ -165,9 +165,12 @@ alike, one value that cannot drift, and rumors-api resolves the link at creation
 `type="url"` input, limited by its `pattern` to an http(s) scheme (in any case) followed by no
 whitespace. Words separated from the link by a space are refused; words glued to the link with
 no space cannot be told apart from a legitimate non-ASCII path (zh.wikipedia's, say) and pass.
-Validation is native only (`type="url"`, `required`, the http(s) `pattern`); the server
-functions pass the trimmed text through to rumors-api, which accepts arbitrary text and
-extracts URLs itself. The inline message also points a pure
+The URL rule — an http(s) link and nothing else — is enforced by the form alone (`type="url"`,
+`required`, the http(s) `pattern`). The server functions check only what any caller could get
+wrong in shape: text where text is expected, and a non-empty link, since searching or filing
+nothing is meaningless (the cofacts-frontend skill's data-layer rule 6). They do not re-check the
+URL rule: rumors-api accepts arbitrary text and extracts URLs itself, and any signed-in user can
+call it directly with their own token, so a stricter check here would protect nothing. The inline message also points a pure
 LINE forward to the LINE bot. It appears when the reporter tries to submit — not on load, while
 typing or on blur, where it would move the submit button under a click or tap — and is updated
 or cleared while they edit. Pulling a link out of shared text is the Web Share Target's job
