@@ -1,4 +1,4 @@
-import { expect, within } from 'storybook/test'
+import { expect, waitFor, within } from 'storybook/test'
 
 import { viewportOptions } from '../../.storybook/viewports'
 import { HyperlinkPreview } from './HyperlinkPreview'
@@ -54,7 +54,10 @@ export const UrlOnly: Story = {
 
 const unsafeUrls = ['javascript:alert(1)', 'data:text/html,hi', 'not a url']
 
-/** The url is user-submitted: one that is not http(s) shows as text, never as a link. */
+/**
+ * The url and `topImageUrl` are user-submitted: a url that is not http(s) shows as text, never
+ * as a link, and such a `topImageUrl` shows no image.
+ */
 export const UnsafeUrl: Story = {
   render: (args) => (
     <div className="flex flex-col gap-spacing-16">
@@ -62,7 +65,7 @@ export const UnsafeUrl: Story = {
         <HyperlinkPreview
           key={url}
           {...args}
-          hyperlink={{ url, title: 'Not a link' }}
+          hyperlink={{ url, title: 'Not a link', topImageUrl: url }}
         />
       ))}
     </div>
@@ -70,8 +73,45 @@ export const UnsafeUrl: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await expect(canvas.queryByRole('link')).toBeNull()
+    await expect(canvasElement.querySelector('img')).toBeNull()
     for (const url of unsafeUrls) {
       await expect(canvas.getByText(url)).toBeVisible()
     }
+  },
+}
+
+/**
+ * Not in Penpot yet: rumors-api found an image on the page. The thumbnail is a placeholder that
+ * copies cofacts.tw until the designer decides whether and how to show it.
+ */
+export const WithImage: Story = {
+  tags: ['not-in-penpot'],
+  args: {
+    hyperlink: {
+      ...meta.args.hyperlink,
+      // A 1200×630 landscape, the usual og:image shape.
+      topImageUrl: new URL('./__fixtures__/og-image.jpg', import.meta.url).href,
+    },
+  },
+  play: async ({ canvasElement, args }) => {
+    // Decorative (the title names the link), loaded lazily from a third-party page with no referrer.
+    const img = canvasElement.querySelector('img')
+    await expect(img).toHaveAttribute('src', args.hyperlink.topImageUrl)
+    await expect(img).toHaveAttribute('alt', '')
+    await expect(img).toHaveAttribute('loading', 'lazy')
+    await expect(img).toHaveAttribute('referrerpolicy', 'no-referrer')
+  },
+}
+
+/** Not in Penpot: `topImageUrl` fails to load, so the card leaves the image out. */
+export const BrokenImage: Story = {
+  args: {
+    hyperlink: {
+      ...meta.args.hyperlink,
+      topImageUrl: 'https://example.invalid/missing.jpg',
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(canvasElement.querySelector('img')).toBeNull())
   },
 }
