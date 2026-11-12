@@ -1,3 +1,4 @@
+import { expect, waitFor } from 'storybook/test'
 import { viewportOptions } from '../../.storybook/viewports'
 import { HyperlinkPreview } from './HyperlinkPreview'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
@@ -38,5 +39,33 @@ export const UrlOnly: Story = {
     hyperlink: {
       url: 'https://www.kaineng.com.tw/knowledge-bedridden-care/?utm_source=line&utm_medium=share&utm_campaign=a-very-long-campaign-name',
     },
+  },
+}
+
+/**
+ * Not in Penpot yet: rumors-api found an image on the page. The thumbnail is a placeholder that
+ * copies cofacts.tw until the designer decides whether and how to show it.
+ */
+export const WithImage: Story = {
+  tags: ['not-in-penpot'],
+  args: {
+    hyperlink: {
+      ...meta.args.hyperlink,
+      // A 1200×630 landscape, the usual og:image shape.
+      topImageUrl: new URL('./__fixtures__/og-image.jpg', import.meta.url).href,
+    },
+  },
+}
+
+/** Not in Penpot: `topImageUrl` fails to load, so the card leaves the image out. */
+export const BrokenImage: Story = {
+  args: {
+    hyperlink: {
+      ...meta.args.hyperlink,
+      topImageUrl: 'https://example.invalid/missing.jpg',
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(canvasElement.querySelector('img')).toBeNull())
   },
 }
