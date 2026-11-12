@@ -37,8 +37,10 @@ export type FactCheckReplyProps = {
    */
   createdAt: string | Date
   /**
-   * The time the date is read against. The route loader takes it once and passes it down, so the
-   * server render and the browser agree; `new Date()` here would differ between them.
+   * The current time, passed in instead of read from the clock. `formatDate` uses it to decide
+   * between 「3 小時前」 and a date, and whether the date needs a year. The route loader takes it
+   * once and passes it down, so the server render and the browser agree; `new Date()` here would
+   * differ between them.
    */
   now: string | Date
   /** How many messages use this reply. 「被引用 N 次」. */
