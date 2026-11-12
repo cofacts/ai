@@ -74,3 +74,21 @@ describe('formatDateTime', () => {
     )
   })
 })
+
+describe('dates that do not parse', () => {
+  it('read as the original string instead of throwing', () => {
+    expect(formatTimeAgo('not a date', now)).toBe('not a date')
+    expect(formatDate('not a date', now)).toBe('not a date')
+    expect(formatDateTime('not a date')).toBe('not a date')
+  })
+
+  it('read the date with its year when now does not parse', () => {
+    const invalidNow = new Date(NaN)
+    expect(formatTimeAgo('2026-11-04T12:00:00+08:00', invalidNow)).toBe(
+      '2026年11月4日',
+    )
+    expect(formatDate('2026-11-04T12:00:00+08:00', invalidNow)).toBe(
+      '2026年11月4日',
+    )
+  })
+})
