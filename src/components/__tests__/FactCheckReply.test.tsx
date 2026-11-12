@@ -31,6 +31,12 @@ describe('FactCheckReply', () => {
     expect(render()).toContain('1 天前')
   })
 
+  it('reads as the date from 48 hours on, with the full time as the title', () => {
+    const html = render({ createdAt: '2026-11-04T09:05:00+08:00' })
+    expect(html).toContain('11月4日')
+    expect(html).toContain('title="2026年11月4日 上午9:05"')
+  })
+
   it.each([
     ['RUMOR', '含有不實訊息'],
     ['NOT_RUMOR', '含有正確訊息'],

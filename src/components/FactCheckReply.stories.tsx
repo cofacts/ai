@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fn } from 'storybook/test'
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
 
 import { viewportOptions } from '../../.storybook/viewports'
 import { FactCheckReply } from './FactCheckReply'
@@ -83,7 +83,25 @@ type Story = StoryObj<typeof meta>
  * Penpot Type = default. Click 閱讀全文 to open the whole text; the button becomes 收合全文. The
  * four results (Incorrect, Correct, …) are FactCheckReply-Title's variants, shown in its stories.
  */
-export const Default: Story = {}
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    // The button shows once the text is measured as cut off.
+    const button = await canvas.findByRole('button', { name: '閱讀全文' })
+    await expect(button).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(button)
+    await expect(button).toHaveAttribute('aria-expanded', 'true')
+    await expect(button).toHaveAccessibleName('收合全文')
+    // Collapsing measures again, so the button stays.
+    await userEvent.click(button)
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: '閱讀全文' })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      ),
+    )
+  },
+}
 
 // ── Penpot Type = with-link ──
 
@@ -109,4 +127,13 @@ export const WithLink: Story = {
 /** A text that fits needs no 閱讀全文. */
 export const ShortText: Story = {
   args: { text: '假的。目前沒有研究可以證實雨水會傳播病毒。' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    // Wait for the reply to render, then for the measurement that would add the button.
+    await canvas.findByText(/目前沒有研究/)
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    await expect(
+      canvas.queryByRole('button', { name: /閱讀全文|收合全文/ }),
+    ).toBeNull()
+  },
 }
