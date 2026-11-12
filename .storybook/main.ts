@@ -5,7 +5,12 @@ const config: StorybookConfig = {
   stories: ['../src/**/*.stories.@(ts|tsx)'],
   // `addon-vitest` runs every story (and its play function) as a Vitest test: the `storybook`
   // project in vite.config.ts.
-  addons: ['@storybook/addon-docs', '@storybook/addon-vitest'],
+  // `addon-a11y` runs axe checks: the Accessibility panel.
+  addons: [
+    '@storybook/addon-docs',
+    '@storybook/addon-vitest',
+    '@storybook/addon-a11y',
+  ],
   framework: {
     name: '@storybook/tanstack-react',
     options: {},
