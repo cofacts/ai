@@ -30,3 +30,47 @@ export function formatTimeAgo(date: Date | string, now: Date = new Date()) {
   }
   return rtf.format(-Math.floor(elapsed / SECOND), 'second')
 }
+
+// Dates read in Taipei on the server (Cloud Run runs in UTC) and in the browser alike,
+// so both render the same string.
+const timeZone = 'Asia/Taipei'
+const yearFormat = new Intl.DateTimeFormat('zh-TW', {
+  timeZone,
+  year: 'numeric',
+})
+const dayFormat = new Intl.DateTimeFormat('zh-TW', {
+  timeZone,
+  month: 'short',
+  day: 'numeric',
+})
+const dayWithYearFormat = new Intl.DateTimeFormat('zh-TW', {
+  timeZone,
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
+const dateTimeFormat = new Intl.DateTimeFormat('zh-TW', {
+  timeZone,
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+})
+
+/**
+ * Time ago within 48 hours (「3 小時前」), the date after that (「11月4日」), with the year only
+ * when it is not the year of `now` (「2024年4月2日」). Users asked for dates instead of 「N 天前」
+ * in the 2021 user profile pilot study, and cofacts.tw has read this way since rumors-site#419.
+ */
+export function formatDate(date: Date | string, now: Date = new Date()) {
+  const d = new Date(date)
+  if (now.getTime() - d.getTime() < 2 * DAY) return formatTimeAgo(d, now)
+  const sameYear = yearFormat.format(d) === yearFormat.format(now)
+  return (sameYear ? dayFormat : dayWithYearFormat).format(d)
+}
+
+/** The full date and time, 「2024年4月2日 上午9:05」, for the tooltip of a date from `formatDate`. */
+export function formatDateTime(date: Date | string) {
+  return dateTimeFormat.format(new Date(date))
+}
