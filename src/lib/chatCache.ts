@@ -1,5 +1,7 @@
 import { handleAuthExpired } from './authExpired'
 import { UPLOAD_FILENAME_PREFIX } from './adk'
+import { formatEditedDraftPart, parseEditedDraftPart } from './factCheckDraft'
+import type { DraftFields } from './factCheckDraft'
 import type { QueryClient } from '@tanstack/react-query'
 import type {
   AdkEvent,
@@ -15,6 +17,11 @@ export interface ChatSessionState {
   error: string | null
   toolInvocations: Record<string, ToolInvocation>
   lastReplyDraftId: string | null
+  /**
+   * Drafts the user can no longer edit because their edits to it were sent to the AI with a
+   * chat message (see `factCheckDraft.ts`). Rebuilt from the messages on reload.
+   */
+  lockedDraftIds: Array<string>
 }
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
@@ -23,6 +30,18 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   error: null,
   toolInvocations: {},
   lastReplyDraftId: null,
+  lockedDraftIds: [],
+}
+
+/** Adds the drafts that `parts` carries edits of to `locked`. */
+function lockDraftsEditedIn(
+  locked: Array<string>,
+  parts: Array<AdkPart>,
+): Array<string> {
+  const ids = parts
+    .map((p) => (p.text ? parseEditedDraftPart(p.text)?.basedOn : undefined))
+    .filter((id): id is string => !!id && !locked.includes(id))
+  return ids.length > 0 ? [...locked, ...ids] : locked
 }
 
 export function chatCacheKey(): readonly ['chat']
@@ -207,6 +226,8 @@ export async function sendChatMessage(
   sessionId: string,
   text: string,
   files: Array<File> = [],
+  /** The user's unsent edits to the latest draft, sent along for the AI to revise from. */
+  editedDraft?: { draftId: string; fields: DraftFields },
 ) {
   const queryKey = chatCacheKey(sessionId)
 
@@ -223,6 +244,11 @@ export async function sendChatMessage(
   // part per attachment.
   const parts: Array<AdkPart> = []
   if (text) parts.push({ text })
+  if (editedDraft) {
+    parts.push({
+      text: formatEditedDraftPart(editedDraft.draftId, editedDraft.fields),
+    })
+  }
   if (files.length > 0) {
     parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
   }
@@ -232,6 +258,7 @@ export async function sendChatMessage(
     if (!prev) return INITIAL_CHAT_STATE
     return {
       ...prev,
+      lockedDraftIds: lockDraftsEditedIn(prev.lockedDraftIds, parts),
       messages: [
         ...prev.messages,
         {
@@ -339,6 +366,7 @@ export function applyEventToState(
       ...prev,
       toolInvocations,
       lastReplyDraftId,
+      lockedDraftIds: lockDraftsEditedIn(prev.lockedDraftIds, userParts),
       messages: [
         ...prev.messages,
         {

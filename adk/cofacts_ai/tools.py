@@ -588,9 +588,9 @@ def draft_factcheck_response(
             "Proposal accepted. To have a proofreader review it, cite this result's `cite_as` id in "
             "the proofreader's request. If proofreader review or your own judgment still calls for "
             "changes, revise and call this tool again — only your LAST successful call is shown to "
-            "the user once you finish responding. If this is your final proposal, guide the user to "
-            "open the tool call result above to read the draft, then ask if they have any feedback "
-            "or edits before submitting to Cofacts."
+            "the user once you finish responding, in the panel where they can edit it and submit it to "
+            "Cofacts. If this is your final proposal, end your turn with the closing "
+            "「接下來需要你做的事」 (Step 8 of your instructions)."
         ),
     }
 

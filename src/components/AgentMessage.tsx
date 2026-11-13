@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
+import { AiButton } from './AiButton'
 import type { ChatMessage } from '@/lib/adk'
 import { cn } from '@/lib/utils'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
@@ -10,6 +11,12 @@ interface AgentMessageProps {
   showAvatar?: boolean
   focusedToolCallId?: string | null
   onToolBadgeClick?: (id: string) => void
+  /**
+   * Set on the last message of a turn that proposed a passed draft: shows a button that opens it,
+   * so the user doesn't have to scroll back to the tool call.
+   */
+  draftId?: string
+  onOpenDraft?: (draftId: string) => void
 }
 
 export function AgentMessage({
@@ -17,6 +24,8 @@ export function AgentMessage({
   showAvatar = true,
   focusedToolCallId,
   onToolBadgeClick,
+  draftId,
+  onOpenDraft,
 }: AgentMessageProps) {
   return (
     <div className="flex flex-col items-start w-full">
@@ -108,6 +117,16 @@ export function AgentMessage({
 
           return null
         })}
+
+        {draftId && onOpenDraft && (
+          <AiButton
+            icon="edit_document"
+            className="mt-spacing-4"
+            onClick={() => onOpenDraft(draftId)}
+          >
+            查核回應草稿
+          </AiButton>
+        )}
       </div>
     </div>
   )

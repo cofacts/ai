@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SearchSuggestions } from './SearchSuggestions'
+import { FactCheckDraftPanel } from './FactCheckDraftPanel'
 import styles from './RightDrawer.module.css'
+import type { DraftPanelContext } from './FactCheckDraftPanel'
 import type { AllTools, ToolInvocation, ToolSource } from '@/lib/adk'
-import type { MaterialSymbol } from '@/components/icons/material-symbols'
 import { getArticleAttachmentUrl } from '@/server/articles.functions'
 import { cn } from '@/lib/utils'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
@@ -14,9 +15,16 @@ interface RightDrawerProps {
   isOpen: boolean
   onClose: () => void
   invocation: ToolInvocation | null
+  /** Editing / submitting context for a `draft_factcheck_response` invocation. */
+  draftContext: DraftPanelContext
 }
 
-export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
+export function RightDrawer({
+  isOpen,
+  onClose,
+  invocation,
+  draftContext,
+}: RightDrawerProps) {
   return (
     <>
       {/* Desktop drawer */}
@@ -28,14 +36,14 @@ export function RightDrawer({ isOpen, onClose, invocation }: RightDrawerProps) {
           )}
         >
           <DrawerHeader invocation={invocation} onClose={onClose} />
-          <DrawerContent invocation={invocation} />
+          <DrawerContent invocation={invocation} draftContext={draftContext} />
         </aside>
       )}
 
       {/* Mobile bottom sheet */}
       <MobileBottomSheet isOpen={isOpen} onClose={onClose}>
         <DrawerHeader invocation={invocation} onClose={onClose} />
-        <DrawerContent invocation={invocation} />
+        <DrawerContent invocation={invocation} draftContext={draftContext} />
       </MobileBottomSheet>
     </>
   )
@@ -106,7 +114,13 @@ function DrawerHeader({
 
 // ── Content router ───────────────────────────────────────────────
 
-function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
+function DrawerContent({
+  invocation,
+  draftContext,
+}: {
+  invocation: ToolInvocation | null
+  draftContext: DraftPanelContext
+}) {
   if (!invocation) return null
 
   switch (invocation.name) {
@@ -130,7 +144,14 @@ function DrawerContent({ invocation }: { invocation: ToolInvocation | null }) {
         <ProofreaderContent args={invocation.args} response={invocation.resp} />
       )
     case 'draft_factcheck_response':
-      return <DraftFactcheckContent args={invocation.args} />
+      return (
+        <FactCheckDraftPanel
+          key={invocation.id}
+          toolCallId={invocation.id}
+          args={invocation.args}
+          context={draftContext}
+        />
+      )
     case 'get_single_cofacts_article':
       return <CofactsArticleContent response={invocation.resp} />
     default: {
@@ -372,139 +393,6 @@ function ProofreaderContent({
           等待回應…
         </p>
       )}
-    </div>
-  )
-}
-
-// ── Copy button ──────────────────────────────────────────────────
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false)
-  const handleCopy = () => {
-    navigator.clipboard.writeText(value)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-  return (
-    <button
-      onClick={handleCopy}
-      disabled={!value}
-      className="ml-auto text-text-tertiary hover:text-text-secondary disabled:opacity-0 transition-colors"
-      aria-label="複製"
-    >
-      <MaterialIcon name={copied ? 'check' : 'content_copy'} size={24} />
-    </button>
-  )
-}
-
-// ── Draft Factcheck ──────────────────────────────────────────────
-
-type ReplyCategory = 'NOT_ARTICLE' | 'RUMOR' | 'NOT_RUMOR' | 'OPINIONATED'
-
-const CATEGORIES: Array<{
-  key: ReplyCategory
-  label: string
-  icon: MaterialSymbol
-  colorClass: string
-  activeClass: string
-}> = [
-  {
-    key: 'NOT_ARTICLE',
-    label: '不在查證範圍',
-    icon: 'warning',
-    colorClass: 'text-status-outofscope',
-    activeClass:
-      'bg-surface-accent-subtle border-border-accent text-text-on-accent',
-  },
-  {
-    key: 'RUMOR',
-    label: '含有不實訊息',
-    icon: 'cancel',
-    colorClass: 'text-status-incorrect',
-    activeClass:
-      'bg-surface-raised border-border-control text-status-incorrect',
-  },
-  {
-    key: 'NOT_RUMOR',
-    label: '含有正確訊息',
-    icon: 'check_circle',
-    colorClass: 'text-status-correct',
-    activeClass: 'bg-surface-raised border-border-subtle text-status-correct',
-  },
-  {
-    key: 'OPINIONATED',
-    label: '含有個人意見',
-    icon: 'comment',
-    colorClass: 'text-status-opinion',
-    activeClass: 'bg-surface-raised border-border-subtle text-text-link',
-  },
-]
-
-function DraftFactcheckContent({
-  args,
-}: {
-  args: AllTools['draft_factcheck_response']['args']
-}) {
-  const classification = args.classification as ReplyCategory | undefined
-  const text = args.text ?? ''
-  const references = args.references ?? ''
-
-  return (
-    <div className="flex-1 overflow-y-auto p-spacing-16 space-y-spacing-20 bg-surface-raised">
-      {/* Classification */}
-      <div className="flex flex-row gap-spacing-4 p-spacing-4 bg-surface-raised rounded-radius-10 w-full overflow-x-auto [scrollbar-width:none]">
-        {CATEGORIES.map((cat) => {
-          const isActive = classification === cat.key
-          return (
-            <div
-              key={cat.key}
-              className={cn(
-                'flex-1 min-w-[80px] whitespace-nowrap py-spacing-8 text-[10px] font-bold text-center rounded-radius-5',
-                'flex flex-col items-center justify-center gap-spacing-2',
-                // cn() drops the base bg / border colors that activeClass replaces.
-                isActive
-                  ? [
-                      'bg-surface-base shadow-btn-shadow border border-border-subtle',
-                      cat.activeClass,
-                    ]
-                  : 'text-text-tertiary',
-              )}
-            >
-              <MaterialIcon
-                name={cat.icon}
-                size={24}
-                className={`${isActive ? '' : cat.colorClass} ${isActive ? '' : 'opacity-40'}`}
-              />
-              <span>{cat.label}</span>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Response text */}
-      <div className="space-y-spacing-8">
-        <label className="text-type-caption font-bold text-text-tertiary uppercase flex items-center">
-          回應內容
-          <CopyButton value={text} />
-        </label>
-        <div className="w-full min-h-[11rem] p-spacing-12 text-type-body-s text-text-primary bg-surface-base border border-border-subtle rounded-radius-10 whitespace-pre-wrap">
-          {text || <span className="text-text-disabled">（尚未產生）</span>}
-        </div>
-      </div>
-
-      {/* References */}
-      <div className="space-y-spacing-8">
-        <label className="text-type-caption font-bold text-text-tertiary uppercase flex items-center gap-spacing-4">
-          <MaterialIcon name="link" size={24} />
-          佐證資料
-          <CopyButton value={references} />
-        </label>
-        <div className="w-full min-h-[8rem] p-spacing-12 text-type-body-s font-mono text-text-secondary bg-surface-base border border-border-subtle rounded-radius-10 whitespace-pre-wrap">
-          {references || (
-            <span className="text-text-disabled">（尚未產生）</span>
-          )}
-        </div>
-      </div>
     </div>
   )
 }

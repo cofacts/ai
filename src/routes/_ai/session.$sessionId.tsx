@@ -28,6 +28,7 @@ function SessionPage() {
     sendMessage,
     stopGeneration,
     lastReplyDraftId,
+    toolInvocations,
   } = useChat({ sessionId })
 
   const openedCallIds = useRef<Set<string>>(new Set())
@@ -51,6 +52,18 @@ function SessionPage() {
       })
     },
     [toolCallId, sessionId, navigate],
+  )
+
+  const handleOpenDraft = useCallback(
+    (draftId: string) => {
+      navigate({
+        to: '/session/$sessionId/tool/$toolCallId',
+        params: { sessionId, toolCallId: draftId },
+        viewTransition: true,
+        replace: toolCallId !== undefined,
+      })
+    },
+    [sessionId, toolCallId, navigate],
   )
 
   // Auto-open: lastReplyDraftId is pre-computed by the cache reducer
@@ -106,6 +119,8 @@ function SessionPage() {
           sessionId={sessionId}
           focusedToolCallId={toolCallId ?? null}
           onToolBadgeClick={handleToolBadgeClick}
+          toolInvocations={toolInvocations}
+          onOpenDraft={handleOpenDraft}
         />
       </div>
       <Outlet />
