@@ -13,6 +13,7 @@ import { submitFactCheckReply } from '@/server/replies.functions'
 import { isAuthExpiredError } from '@/lib/authExpired'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { SubmitReplyDialog } from '@/components/SubmitReplyDialog'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
@@ -31,6 +32,8 @@ export interface DraftPanelContext {
   articleId: string | null
   /** Opens the latest draft, offered from a locked one. */
   onOpenLatestDraft?: () => void
+  /** The logged-in user's name, shown in the submit confirmation. */
+  userName: string | null
 }
 
 const CATEGORIES: Array<{
@@ -165,7 +168,7 @@ export function FactCheckDraftPanel({
   args: AllTools['draft_factcheck_response']['args']
   context: DraftPanelContext
 }) {
-  const { sessionId, articleId, onOpenLatestDraft } = context
+  const { sessionId, articleId, onOpenLatestDraft, userName } = context
   const original = draftFieldsFromArgs(args)
   const [edit, setEdit] = useDraftEdit(sessionId, toolCallId)
   const [submittedReplyId, setSubmitted] = useSubmittedReply(
@@ -361,45 +364,25 @@ export function FactCheckDraftPanel({
           {problem && (
             <p className="text-type-caption text-text-tertiary">{problem}</p>
           )}
-          {submitError && (
-            <p role="alert" className="text-type-caption text-status-incorrect">
-              送出失敗：{submitError}
-            </p>
-          )}
-          {confirming ? (
-            <div className="space-y-spacing-8">
-              <p className="text-type-body-s text-text-primary">
-                確定要用你的 Cofacts 帳號公開送出這則查核回應嗎？
-              </p>
-              <div className="flex gap-spacing-8">
-                <Button
-                  className="flex-1"
-                  iconStart="send"
-                  disabled={submit.isPending}
-                  aria-busy={submit.isPending || undefined}
-                  onClick={() => submit.mutate()}
-                >
-                  {submit.isPending ? '送出中…' : '確定送出'}
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={submit.isPending}
-                  onClick={() => setConfirming(false)}
-                >
-                  取消
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button
-              className="w-full"
-              iconStart="send"
-              disabled={!!problem}
-              onClick={() => setConfirming(true)}
-            >
-              送出查核回應
-            </Button>
-          )}
+          <Button
+            className="w-full"
+            iconStart="send"
+            disabled={!!problem}
+            onClick={() => {
+              submit.reset()
+              setConfirming(true)
+            }}
+          >
+            送出查核回應
+          </Button>
+          <SubmitReplyDialog
+            open={confirming}
+            onOpenChange={setConfirming}
+            userName={userName}
+            pending={submit.isPending}
+            error={submitError}
+            onConfirm={() => submit.mutate()}
+          />
         </div>
       )}
     </div>

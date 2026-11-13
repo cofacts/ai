@@ -4,6 +4,7 @@ import type { DraftLockReason } from '@/components/FactCheckDraftPanel'
 import type { ToolInvocation } from '@/lib/adk'
 import { useChat } from '@/hooks/useChat'
 import { RightDrawer } from '@/components/RightDrawer'
+import { useAuth } from '@/lib/auth'
 
 export const Route = createFileRoute(
   '/_ai/session/$sessionId/tool/$toolCallId',
@@ -38,6 +39,7 @@ function ToolDrawer() {
     from: '/_ai/session/$sessionId/tool/$toolCallId',
   })
   const navigate = useNavigate()
+  const { user } = useAuth()
   const {
     toolInvocations,
     lastReplyDraftId,
@@ -80,6 +82,7 @@ function ToolDrawer() {
         sessionId,
         lockReason,
         articleId,
+        userName: user?.name ?? null,
         onOpenLatestDraft:
           lastReplyDraftId &&
           lastReplyDraftId !== toolCallId &&
