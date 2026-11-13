@@ -16,7 +16,7 @@
  * This file is pure (no React, no storage) so the cache reducer and its tests can use it.
  */
 
-import type { ToolInvocation } from './adk'
+import type { ChatMessage, ToolInvocation } from './adk'
 
 export type ReplyCategory =
   | 'NOT_ARTICLE'
@@ -139,4 +139,46 @@ export function findArticleId(
     if (id) articleId = id
   }
   return articleId
+}
+
+// ── The 「查核回應草稿」 button at the end of a turn ─────────────
+
+/**
+ * For each chat turn (the agent messages between two user messages) that proposed a draft that
+ * passed validation, maps the turn's LAST agent message id to that turn's last passed draft. The
+ * message renders a button that opens the draft, so the user doesn't have to scroll back to the
+ * tool call. A turn still streaming gets no button yet.
+ */
+export function draftButtonsByMessage(
+  messages: Array<ChatMessage>,
+  toolInvocations: Record<string, ToolInvocation>,
+  isStreaming: boolean,
+): Map<string, string> {
+  const result = new Map<string, string>()
+  let lastAgentMessageId: string | null = null
+  let turnDraftId: string | null = null
+
+  const endTurn = () => {
+    if (lastAgentMessageId && turnDraftId)
+      result.set(lastAgentMessageId, turnDraftId)
+    lastAgentMessageId = null
+    turnDraftId = null
+  }
+
+  for (const message of messages) {
+    if (message.author === 'user') {
+      endTurn()
+      continue
+    }
+    lastAgentMessageId = message.id
+    for (const part of message.parts ?? []) {
+      const id = part.functionCall?.id
+      if (!id) continue
+      const inv = toolInvocations[id]
+      if (inv?.name === 'draft_factcheck_response' && inv.resp?.success)
+        turnDraftId = id
+    }
+  }
+  if (!isStreaming) endTurn()
+  return result
 }

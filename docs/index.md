@@ -157,8 +157,9 @@ draft is attached to the message as a `<user_edited_draft based_on="…">` text 
 locks; the writer's instruction tells it to revise from the user's version and propose again. Unsent
 edits live in the TanStack Query cache, mirrored to localStorage. The rules are in
 `src/lib/factCheckDraft.ts`. After each passed proposal, the writer ends with a one-sentence
-conclusion and the three steps of 「接下來需要你做的事」, and the chat shows buttons that open the
-draft and its references.
+conclusion and the three steps of 「接下來需要你做的事」. The last agent message of every turn that
+proposed a passed draft carries a 「查核回應草稿」 button that opens that draft (decided in the
+frontend, `draftButtonsByMessage`), so the user never scrolls back to the tool call.
 
 ## Data & sessions
 

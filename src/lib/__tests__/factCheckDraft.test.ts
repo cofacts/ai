@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'vitest'
 import { INITIAL_CHAT_STATE, applyEventToState } from '../chatCache'
 import {
+  draftButtonsByMessage,
   draftSubmitProblem,
   findArticleId,
   formatEditedDraftPart,
   parseEditedDraftPart,
 } from '../factCheckDraft'
-import type { AdkEvent, ToolInvocation } from '../adk'
+import type { AdkEvent, ChatMessage, ToolInvocation } from '../adk'
 import type { DraftFields } from '../factCheckDraft'
 
 const fields: DraftFields = {
@@ -100,5 +101,65 @@ describe('applyEventToState / lockedDraftIds', () => {
   test('an ordinary user message locks nothing', () => {
     const state = applyEventToState(INITIAL_CHAT_STATE, userEvent('hi'))
     expect(state.lockedDraftIds).toEqual([])
+  })
+})
+
+describe('draftButtonsByMessage', () => {
+  const user = (id: string): ChatMessage => ({
+    id,
+    role: 'user',
+    author: 'user',
+    parts: [{ text: 'q' }],
+  })
+  const agent = (id: string, callIds: Array<string> = []): ChatMessage => ({
+    id,
+    role: 'model',
+    author: 'writer',
+    parts: [
+      { text: 'a' },
+      ...callIds.map((callId) => ({
+        functionCall: { id: callId, name: 'draft_factcheck_response' },
+      })),
+    ],
+  })
+  const draft = (id: string, success: boolean) =>
+    ({
+      id,
+      name: 'draft_factcheck_response',
+      args: {},
+      resp: { success, text: '' },
+    }) as ToolInvocation
+  const invocations = {
+    ok1: draft('ok1', true),
+    ok2: draft('ok2', true),
+    bad: draft('bad', false),
+  }
+
+  test("puts the turn's last passed draft on the turn's last agent message", () => {
+    const messages = [
+      user('u1'),
+      agent('a1', ['ok1']),
+      agent('a2', ['ok2']),
+      agent('a3', ['bad']),
+      agent('a4'),
+      user('u2'),
+      agent('a5'),
+    ]
+    expect([...draftButtonsByMessage(messages, invocations, false)]).toEqual([
+      ['a4', 'ok2'],
+    ])
+  })
+
+  test('the last turn gets its button only once streaming ends', () => {
+    const messages = [user('u1'), agent('a1', ['ok1']), agent('a2')]
+    expect(draftButtonsByMessage(messages, invocations, true).size).toBe(0)
+    expect([...draftButtonsByMessage(messages, invocations, false)]).toEqual([
+      ['a2', 'ok1'],
+    ])
+  })
+
+  test('a turn whose drafts all failed gets no button', () => {
+    const messages = [user('u1'), agent('a1', ['bad'])]
+    expect(draftButtonsByMessage(messages, invocations, false).size).toBe(0)
   })
 })

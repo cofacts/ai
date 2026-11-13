@@ -11,7 +11,6 @@ import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
 import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
-import { DRAFT_REFERENCES_HASH } from '@/components/FactCheckDraftPanel'
 
 export const Route = createFileRoute('/_ai/session/$sessionId')({
   component: SessionPage,
@@ -29,6 +28,7 @@ function SessionPage() {
     sendMessage,
     stopGeneration,
     lastReplyDraftId,
+    toolInvocations,
   } = useChat({ sessionId })
 
   const openedCallIds = useRef<Set<string>>(new Set())
@@ -55,17 +55,15 @@ function SessionPage() {
   )
 
   const handleOpenDraft = useCallback(
-    ({ references }: { references?: boolean }) => {
-      if (!lastReplyDraftId) return
+    (draftId: string) => {
       navigate({
         to: '/session/$sessionId/tool/$toolCallId',
-        params: { sessionId, toolCallId: lastReplyDraftId },
-        hash: references ? DRAFT_REFERENCES_HASH : undefined,
+        params: { sessionId, toolCallId: draftId },
         viewTransition: true,
         replace: toolCallId !== undefined,
       })
     },
-    [lastReplyDraftId, sessionId, toolCallId, navigate],
+    [sessionId, toolCallId, navigate],
   )
 
   // Auto-open: lastReplyDraftId is pre-computed by the cache reducer
@@ -121,7 +119,7 @@ function SessionPage() {
           sessionId={sessionId}
           focusedToolCallId={toolCallId ?? null}
           onToolBadgeClick={handleToolBadgeClick}
-          latestDraftId={lastReplyDraftId}
+          toolInvocations={toolInvocations}
           onOpenDraft={handleOpenDraft}
         />
       </div>

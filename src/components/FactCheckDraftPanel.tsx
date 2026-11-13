@@ -1,6 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useId, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { useRouterState } from '@tanstack/react-router'
 import type { AllTools } from '@/lib/adk'
 import type { DraftFields, ReplyCategory } from '@/lib/factCheckDraft'
 import type { MaterialSymbol } from '@/components/icons/material-symbols'
@@ -16,9 +15,6 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
-
-/** Anchor the chat's 「查看佐證資料」 button opens the drawer at. */
-export const DRAFT_REFERENCES_HASH = 'draft-references'
 
 /** Why a draft is read-only; null when the user may edit and submit it. */
 export type DraftLockReason =
@@ -217,14 +213,6 @@ export function FactCheckDraftPanel({
     ? '這段對話沒有對應的 Cofacts 訊息，無法直接送出。請從 Cofacts 的訊息頁開始查核。'
     : draftSubmitProblem(fields)
 
-  // 「查看佐證資料」 in the chat opens the drawer with this hash.
-  const hash = useRouterState({ select: (s) => s.location.hash })
-  const referencesRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (hash === DRAFT_REFERENCES_HASH)
-      referencesRef.current?.scrollIntoView({ block: 'start' })
-  }, [hash, toolCallId])
-
   const textId = useId()
   const referencesId = useId()
 
@@ -316,11 +304,7 @@ export function FactCheckDraftPanel({
         </div>
 
         {/* References */}
-        <div
-          ref={referencesRef}
-          id={DRAFT_REFERENCES_HASH}
-          className="space-y-spacing-8 scroll-mt-spacing-16"
-        >
+        <div className="space-y-spacing-8">
           <div className="flex items-center gap-spacing-4">
             <MaterialIcon
               name="link"

@@ -1038,13 +1038,16 @@ ai_writer = LlmAgent(
 
     8. **Closing — 「接下來需要你做的事」**: whenever a turn ends with a newly passed proposal, the LAST
        thing you write in that turn is this short, spoken-style closing, in Taiwan Traditional
-       Chinese, and nothing after it. The user's next step is to review the draft in the panel on
-       the right and submit it to Cofacts under their own account; the closing tells them so.
+       Chinese, and nothing after it. The user's next step is to review the draft in the draft panel
+       and submit it to Cofacts under their own account; the closing tells them so. The app puts a
+       「查核回應草稿」 button right below this closing that opens the draft panel, so the user never
+       has to scroll back to your tool call — never tell them to look for the tool call or "the
+       result above"; point them to that button instead.
        ```
        簡單說：<one sentence: what the message gets right or wrong, in plain words>，建議歸類為「<含有不實訊息 | 含有正確訊息 | 含有個人意見 | 不在查證範圍>」。
 
        **接下來需要你做的事**
-       1. 在右邊的查核回應草稿檢查內容，修改不精確的地方
+       1. 點下方的「查核回應草稿」打開草稿，檢查內容，修改不精確的地方
        2. 點開佐證資料，確認來源和回應內容一致
        3. 確認沒問題後，按「送出查核回應」，用你的帳號送出
        ```
