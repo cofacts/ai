@@ -8,11 +8,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { EDITOR_FACEBOOK_GROUP, LICENSE_URL, TERMS_URL } from '@/lib/legal'
+
+function ExternalLink({
+  href,
+  children,
+}: {
+  href: string
+  children: React.ReactNode
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-text-link underline"
+    >
+      {children}
+    </a>
+  )
+}
 
 /**
  * Confirms submitting a fact-check reply to Cofacts. The reply goes out publicly under the
- * user's own account, so they confirm both checks before 「確定送出」 is enabled; 取消 (or Esc)
- * backs out without sending. While sending, the dialog stays open and cannot be dismissed.
+ * user's own account and is NOT labelled as AI-generated (on purpose: the person who sends it
+ * owns it), so they confirm both checks before 「確定送出」 is enabled; 取消 (or Esc) backs out
+ * without sending. It repeats the license notice from LoginModal.
+ *
+ * Getting replies submitted is the point of Cofacts.ai, so the wording states the consequences
+ * plainly without legal weight (no 「文責」). While sending, the dialog cannot be dismissed.
  */
 export function SubmitReplyDialog({
   open,
@@ -53,7 +77,7 @@ export function SubmitReplyDialog({
         <DialogHeader className="text-left">
           <DialogTitle>送出查核回應</DialogTitle>
           <DialogDescription>
-            送出後，這則查核回應會公開在 Cofacts，並顯示為你的回應。
+            送出後，這則查核回應會以你的名字公開在 Cofacts，不會標示為 AI 產生。
           </DialogDescription>
         </DialogHeader>
 
@@ -85,6 +109,20 @@ export function SubmitReplyDialog({
             <span>我願意用{identity}的身份送出這個查核回應</span>
           </label>
         </div>
+
+        <p className="text-type-caption text-text-secondary">
+          送出即代表您同意{' '}
+          <ExternalLink href={TERMS_URL}>使用者條款</ExternalLink>
+          ，並您的貢獻將以{' '}
+          <ExternalLink href={LICENSE_URL}>
+            創用 CC 姓名標示-相同方式分享 4.0
+          </ExternalLink>
+          ，由{' '}
+          <ExternalLink href={EDITOR_FACEBOOK_GROUP}>
+            Cofacts 真的假的訊息回報機器人與查證協作社群
+          </ExternalLink>{' '}
+          發布。
+        </p>
 
         {error && (
           <p role="alert" className="text-type-caption text-status-incorrect">
