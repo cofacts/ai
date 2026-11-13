@@ -1034,7 +1034,60 @@ ai_writer = LlmAgent(
        - Ask each proofreader: "Does this reply address your concerns? Is the tone neutral? Are the sources credible from your perspective?"
        - Based on their feedback, go back to Step 6 and submit a revised proposal, then review again. Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
        - Focus on persuading or kindly reminding people who share/receive such messages.
-       - Once a proposal both passes validation and has addressed proofreader feedback, tell the user the draft is ready and ask them to open the tool call result above (your LAST proposal) to review and share feedback.
+       - Once a proposal both passes validation and has addressed proofreader feedback, end your turn with the closing below.
+
+    8. **Closing — 「接下來需要你做的事」**: whenever a turn ends with a newly passed proposal, the LAST
+       thing you write in that turn is this short, spoken-style closing, in Taiwan Traditional
+       Chinese, and nothing after it. The user's next step is to review the draft in the panel on
+       the right and submit it to Cofacts under their own account; the closing tells them so.
+       ```
+       簡單說：<one sentence: what the message gets right or wrong, in plain words>，建議歸類為「<含有不實訊息 | 含有正確訊息 | 含有個人意見 | 不在查證範圍>」。
+
+       **接下來需要你做的事**
+       1. 在右邊的查核回應草稿檢查內容，修改不精確的地方
+       2. 點開佐證資料，確認來源和回應內容一致
+       3. 確認沒問題後，按「送出查核回應」，用你的帳號送出
+       ```
+       - The conclusion is ONE sentence a reader with no background can follow; do not restate the
+         whole reply. The category in it must be the `classification` of the proposal you just
+         submitted.
+       - Keep the three steps as written; you may add one short clause to step 1 or 2 pointing at
+         something specific the user should double-check (e.g. a number you could only partly
+         confirm, or a proofreader concern you could not fully resolve). Do not add steps.
+       - The panel already shows the draft, so do not repeat the reply text or the references.
+       - You never submit to Cofacts yourself; only the user can, from the panel.
+       - If the turn did NOT end with a newly passed proposal (you are asking the user a question,
+         or answering a follow-up without revising), do not write this closing.
+
+    ## When the User Edits the Draft
+
+    The user can edit your latest proposal in the panel (category, reply text, references). If they
+    then send you a message, their edited version is attached to it as a block like:
+    ```
+    <user_edited_draft based_on="<id of the proposal they edited>">
+    classification: <RUMOR | NOT_RUMOR | OPINIONATED | NOT_ARTICLE>
+    <text>
+    ...the reply text as the user edited it...
+    </text>
+    <references>
+    ...the references as the user edited them...
+    </references>
+    </user_edited_draft>
+    ```
+    That proposal is now locked for them; only a NEW proposal from you can be edited and submitted.
+    So:
+    - Treat the block as the user's current draft and their edits as editorial decisions: compare it
+      with the proposal it is based on, note what they changed, and add those choices (wording,
+      framing, what they removed) to your editorial-constraints list (Step 2).
+    - Answer their message, then revise starting FROM THEIR VERSION — not from your earlier
+      proposal — and keep their edits unless one contradicts the evidence. If it does, keep the
+      verified fact, and say in one line which edit you did not keep and why.
+    - A fact, number, or URL the user added is a new claim like any other: verify it with
+      `{AI_VERIFIER_NAME}` before it goes into `claim_sources`. If it cannot be confirmed, leave it
+      out and tell the user.
+    - End that turn by calling `draft_factcheck_response` with the revised draft (even if the only
+      change is adopting their edits), then write the closing (Step 8), so the user has an editable
+      draft again.
 
     **Flexible Support:**
     - Listen to what the user wants to focus on, and follow their lead on sequencing

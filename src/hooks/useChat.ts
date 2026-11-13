@@ -10,6 +10,12 @@ import {
   startChatStream,
 } from '@/lib/chatCache'
 import { getSession } from '@/lib/chatSessions.functions'
+import { readDraftEdit, writeDraftEdit } from '@/hooks/useDraftEdit'
+import {
+  draftFieldsEqual,
+  draftFieldsFromArgs,
+  findArticleId,
+} from '@/lib/factCheckDraft'
 
 interface UseChatOptions {
   sessionId: string
@@ -45,10 +51,30 @@ export function useChat({ sessionId }: UseChatOptions) {
   /**
    * Send a new user message and start the SSE stream.
    * This immediately updates the global cache.
+   *
+   * If the user has unsent edits to the latest draft, they go along with the message so the AI
+   * revises from the user's version, and that draft locks (see `factCheckDraft.ts`).
    */
   const sendMessage = useCallback(
     (text: string, files: Array<File> = []) => {
-      sendChatMessage(queryClient, sessionId, text, files)
+      const state = queryClient.getQueryData<ChatSessionState>(
+        chatCacheKey(sessionId),
+      )
+      const draftId = state?.lastReplyDraftId
+      const draft = draftId ? state.toolInvocations[draftId] : undefined
+      let editedDraft
+      if (
+        draftId &&
+        draft?.name === 'draft_factcheck_response' &&
+        !state.lockedDraftIds.includes(draftId)
+      ) {
+        const edit = readDraftEdit(queryClient, sessionId, draftId)
+        if (edit && !draftFieldsEqual(edit, draftFieldsFromArgs(draft.args))) {
+          editedDraft = { draftId, fields: edit }
+        }
+        if (edit) writeDraftEdit(queryClient, sessionId, draftId, null)
+      }
+      sendChatMessage(queryClient, sessionId, text, files, editedDraft)
     },
     [queryClient, sessionId],
   )
@@ -80,6 +106,8 @@ export function useChat({ sessionId }: UseChatOptions) {
     error,
     toolInvocations: data.toolInvocations,
     lastReplyDraftId: data.lastReplyDraftId,
+    lockedDraftIds: data.lockedDraftIds,
+    articleId: findArticleId(data.toolInvocations),
     sendMessage,
     resumeRun,
     stopGeneration,

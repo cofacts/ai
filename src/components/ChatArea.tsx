@@ -3,6 +3,7 @@ import { UserMessage } from './UserMessage'
 import { AgentMessage } from './AgentMessage'
 import { FeedbackButtons } from './FeedbackButtons'
 import { ChatInput } from './ChatInput'
+import { AiButton } from './AiButton'
 import styles from './ChatArea.module.css'
 import type { ChatMessage } from '@/lib/adk'
 
@@ -14,6 +15,9 @@ interface ChatAreaProps {
   sessionId?: string
   focusedToolCallId?: string | null
   onToolBadgeClick?: (id: string) => void
+  /** The latest successful draft; shows the 「查核回應草稿」 actions at the end of the chat. */
+  latestDraftId?: string | null
+  onOpenDraft?: (options: { references?: boolean }) => void
 }
 
 export function ChatArea({
@@ -24,6 +28,8 @@ export function ChatArea({
   sessionId,
   focusedToolCallId,
   onToolBadgeClick,
+  latestDraftId,
+  onOpenDraft,
 }: ChatAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -73,6 +79,23 @@ export function ChatArea({
             </React.Fragment>
           )
         })}
+
+        {/* Action buttons for the closing 「接下來需要你做的事」: the draft and its sources open
+            in the right drawer, which is the only place a reply is submitted from. */}
+        {latestDraftId && !isStreaming && onOpenDraft && (
+          <div className="flex flex-wrap gap-spacing-8 mt-spacing-12">
+            <AiButton
+              variant="secondary"
+              icon="link"
+              onClick={() => onOpenDraft({ references: true })}
+            >
+              查看佐證資料
+            </AiButton>
+            <AiButton icon="edit_document" onClick={() => onOpenDraft({})}>
+              查核回應草稿
+            </AiButton>
+          </div>
+        )}
 
         {isStreaming && (
           <p className="flex items-center gap-spacing-8 text-text-tertiary mt-spacing-8">
