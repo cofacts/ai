@@ -53,6 +53,22 @@ export type ListArticlesQuery = {
   } | null
 }
 
+export type GetArticleQueryVariables = Exact<{
+  id: string
+}>
+
+export type GetArticleQuery = {
+  GetArticle: {
+    id: string
+    text: string | null
+    articleReplies: Array<{
+      replyId: string
+      replyType: ReplyTypeEnum | null
+      reply: { text: string | null } | null
+    }>
+  } | null
+}
+
 export type ReportOutcomeArticleQueryVariables = Exact<{
   id: string
 }>
@@ -237,6 +253,95 @@ export const ListArticlesDocument = {
     },
   ],
 } as unknown as DocumentNode<ListArticlesQuery, ListArticlesQueryVariables>
+export const GetArticleDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetArticle' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'GetArticle' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'id' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'id' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'text' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'articleReplies' },
+                  arguments: [
+                    {
+                      kind: 'Argument',
+                      name: { kind: 'Name', value: 'statuses' },
+                      value: {
+                        kind: 'ListValue',
+                        values: [{ kind: 'EnumValue', value: 'NORMAL' }],
+                      },
+                    },
+                  ],
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'replyId' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'replyType' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'reply' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'text' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetArticleQuery, GetArticleQueryVariables>
 export const ReportOutcomeArticleDocument = {
   kind: 'Document',
   definitions: [
