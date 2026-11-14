@@ -22,6 +22,10 @@ spec:
         run.googleapis.com/container-dependencies: '{"ingress":["backend"],"backend":["cloudsql-proxy"]}'
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "3"
+        # "false" when REDIS_URL is set: background runs keep working after
+        # the HTTP response that started them, which needs CPU outside
+        # requests (see deploy.yml).
+        run.googleapis.com/cpu-throttling: "${CPU_THROTTLING}"
     spec:
       # Request timeout for the Cloud Run revision. Without this, Cloud Run
       # applies its 300s default, which cuts long multimodal writer↔verifier↔
@@ -76,6 +80,11 @@ spec:
           value: "${LANGFUSE_TRACING_ENVIRONMENT}"
         - name: DATABASE_URL
           value: "${DATABASE_URL}"
+        # Background runs (adk/cofacts_ai/run_bus.py). Every instance and
+        # revision shares one Redis, so a viewer can land on any of them.
+        # Empty turns background runs off.
+        - name: REDIS_URL
+          value: "${REDIS_URL}"
         # Persist artifacts (e.g. Google Search suggestion widgets) to GCS so
         # they survive across revisions/instances, alongside the Postgres
         # session store above.

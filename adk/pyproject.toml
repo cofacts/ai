@@ -20,6 +20,7 @@ dependencies = [
     "uvicorn>=0.41.0",
     "google-cloud-storage>=3.17.1",
     "anthropic[vertex]>=1.15.0",
+    "redis>=5.2",
 ]
 
 [dependency-groups]
@@ -30,6 +31,7 @@ dev = [
     "ty>=0.0.59",
     "grpcio-tools>=1.78.0",
     "pytest-cov>=7.1.0",
+    "fakeredis[lua]>=2.40.0",
 ]
 
 [tool.pytest.ini_options]

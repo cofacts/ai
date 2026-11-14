@@ -15,13 +15,14 @@ repeating them. See [`AGENTS.md`](../AGENTS.md) for how to keep both up to date.
 ```mermaid
 flowchart LR
     B[Browser · React UI] -->|HttpOnly cookie| BFF[BFF / SSR server · TanStack Start + Nitro]
-    BFF -->|openapi-fetch + /run_sse proxy · Bearer token| ADK[ADK agent backend · Python · Google ADK]
+    BFF -->|openapi-fetch + /runs proxy · Bearer token| ADK[ADK agent backend · Python · Google ADK]
     BFF -->|GraphQL · Bearer token| API[(rumors-api)]
     ADK -->|GraphQL tools · Bearer token| API
     ADK --> GEM[Gemini + Claude · Vertex AI]
     ADK --> VIS[Google Vision]
     ADK -->|gRPC · internal only| UR[url-resolver]
     ADK --> LF[Langfuse]
+    ADK -->|run registry| R[(Redis)]
 ```
 
 1. **Frontend + BFF** — a TanStack Start (React / Vite / Nitro) app at the repo root
@@ -142,6 +143,21 @@ is only the overview.
 
 Design record: the kb doc
 [Phase 3 網站遷移與前端架構](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Phase%203%20網站遷移與前端架構.md).
+
+## Background runs
+
+A turn keeps running after the browser leaves. The browser starts it with
+`POST /api/runs/:sessionId/start`; ADK runs it in a task no request owns (`adk/cofacts_ai/run_bus.py`)
+and appends every event to a per-session Redis Stream. Any window can watch with
+`GET /api/runs/:sessionId/stream`: it replays the run from its start, then streams live, and
+closes when the run ends. Stop is `POST .../cancel`. A run stopped by the user, a redeploy, the
+15-minute limit or an error stores the text already typed with
+`customMetadata.cofacts_run_end`. Pages never poll; they check `.../status` on load, when the tab
+becomes visible and when sending. Session-state writes wait while a run holds the session
+(`POST /apps/.../sessions/:id/opened`), since they would kill it. Redis is the rumors-line-bot
+container on GCE and Redis Cloud on Cloud Run (`REDIS_URL`); without it, the frontend falls back to
+`/api/run-sse`, where closing the tab stops the run.
+→ decision: [background runs on Redis Streams](decisions/20261114-background-runs-redis-streams.md).
 
 ## Data & sessions
 

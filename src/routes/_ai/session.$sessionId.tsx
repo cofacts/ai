@@ -11,6 +11,7 @@ import { useChat } from '@/hooks/useChat'
 import { markSessionOpened } from '@/lib/chatSessions.functions'
 import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
+import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/_ai/session/$sessionId')({
   component: SessionPage,
@@ -25,7 +26,10 @@ function SessionPage() {
     messages,
     isStreaming,
     error,
+    notice,
+    interrupted,
     sendMessage,
+    retry,
     stopGeneration,
     lastReplyDraftId,
   } = useChat({ sessionId })
@@ -70,8 +74,10 @@ function SessionPage() {
 
   useEffect(() => {
     if (isStreaming) {
-      // Don't trigger ADK state update when streaming;
-      // otherwise when the stream ends, the session will be stale.
+      // Writing session state while a run is going would kill the run
+      // (StaleSessionError). The backend also refuses ({deferred: true}) when
+      // a run started elsewhere holds the session; this effect runs again
+      // once isStreaming turns false.
       return
     }
     markSessionOpened({ data: sessionId })
@@ -96,6 +102,33 @@ function SessionPage() {
             >
               重新整理
             </button>
+          </div>
+        )}
+        {notice && (
+          <div
+            role="status"
+            className="bg-surface-raised border-b border-border-control px-spacing-16 py-spacing-8 text-type-body-s text-text-secondary flex items-center gap-spacing-8"
+          >
+            <MaterialIcon name="notifications" size={24} />
+            <span>{notice}</span>
+          </div>
+        )}
+        {interrupted && (
+          <div
+            role="status"
+            className="bg-surface-raised border-b border-border-control px-spacing-16 py-spacing-8 text-type-body-s text-text-secondary flex items-center gap-spacing-8"
+          >
+            <MaterialIcon name="warning" size={24} />
+            <span>這次回覆中斷了，沒有完成。</span>
+            <Button
+              variant="outline"
+              size="sm"
+              iconStart="send"
+              className="ml-auto"
+              onClick={retry}
+            >
+              重新提問
+            </Button>
           </div>
         )}
         <ChatArea

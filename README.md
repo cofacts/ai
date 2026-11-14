@@ -51,6 +51,10 @@ cp adk/cofacts_ai/.env.example adk/cofacts_ai/.env
 
 Edit `adk/cofacts_ai/.env` and fill in the required values.
 
+Optionally set `REDIS_URL` there (e.g. `redis://localhost:6379` with a local `redis-server`)
+to turn on background runs, where a turn keeps going after the browser tab closes. Without it
+the agent streams over `/run_sse` and closing the tab stops the turn.
+
 For the frontend UI (Vite / TanStack Start):
 
 ```bash

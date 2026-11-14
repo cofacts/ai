@@ -5,7 +5,10 @@ import type { ChatSessionState } from '@/lib/chatCache'
 import type { SessionListItem } from '@/lib/chatSessions.functions'
 import { chatCacheKey } from '@/lib/chatCache'
 import { useSessions } from '@/hooks/useSessions'
-import { updateSessionTitle } from '@/lib/chatSessions.functions'
+import {
+  SESSION_BUSY_MESSAGE,
+  updateSessionTitle,
+} from '@/lib/chatSessions.functions'
 import { handleAuthExpired, isAuthExpiredError } from '@/lib/authExpired'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 
@@ -83,6 +86,9 @@ function SessionItem({ session, isActive, onClose }: SessionItemProps) {
     } catch (err) {
       if (isAuthExpiredError(err)) {
         handleAuthExpired()
+      } else if (err instanceof Error && err.message === SESSION_BUSY_MESSAGE) {
+        // A run started in another window; renaming now would kill it.
+        window.alert(SESSION_BUSY_MESSAGE)
       } else {
         console.error('Failed to update session title:', err)
       }

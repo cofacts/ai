@@ -7,6 +7,7 @@ this format is itself a record — the 2026-07-23 entry below.
 
 | Date       | Decision                                                                                                     |
 | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| 2026-11-14 | [Keep runs going after the browser leaves, with Redis Streams](20261114-background-runs-redis-streams.md)    |
 | 2026-11-01 | [Server-side rendering with a session token that rumors-api rejects](20261101-ssr-rejected-session-token.md) |
 | 2026-10-21 | [Run the writer on Claude Haiku 5.5 as a text-only orchestrator](20261021-writer-on-claude-haiku.md)         |
 | 2026-10-14 | [Serve Storybook from the frontend image](20261014-serve-storybook-from-frontend-image.md)                   |
