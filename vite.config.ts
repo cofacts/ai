@@ -69,8 +69,7 @@ const config = defineConfig({
         'src/server/gql/**',
         'src/**/*.d.ts',
         'src/styles/tokens.generated.ts',
-        // shadcn primitives, and story files.
-        'src/components/ui/**',
+        // Stories and tests are not what we measure.
         'src/**/*.stories.tsx',
         'src/**/__tests__/**',
         // Router entrypoint.
