@@ -3,6 +3,8 @@ import { ADK_APP_NAME, adkClient } from './adkClient'
 import { handleAdkError, handleAdkResponseError } from './adk-errors'
 import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
 
+const ADK_BASE_URL = process.env.ADK_URL || 'http://localhost:8000'
+
 const SESSION_TITLE_KEY = 'title'
 
 // lastEventTime: set by Python after_agent_callback when an agent turn completes.
@@ -124,6 +126,10 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
   .inputValidator((input: UpdateSessionInput) => input)
   .handler(async ({ data: { sessionId, title } }) => {
     const userId = await resolveAdkUserIdOrThrow()
+    // Same StaleSessionError hazard as markSessionOpened; a rename can wait.
+    if (await isRunGoing(userId, sessionId)) {
+      throw new Error(SESSION_BUSY_MESSAGE)
+    }
     const { data, error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
@@ -184,6 +190,22 @@ export const markSessionOpened = createServerFn({ method: 'POST' })
   .inputValidator((sessionId: string) => sessionId)
   .handler(async ({ data: sessionId }) => {
     const userId = await resolveAdkUserIdOrThrow()
+
+    // Writing session state while a run is going makes the run's next write
+    // fail with StaleSessionError, killing it. ADK's /opened skips the write
+    // when a run holds the session ({deferred: true}); the session page
+    // calls again once the run ends.
+    const opened = await fetch(adkSessionUrl(userId, sessionId, '/opened'), {
+      method: 'POST',
+    })
+    if (opened.ok) {
+      const { deferred } = (await opened.json()) as { deferred: boolean }
+      return { ok: true, deferred }
+    }
+    if (opened.status !== 503) handleAdkResponseError(opened)
+
+    // ADK without Redis (background runs off): runs are tied to the open
+    // stream, and the page never calls this while streaming.
     const { error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
@@ -201,5 +223,22 @@ export const markSessionOpened = createServerFn({ method: 'POST' })
       },
     )
     if (error) handleAdkError(error)
-    return { ok: true }
+    return { ok: true, deferred: false }
   })
+
+function adkSessionUrl(userId: string, sessionId: string, suffix: string) {
+  return (
+    `${ADK_BASE_URL}/apps/${ADK_APP_NAME}` +
+    `/users/${encodeURIComponent(userId)}` +
+    `/sessions/${encodeURIComponent(sessionId)}${suffix}`
+  )
+}
+
+/** Thrown by updateSessionTitle while a run holds the session. */
+export const SESSION_BUSY_MESSAGE = '對話還在執行中，請等回覆完成後再改名。'
+
+async function isRunGoing(userId: string, sessionId: string) {
+  const res = await fetch(adkSessionUrl(userId, sessionId, '/runs/status'))
+  if (!res.ok) return false // 503: background runs off
+  return ((await res.json()) as { running: boolean }).running
+}

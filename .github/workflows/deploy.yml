@@ -169,7 +169,23 @@ jobs:
           # out, so a wider window buys session reuse with a longer billed idle
           # tail. Cloudflare caps it at 600000.
           CLOUDFLARE_KEEP_ALIVE_MS: ${{ vars.CLOUDFLARE_KEEP_ALIVE_MS }}
+          # Redis for background runs (adk/cofacts_ai/run_bus.py), e.g. the
+          # staging LINE bot's Redis Cloud instance: rediss://default:<pw>@<host>:<port>.
+          # Unset renders as "": background runs stay off and the frontend
+          # uses /run_sse, a run lasting only as long as the browser's
+          # connection.
+          REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
+          # A background run keeps working after its HTTP response has ended,
+          # which Cloud Run only gives CPU to with throttling off. Only turned
+          # off when background runs are on, since it changes billing to
+          # instance-based.
+          if [ -n "$REDIS_URL" ]; then
+            export CPU_THROTTLING=false
+          else
+            export CPU_THROTTLING=true
+          fi
+
           # Fail fast on missing Cloudflare credentials. Without this the deploy
           # succeeds and the breakage is invisible: url-resolver throws on
           # connect, the error goes to a Rollbar that has no token configured,
@@ -195,7 +211,7 @@ jobs:
           # placeholder missing from this list reaches Cloud Run as literal text.
           # Listed-but-unset names become the empty string, which is the safe
           # default the template is written around.
-          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${LANGFUSE_TRACING_ENVIRONMENT} ${DATABASE_URL} ${GCS_ARTIFACT_BUCKET} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL} ${CLOUDFLARE_ACCOUNT_ID} ${CLOUDFLARE_API_TOKEN} ${CLOUDFLARE_KEEP_ALIVE_MS}' < service.template.yaml > service.yaml
+          envsubst '${FRONTEND_IMAGE} ${BACKEND_IMAGE} ${TRAFFIC_BLOCK} ${LANGFUSE_PUBLIC_KEY} ${LANGFUSE_SECRET_KEY} ${LANGFUSE_TRACING_ENVIRONMENT} ${DATABASE_URL} ${GCS_ARTIFACT_BUCKET} ${SERVICE_ACCOUNT_EMAIL} ${GC_PROJECT_ID} ${COFACTS_API_URL} ${CLOUDFLARE_ACCOUNT_ID} ${CLOUDFLARE_API_TOKEN} ${CLOUDFLARE_KEEP_ALIVE_MS} ${REDIS_URL} ${CPU_THROTTLING}' < service.template.yaml > service.yaml
           # Deliberately not dumping service.yaml here: envsubst has just inlined
           # DATABASE_URL, the Langfuse secret key and the Cloudflare API token
           # into it. `gcloud run services replace` reports its own errors.
