@@ -16,6 +16,7 @@ import { Route as ReportCheckRouteImport } from './routes/report/check'
 import { Route as ReportArticleIdRouteImport } from './routes/report/$articleId'
 import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
 import { Route as listsArticlesRouteImport } from './routes/(lists)/articles'
+import { Route as ArticleIdIndexRouteImport } from './routes/article.$id/index'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as AiSessionSessionIdRouteImport } from './routes/_ai/session.$sessionId'
 import { Route as AiSessionSessionIdToolToolCallIdRouteImport } from './routes/_ai/session.$sessionId.tool.$toolCallId'
@@ -54,6 +55,11 @@ const listsArticlesRoute = listsArticlesRouteImport.update({
   path: '/articles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ArticleIdIndexRoute = ArticleIdIndexRouteImport.update({
+  id: '/article/$id/',
+  path: '/article/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   id: '/api/auth/callback',
   path: '/api/auth/callback',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/report/': typeof ReportIndexRoute
   '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/article/$id/': typeof ArticleIdIndexRoute
   '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesByTo {
@@ -91,6 +98,7 @@ export interface FileRoutesByTo {
   '/report': typeof ReportIndexRoute
   '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/article/$id': typeof ArticleIdIndexRoute
   '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesById {
@@ -104,6 +112,7 @@ export interface FileRoutesById {
   '/report/': typeof ReportIndexRoute
   '/_ai/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/article/$id/': typeof ArticleIdIndexRoute
   '/_ai/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRouteTypes {
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/report/'
     | '/session/$sessionId'
     | '/api/auth/callback'
+    | '/article/$id/'
     | '/session/$sessionId/tool/$toolCallId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/report'
     | '/session/$sessionId'
     | '/api/auth/callback'
+    | '/article/$id'
     | '/session/$sessionId/tool/$toolCallId'
   id:
     | '__root__'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '/report/'
     | '/_ai/session/$sessionId'
     | '/api/auth/callback'
+    | '/article/$id/'
     | '/_ai/session/$sessionId/tool/$toolCallId'
   fileRoutesById: FileRoutesById
 }
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   ReportCheckRoute: typeof ReportCheckRoute
   ReportIndexRoute: typeof ReportIndexRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
+  ArticleIdIndexRoute: typeof ArticleIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -202,6 +215,13 @@ declare module '@tanstack/react-router' {
       path: '/articles'
       fullPath: '/articles'
       preLoaderRoute: typeof listsArticlesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/article/$id/': {
+      id: '/article/$id/'
+      path: '/article/$id'
+      fullPath: '/article/$id/'
+      preLoaderRoute: typeof ArticleIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/callback': {
@@ -259,6 +279,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportCheckRoute: ReportCheckRoute,
   ReportIndexRoute: ReportIndexRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
+  ArticleIdIndexRoute: ArticleIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
