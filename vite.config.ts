@@ -9,20 +9,27 @@ import viteTsConfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
 
+// Vitest runs without the Start plugins. Start's compiler replaces every
+// `createServerFn(...).handler(fn)` with an RPC stub and drops `fn`, so a route's
+// server functions could not be tested; without it, tests mock `createServerFn`
+// (src/test/createServerFnMock.ts) and call validator + handler directly.
+const isVitest = !!process.env.VITEST
+
 const config = defineConfig({
   plugins: [
-    devtools(),
-    nitro(),
+    !isVitest && devtools(),
+    !isVitest && nitro(),
     // this is the plugin that enables path aliases
     viteTsConfigPaths({
       projects: ['./tsconfig.json'],
     }),
     tailwindcss(),
-    tanstackStart({
-      router: {
-        routeFileIgnorePattern: '__tests__',
-      },
-    }),
+    !isVitest &&
+      tanstackStart({
+        router: {
+          routeFileIgnorePattern: '__tests__',
+        },
+      }),
     viteReact(),
   ],
   test: {

@@ -29,7 +29,7 @@ export const NAV_LINKS = {
   tutorial: { label: '使用教學', href: 'https://cofacts.tw/tutorial' },
   about: { label: '關於', href: 'https://cofacts.tw/about' },
   contact: { label: '聯絡我們', href: 'mailto:cofacts@googlegroups.com' },
-  report: { label: '回報可疑訊息', href: 'https://cofacts.tw/report' },
+  report: { label: '回報可疑訊息', href: '/report' },
   line: { label: '加LINE查謠言', href: 'https://line.me/R/ti/p/@cofacts' },
   search: { href: 'https://cofacts.tw/search' },
 } as const
@@ -64,7 +64,7 @@ export type SiteNavUser = Pick<
 
 export interface SiteNavProps {
   /** The page this nav is on; that item gets `aria-current="page"` and the underline. */
-  current?: NavKey
+  current?: NavKey | 'report'
   /** `undefined` while the session is loading. */
   user: SiteNavUser | null | undefined
   /** Number of new fact-checks, shown as a badge on 最新查核 (99+ above 99). */
@@ -185,8 +185,9 @@ export function SiteNav({
                 <LineMark />
                 {NAV_LINKS.line.label}
               </a>
-              <a
+              <NavAnchor
                 href={NAV_LINKS.report.href}
+                aria-current={current === 'report' ? 'page' : undefined}
                 className={cn(
                   buttonVariants({ variant: 'primary', withIcon: true }),
                   'hidden min-h-[40px] lg:inline-flex',
@@ -194,7 +195,7 @@ export function SiteNav({
               >
                 <MaterialIcon name="flag_2" filled />
                 {NAV_LINKS.report.label}
-              </a>
+              </NavAnchor>
               <AccountControl
                 user={user}
                 onLogin={onLogin}
@@ -254,6 +255,9 @@ export function SiteNav({
                   ref={i === 0 ? firstItemRef : undefined}
                   href={NAV_LINKS[key].href}
                   aria-current={current === key ? 'page' : undefined}
+                  // A local link navigates without a reload, so the menu would stay open over
+                  // the new page.
+                  onClick={() => setMenuOpen(false)}
                   className="text-type-ui-m text-text-on-dark hover:underline aria-[current=page]:underline"
                 >
                   {NAV_LINKS[key].label}
@@ -263,8 +267,10 @@ export function SiteNav({
             <li className="text-type-ui-m text-text-on-dark">LINE:@cofacts</li>
           </ul>
           <div className="flex w-full flex-col gap-spacing-8">
-            <a
+            <NavAnchor
               href={NAV_LINKS.report.href}
+              aria-current={current === 'report' ? 'page' : undefined}
+              onClick={() => setMenuOpen(false)}
               className={cn(
                 buttonVariants({ size: 'lg', withIcon: true }),
                 'w-full',
@@ -272,7 +278,7 @@ export function SiteNav({
             >
               <MaterialIcon name="flag_2" filled />
               {NAV_LINKS.report.label}
-            </a>
+            </NavAnchor>
             <a
               href={NAV_LINKS.line.href}
               target="_blank"
