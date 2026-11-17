@@ -102,11 +102,10 @@ export const Reason: Story = {
 }
 
 /**
- * Not in Penpot: Feedback/ReactionGroup has no flag; one appears only in Content/MessageListItem.
- * The last segment is 檢舉 and calls `onReport`; the parent opens the report form.
+ * The ReactionGroup instance in Content/MessageListItem: its last segment is overridden with a
+ * flag. The flag is 檢舉 and calls `onReport`; the parent opens the report form.
  */
 export const Report: Story = {
-  tags: ['not-in-penpot'],
   args: { type: 'report', onReport: fn() },
   play: async ({ canvasElement, args }) => {
     const report = within(canvasElement).getByRole('button', { name: '檢舉' })
