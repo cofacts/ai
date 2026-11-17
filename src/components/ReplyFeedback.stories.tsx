@@ -42,7 +42,9 @@ const meta = {
           '(`ArticleReplyFeedbackControl`): a vote first asks for a reason, in a popover under the ' +
           'buttons, and is sent with it; pressing the vote you gave takes it back at once. The ' +
           'reason form is not in Penpot, so its stories are tagged `not-in-penpot`. It goes on ' +
-          'every reply card, next to the reply.',
+          'every reply card, next to the reply. ReactionGroup has the same `parameters.penpot`: ' +
+          'for a Feedback/ReactionGroup instance on a reply card or a message, use ' +
+          'ReplyFeedback; ReactionGroup is only its row of buttons.',
       },
     },
   },
@@ -118,7 +120,7 @@ export const Report: Story = {
 /**
  * Not in Penpot. A downvote asks why. Esc closes the form without sending and puts the focus
  * back on the button that opened it. Pressing the thumb again also closes it; what was typed is
- * kept for that vote, and choosing the other vote starts empty.
+ * kept for that vote, and choosing the other vote starts empty. Ends with the downvote form open.
  */
 export const DownvoteForm: Story = {
   tags: ['not-in-penpot'],
@@ -150,15 +152,16 @@ export const DownvoteForm: Story = {
       await body.findByRole('textbox', { name: '為什麼你覺得沒有幫助？' }),
     ).toHaveValue('沒有出處')
 
-    // The other vote starts empty.
+    // The other vote starts empty, and so does coming back.
     await userEvent.click(up)
     await expect(
       await body.findByRole('textbox', { name: '還有什麼想補充的嗎？' }),
     ).toHaveValue('')
+    await userEvent.click(down)
+    await expect(
+      await body.findByRole('textbox', { name: '為什麼你覺得沒有幫助？' }),
+    ).toHaveValue('')
     await expect(args.onSubmitVote).not.toHaveBeenCalled()
-
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(body.queryByRole('textbox')).toBeNull())
   },
 }
 
@@ -345,9 +348,6 @@ export const ReasonsList: Story = {
         '匿名使用者',
       ),
     ).toBeVisible()
-
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(body.queryByRole('tab')).toBeNull())
   },
 }
 
@@ -363,17 +363,14 @@ const manyReasons: Array<ReplyFeedbackReason> = Array.from(
   }),
 )
 
-/**
- * Not in Penpot. Ten reasons per vote, then 載入更多 shows the rest. Pressing 看理由 again closes
- * the list without fetching it again.
- */
+/** Not in Penpot. Ten reasons per vote, then 載入更多 shows the rest. */
 export const ReasonsLoadMore: Story = {
   tags: ['not-in-penpot'],
   args: {
     reasons: { status: 'success', feedbacks: manyReasons },
     onLoadReasons: fn(),
   },
-  play: async ({ canvasElement, args }) => {
+  play: async ({ canvasElement }) => {
     const body = await reasonsOpen(canvasElement)
     const list = await body.findByRole('region', { name: '有幫助的理由' })
 
@@ -385,14 +382,36 @@ export const ReasonsLoadMore: Story = {
     await waitFor(() =>
       expect(within(list).getAllByRole('listitem')[10]).toHaveFocus(),
     )
+  },
+}
 
-    await userEvent.click(
-      within(canvasElement).getByRole('button', { name: '看理由' }),
-    )
-    await waitFor(() =>
-      expect(body.queryByRole('region', { name: '有幫助的理由' })).toBeNull(),
-    )
-    await expect(args.onLoadReasons).toHaveBeenCalledTimes(1)
+/**
+ * Not in Penpot. Esc closes the list and puts the focus back on 看理由. Pressing 看理由 while
+ * the list is open closes it, without asking the parent to fetch again.
+ */
+export const ReasonsClose: Story = {
+  tags: ['not-in-penpot'],
+  args: {
+    reasons: { status: 'success', feedbacks: reasonFixtures },
+    onLoadReasons: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const reasonsButton = within(canvasElement).getByRole('button', {
+      name: '看理由',
+    })
+    const body = await reasonsOpen(canvasElement)
+    await body.findByRole('region', { name: '有幫助的理由' })
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(body.queryByRole('tab')).toBeNull())
+    await waitFor(() => expect(reasonsButton).toHaveFocus())
+
+    await userEvent.click(reasonsButton)
+    await body.findByRole('region', { name: '有幫助的理由' })
+    const calls = mocked(args.onLoadReasons!).mock.calls.length
+    await userEvent.click(reasonsButton)
+    await waitFor(() => expect(body.queryByRole('tab')).toBeNull())
+    await expect(args.onLoadReasons).toHaveBeenCalledTimes(calls)
   },
 }
 

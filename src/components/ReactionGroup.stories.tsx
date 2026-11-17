@@ -31,6 +31,14 @@ const meta = {
   parameters: {
     penpot: { component: 'Feedback/ReactionGroup' },
     viewport: { options: viewportOptions },
+    docs: {
+      description: {
+        component:
+          'The row of buttons only. ReplyFeedback has the same `parameters.penpot` and wraps this ' +
+          'with the reason form and the reasons list: for a Feedback/ReactionGroup instance on a ' +
+          'reply card or a message, use ReplyFeedback.',
+      },
+    },
   },
   render: (args) => (
     <Interactive key={`${args.type}-${args.ownVote ?? 'none'}`} {...args} />
