@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 
 import { FactCheckReplyTitle } from './FactCheckReplyTitle'
 import { HyperlinkPreview } from './HyperlinkPreview'
@@ -62,8 +62,6 @@ export type FactCheckReplyProps = {
   onShare?: () => void
   /** with-link: the flag button, 檢舉. */
   onReport?: () => void
-  /** Start with the whole text shown. */
-  defaultExpanded?: boolean
   className?: string
 }
 
@@ -91,7 +89,6 @@ export function FactCheckReply({
   onShowReasons,
   onShare,
   onReport,
-  defaultExpanded = false,
   className,
 }: FactCheckReplyProps) {
   const withLink = variant === 'with-link'
@@ -133,7 +130,6 @@ export function FactCheckReply({
           </div>
           {/* Penpot: desktop with-link has 16px above 閱讀全文; the other three variants have none. */}
           <ExpandableText
-            defaultExpanded={defaultExpanded}
             className={withLink ? 'md:gap-spacing-16' : undefined}
           >
             {text}
@@ -215,22 +211,31 @@ export function FactCheckReply({
 /**
  * The reply text, clamped like Penpot's text box (8 lines on mobile, 3 on desktop) with
  * 閱讀全文 under it. The button only shows when the text is cut off; once expanded it reads
- * 收合全文, rumors-site's wording, since Penpot doesn't draw the expanded state.
+ * 收合全文, rumors-site's wording, since Penpot doesn't draw the expanded state. It always starts
+ * collapsed, as on rumors-site.
  */
 function ExpandableText({
   children,
-  defaultExpanded,
   className,
 }: {
   children: string
-  defaultExpanded: boolean
   className?: string
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
+  const [expanded, setExpanded] = useState(false)
   // Starts false so a short reply never shows 閱讀全文; a long one gets it once measured.
   const [clamped, setClamped] = useState(false)
   const textRef = useRef<HTMLParagraphElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const collapsing = useRef(false)
   const textId = useId()
+
+  // Collapsing a long text from its end leaves the page scrolled past it, with the next card in
+  // view. Bring the button back into view before the browser paints.
+  useLayoutEffect(() => {
+    if (expanded || !collapsing.current) return
+    collapsing.current = false
+    buttonRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [expanded])
 
   useEffect(() => {
     const el = textRef.current
@@ -256,10 +261,14 @@ function ExpandableText({
       </p>
       {(clamped || expanded) && (
         <button
+          ref={buttonRef}
           type="button"
           aria-expanded={expanded}
           aria-controls={textId}
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => {
+            collapsing.current = expanded
+            setExpanded(!expanded)
+          }}
           className="flex items-center gap-spacing-4 text-type-ui-s text-text-link md:text-type-ui-m"
         >
           {expanded ? '收合全文' : '閱讀全文'}

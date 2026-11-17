@@ -156,6 +156,48 @@ export const WithLink: Story = {
 
 // ── Not in Penpot ──
 
+/** A reply many screens long, as some on cofacts.tw are. */
+const veryLongText = Array.from(
+  { length: 12 },
+  () => longText.split('\n\n')[0],
+).join('\n\n')
+
+/**
+ * Not in Penpot: a long reply in a list, as on /replies. Open it, read to the end and press
+ * 收合全文: the page would stay scrolled past the shorter card, showing the next one, so the
+ * button is scrolled back into view.
+ */
+export const LongTextInList: Story = {
+  tags: ['not-in-penpot'],
+  args: { text: veryLongText },
+  render: (args) => (
+    <div className="flex flex-col gap-spacing-16">
+      <Interactive {...args} />
+      {/* Enough cards after it that the page can stay scrolled where it was. */}
+      {Array.from({ length: 8 }, (_, i) => (
+        <Interactive key={i} {...args} text={longText} />
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const view = canvasElement.ownerDocument.defaultView!
+    const [first] = await canvas.findAllByRole('button', { name: '閱讀全文' })
+    if (!first) throw new Error('no 閱讀全文')
+    await userEvent.click(first)
+    await expect(first).toHaveAccessibleName('收合全文')
+
+    // Read to the end of the reply, then collapse it.
+    first.scrollIntoView({ block: 'end' })
+    await userEvent.click(first)
+    await expect(first).toHaveAccessibleName('閱讀全文')
+    await expect(first).toHaveFocus()
+    const { top, bottom } = first.getBoundingClientRect()
+    await expect(top).toBeGreaterThanOrEqual(0)
+    await expect(bottom).toBeLessThanOrEqual(view.innerHeight)
+  },
+}
+
 /** A text that fits needs no 閱讀全文. */
 export const ShortText: Story = {
   args: { text: '假的。目前沒有研究可以證實雨水會傳播病毒。' },
