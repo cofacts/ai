@@ -64,8 +64,9 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /**
- * Penpot Type = reason. Votes are sent with a reason: upvote, type one, send. The thumb shows
- * as pressed once it is saved, and pressing it again takes it back without asking.
+ * Penpot Type = reason, State = Default. Votes are sent with a reason: upvote, type one, send.
+ * The thumb shows as pressed once it is saved, and pressing it again takes it back without
+ * asking.
  */
 export const Reason: Story = {
   play: async ({ canvasElement, args }) => {
@@ -104,17 +105,53 @@ export const Reason: Story = {
 }
 
 /**
- * The ReactionGroup instance in Content/MessageListItem: its last segment is overridden with a
- * flag. The flag is 檢舉 and calls `onReport`; the parent opens the report form.
+ * Penpot Type = report, State = Default (used in Content/MessageListItem). The last segment is
+ * the flag, 檢舉, and calls `onReport`; the parent opens the report form.
  */
 export const Report: Story = {
   args: { type: 'report', onReport: fn() },
   play: async ({ canvasElement, args }) => {
-    const report = within(canvasElement).getByRole('button', { name: '檢舉' })
-    await expect(report).toBeVisible()
-    await userEvent.click(report)
+    await userEvent.click(
+      within(canvasElement).getByRole('button', { name: '檢舉' }),
+    )
     await expect(args.onReport).toHaveBeenCalledTimes(1)
   },
+}
+
+/** Checks a saved vote: only that thumb is pressed. */
+const expectPressed = async (
+  canvasElement: HTMLElement,
+  vote: 'up' | 'down',
+) => {
+  const canvas = within(canvasElement)
+  const up = canvas.getByRole('button', { name: '有幫助 100' })
+  const down = canvas.getByRole('button', { name: '沒幫助 100' })
+  await expect(up).toHaveAttribute('aria-pressed', String(vote === 'up'))
+  await expect(down).toHaveAttribute('aria-pressed', String(vote === 'down'))
+}
+
+/** Penpot Type = reason, State = Up: you said the reply helps. */
+export const ReasonUp: Story = {
+  args: { ownVote: 'UPVOTE' },
+  play: async ({ canvasElement }) => expectPressed(canvasElement, 'up'),
+}
+
+/** Penpot Type = reason, State = Down: you said the reply does not help. */
+export const ReasonDown: Story = {
+  args: { ownVote: 'DOWNVOTE' },
+  play: async ({ canvasElement }) => expectPressed(canvasElement, 'down'),
+}
+
+/** Penpot Type = report, State = Up. */
+export const ReportUp: Story = {
+  args: { type: 'report', ownVote: 'UPVOTE', onReport: fn() },
+  play: async ({ canvasElement }) => expectPressed(canvasElement, 'up'),
+}
+
+/** Penpot Type = report, State = Down. */
+export const ReportDown: Story = {
+  args: { type: 'report', ownVote: 'DOWNVOTE', onReport: fn() },
+  play: async ({ canvasElement }) => expectPressed(canvasElement, 'down'),
 }
 
 /**
