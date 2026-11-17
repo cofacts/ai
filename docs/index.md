@@ -71,6 +71,13 @@ that call's `request` string. So every tool result is stamped with a footnote id
 text to the top of the request as a block tagged with the same id — both halves in
 `adk/cofacts_ai/writer_citations.py`, one in an after-tool callback and one in a before-tool
 callback.
+
+The verifier's dedicated `VerifierTool` classifies failures and recovers inside
+one tool call, sharing a 12-attempt / 240-second budget across the writer invocation.
+Successful subsets keep their evidence; failed subsets remain explicitly unverified.
+→ [Verifier recovery, batching and cost limits](verifier-recovery.md);
+[decision: bounded verifier recovery](decisions/20261117-bounded-verifier-recovery.md).
+
 → decisions:
 [source-integrity contract](decisions/20260515-agent-source-integrity-contract.md),
 [footnote citations for stateless sub-agent calls](decisions/20260722-subagent-context-citations.md),

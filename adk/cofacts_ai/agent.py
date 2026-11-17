@@ -54,6 +54,12 @@ from .tools import (
     search_image_web,
 )
 from .writer_citations import attach_citation, resolve_citations
+from .verifier_recovery import (
+    VerifierTool,
+    classify_error,
+    limit_verifier_model_calls,
+    verifier_failure,
+)
 
 load_dotenv()
 
@@ -337,9 +343,16 @@ ai_verifier = LlmAgent(
             thinking_level=genai_types.ThinkingLevel.HIGH
         ),
         # Long YouTube videos can otherwise hang with no client-side deadline.
-        http_options=genai_types.HttpOptions(timeout=240_000),
+        http_options=genai_types.HttpOptions(
+            timeout=240_000,
+            retry_options=genai_types.HttpRetryOptions(attempts=1),
+        ),
     ),
-    before_model_callback=[inject_youtube_filedata, inject_cofacts_media_filedata],
+    before_model_callback=[
+        limit_verifier_model_calls,
+        inject_youtube_filedata,
+        inject_cofacts_media_filedata,
+    ],
     after_model_callback=append_url_context_sources,
     instruction=f"""
     You are an AI Verifier for fact-checking. Given a list of claims and a list of URLs,
@@ -664,12 +677,11 @@ async def after_tool(
     )
 
 
-# Empty output from an AgentTool sub-agent is a dropped call or a server-side
-# timeout -- probabilistic, so the only useful reply is "retry", with advice
-# specific to what that agent was doing.
+# Verifier recovery is bounded inside VerifierTool; never ask the writer to
+# restart its retry loop. Other sub-agents retain their existing empty handling.
 _EMPTY_RETRY_HINTS = {
     AI_INVESTIGATOR_NAME: "Retry with simpler/fewer queries.",
-    AI_VERIFIER_NAME: "Retry with fewer URLs or claims.",
+    AI_VERIFIER_NAME: "Do not retry; report affected claims as 尚未查核.",
     **{name: "Retry this proofreader." for name in AI_PROOFREADER_NAMES},
 }
 
@@ -750,6 +762,10 @@ def handle_writer_tool_error(
     Catches any exception thrown by a tool so the writer turn does not crash.
     Returns a structured error dict the writer can read and react to.
     """
+    if isinstance(error, asyncio.CancelledError):
+        raise error
+    if tool.name == AI_VERIFIER_NAME:
+        return verifier_failure(classify_error(error))
     return {
         "error": type(error).__name__,
         "message": (
@@ -1000,7 +1016,7 @@ ai_writer = LlmAgent(
         draft_factcheck_response,
         # submit_cofacts_reply
         AgentTool(agent=ai_investigator),
-        AgentTool(agent=ai_verifier),
+        VerifierTool(agent=ai_verifier),
         AgentTool(agent=ai_proofreader_kmt),
         AgentTool(agent=ai_proofreader_dpp),
         AgentTool(agent=ai_proofreader_tpp),
