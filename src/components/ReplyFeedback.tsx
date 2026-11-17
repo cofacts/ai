@@ -32,7 +32,12 @@ export type ReplyFeedbackVote =
 
 export type ReplyFeedbackProps = Pick<
   ReactionGroupProps,
-  'type' | 'positiveCount' | 'negativeCount' | 'ownVote' | 'voteDisabled'
+  | 'type'
+  | 'positiveCount'
+  | 'negativeCount'
+  | 'ownVote'
+  | 'voteDisabled'
+  | 'onReport'
 > & {
   /**
    * Sends the vote. Resolve when it is saved: the reason form then closes and the thanks shows.
@@ -69,7 +74,7 @@ export function sortReasons(
     .sort(
       (a, b) =>
         Number(!hasComment(a)) - Number(!hasComment(b)) ||
-        b.createdAt.localeCompare(a.createdAt),
+        Date.parse(b.createdAt) - Date.parse(a.createdAt),
     )
 }
 
@@ -113,13 +118,19 @@ function ReasonList({
         <p role="alert" className="text-type-body-s text-status-incorrect">
           載入失敗。
         </p>
-        <Button variant="outline" size="sm" onClick={onRetry}>
-          重試
-        </Button>
+        {onRetry && (
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            重試
+          </Button>
+        )}
       </div>
     )
   }
-  if (!reasons || reasons.status !== 'success') {
+  // Without onRetry (the parent's onLoadReasons) nothing will ever load, so show what there is.
+  if (
+    reasons?.status === 'loading' ||
+    (onRetry && reasons?.status !== 'success')
+  ) {
     return (
       <p role="status" className="text-type-body-s text-text-secondary">
         載入中…
@@ -127,7 +138,7 @@ function ReasonList({
     )
   }
 
-  const sorted = sortReasons(reasons.feedbacks, vote)
+  const sorted = sortReasons(reasons?.feedbacks ?? [], vote)
   if (sorted.length === 0) {
     return (
       <p className="text-type-body-s text-text-secondary">
@@ -147,37 +158,40 @@ function ReasonList({
         className="max-h-[300px] overflow-y-auto overscroll-contain"
       >
         <ul className="flex flex-col">
-          {shown.map((reason) => (
-            <li
-              key={reason.id}
-              className="flex gap-spacing-12 border-b border-border-subtle py-spacing-12 last:border-b-0"
-            >
-              {reason.user && <UserAvatar user={reason.user} size={36} />}
-              <div className="flex min-w-0 flex-1 flex-col gap-spacing-4">
-                <span className="text-type-ui-s-bold text-text-primary">
-                  {reason.user?.name}
-                </span>
-                {hasComment(reason) && (
-                  <p className="text-type-body-s [overflow-wrap:anywhere] whitespace-pre-wrap text-text-primary">
-                    {reason.comment?.trim()}
-                  </p>
-                )}
-                {hasComment(reason) &&
-                  reason.reportHref &&
-                  isHttpUrl(reason.reportHref) && (
-                    <a
-                      href={reason.reportHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="檢舉這則理由（另開新分頁）"
-                      className="self-start text-type-ui-xs text-text-link underline"
-                    >
-                      檢舉
-                    </a>
+          {shown.map((reason) => {
+            const text = reason.comment?.trim()
+            return (
+              <li
+                key={reason.id}
+                className="flex gap-spacing-12 border-b border-border-subtle py-spacing-12 last:border-b-0"
+              >
+                {reason.user && <UserAvatar user={reason.user} size={36} />}
+                <div className="flex min-w-0 flex-1 flex-col gap-spacing-4">
+                  <span className="text-type-ui-s-bold text-text-primary">
+                    {reason.user?.name || '匿名使用者'}
+                  </span>
+                  {text && (
+                    <p className="text-type-body-s [overflow-wrap:anywhere] whitespace-pre-wrap text-text-primary">
+                      {text}
+                    </p>
                   )}
-              </div>
-            </li>
-          ))}
+                  {text &&
+                    reason.reportHref &&
+                    isHttpUrl(reason.reportHref) && (
+                      <a
+                        href={reason.reportHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="檢舉這則理由（另開新分頁）"
+                        className="self-start text-type-ui-xs text-text-link underline"
+                      >
+                        檢舉
+                      </a>
+                    )}
+                </div>
+              </li>
+            )
+          })}
         </ul>
       </div>
       {!expanded && sorted.length > REASONS_PAGE && (
@@ -210,6 +224,8 @@ export function ReplyFeedback({
 
   /** The vote waiting for its reason. The form is open while this is set. */
   const [pending, setPending] = useState<'UPVOTE' | 'DOWNVOTE' | null>(null)
+  /** The vote the form was last opened for. Kept after close so the form stays during the exit animation, and so its draft survives a reopen. */
+  const [formVote, setFormVote] = useState<'UPVOTE' | 'DOWNVOTE' | null>(null)
   const [comment, setComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -244,14 +260,26 @@ export function ReplyFeedback({
       void submit({ vote })
       return
     }
-    setComment('')
     setFailed(false)
+    setReasonsOpen(false)
+    // Pressing the thumb whose form is open closes it.
+    if (pending === vote) {
+      setPending(null)
+      return
+    }
+    if (formVote !== vote) setComment('')
     setThanks(false)
+    setFormVote(vote)
     setPending(vote)
   }
 
   const handleShowReasons = () => {
     setPending(null)
+    // Pressing 看理由 again closes the list.
+    if (reasonsOpen) {
+      setReasonsOpen(false)
+      return
+    }
     setExpanded({ UPVOTE: false, DOWNVOTE: false })
     setReasonsOpen(true)
     onLoadReasons?.()
@@ -275,30 +303,48 @@ export function ReplyFeedback({
         onShowReasons={handleShowReasons}
       />
       {/* Always in the page, so that a screen reader announces the text when it appears. */}
-      <div role="status" className="text-type-caption text-text-secondary">
+      {/* Always in the page, so that a screen reader announces the text when it appears. Hidden
+          while empty so it adds no gap. */}
+      <div
+        role="status"
+        className={cn(
+          'text-type-caption text-text-secondary',
+          !thanks && 'sr-only',
+        )}
+      >
         {thanks ? '感謝你的回饋' : null}
       </div>
       {failed && !pending && failedMessage}
       <Popover
         open={pending !== null}
-        onOpenChange={(open) => {
-          if (!open) setPending(null)
+        onOpenChange={(open, details) => {
+          if (open) return
+          // A press on the buttons is handled by handleVote / handleShowReasons.
+          if (
+            details.reason === 'outside-press' &&
+            details.event.target instanceof Node &&
+            anchorRef.current?.contains(details.event.target)
+          ) {
+            return
+          }
+          setPending(null)
+          setFailed(false)
         }}
       >
         <PopoverContent anchor={anchorRef} align="start">
-          {pending && (
+          {formVote && (
             <form
               className="flex flex-col gap-spacing-12"
               onSubmit={(event) => {
                 event.preventDefault()
-                void submit({ vote: pending, comment })
+                void submit({ vote: formVote, comment })
               }}
             >
               <PopoverTitle
                 id={titleId}
                 className="text-type-heading-xs text-text-primary"
               >
-                {REASON_TITLE[pending]}
+                {REASON_TITLE[formVote]}
               </PopoverTitle>
               <Textarea
                 id={textareaId}
@@ -314,7 +360,20 @@ export function ReplyFeedback({
           )}
         </PopoverContent>
       </Popover>
-      <Popover open={reasonsOpen} onOpenChange={setReasonsOpen}>
+      <Popover
+        open={reasonsOpen}
+        onOpenChange={(open, details) => {
+          if (
+            !open &&
+            details.reason === 'outside-press' &&
+            details.event.target instanceof Node &&
+            anchorRef.current?.contains(details.event.target)
+          ) {
+            return
+          }
+          setReasonsOpen(open)
+        }}
+      >
         <PopoverContent
           anchor={anchorRef}
           align="start"
