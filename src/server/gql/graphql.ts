@@ -24,6 +24,8 @@ export type ArticleTypeEnum = 'AUDIO' | 'IMAGE' | 'TEXT' | 'VIDEO'
 
 export type AvatarTypeEnum = 'Facebook' | 'Github' | 'Gravatar' | 'OpenPeeps'
 
+export type FeedbackVote = 'DOWNVOTE' | 'NEUTRAL' | 'UPVOTE'
+
 /** Reflects how the replier categories the replied article. */
 export type ReplyTypeEnum =
   /** The replier thinks that the article is actually not a complete article on the internet or passed around in messengers. */
@@ -53,6 +55,67 @@ export type ListArticlesQuery = {
   } | null
 }
 
+export type ListCategoriesForArticleQueryVariables = Exact<{
+  [key: string]: never
+}>
+
+export type ListCategoriesForArticleQuery = {
+  ListCategories: {
+    edges: Array<{
+      node: { id: string; title: string | null; description: string | null }
+    }>
+  } | null
+}
+
+export type AddArticleCategoryMutationVariables = Exact<{
+  articleId: string
+  categoryId: string
+}>
+
+export type AddArticleCategoryMutation = {
+  CreateArticleCategory: Array<{ categoryId: string | null } | null> | null
+}
+
+export type RemoveArticleCategoryMutationVariables = Exact<{
+  articleId: string
+  categoryId: string
+}>
+
+export type RemoveArticleCategoryMutation = {
+  UpdateArticleCategoryStatus: Array<{
+    categoryId: string | null
+  } | null> | null
+}
+
+export type VoteArticleCategoryMutationVariables = Exact<{
+  articleId: string
+  categoryId: string
+  vote: FeedbackVote
+  comment?: string | null | undefined
+}>
+
+export type VoteArticleCategoryMutation = {
+  CreateOrUpdateArticleCategoryFeedback: { categoryId: string | null } | null
+}
+
+export type ListArticleCategoryDisagreementsQueryVariables = Exact<{
+  articleId: string
+}>
+
+export type ListArticleCategoryDisagreementsQuery = {
+  GetArticle: {
+    articleCategories: Array<{
+      categoryId: string | null
+      feedbacks: Array<{
+        id: string | null
+        vote: FeedbackVote | null
+        comment: string | null
+        user: { name: string | null } | null
+      } | null> | null
+    }>
+  } | null
+}
+
 export type GetArticleQueryVariables = Exact<{
   id: string
 }>
@@ -61,6 +124,19 @@ export type GetArticleQuery = {
   GetArticle: {
     id: string
     text: string | null
+    articleType: ArticleTypeEnum
+    createdAt: string | null
+    replyRequestCount: number | null
+    attachmentUrl: string | null
+    originalAttachmentUrl: string | null
+    articleCategories: Array<{
+      categoryId: string | null
+      positiveFeedbackCount: number | null
+      negativeFeedbackCount: number | null
+      ownVote: FeedbackVote | null
+      canUpdateStatus: boolean | null
+      category: { title: string | null; description: string | null } | null
+    }>
     articleReplies: Array<{
       replyId: string
       replyType: ReplyTypeEnum | null
@@ -253,6 +329,451 @@ export const ListArticlesDocument = {
     },
   ],
 } as unknown as DocumentNode<ListArticlesQuery, ListArticlesQueryVariables>
+export const ListCategoriesForArticleDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'ListCategoriesForArticle' },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'ListCategories' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'first' },
+                value: { kind: 'IntValue', value: '50' },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'edges' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'node' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'id' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'title' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'description' },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  ListCategoriesForArticleQuery,
+  ListCategoriesForArticleQueryVariables
+>
+export const AddArticleCategoryDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'AddArticleCategory' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'articleId' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'categoryId' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'CreateArticleCategory' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'articleId' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'articleId' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'categoryId' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'categoryId' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'categoryId' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AddArticleCategoryMutation,
+  AddArticleCategoryMutationVariables
+>
+export const RemoveArticleCategoryDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'RemoveArticleCategory' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'articleId' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'categoryId' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'UpdateArticleCategoryStatus' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'articleId' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'articleId' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'categoryId' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'categoryId' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'status' },
+                value: { kind: 'EnumValue', value: 'DELETED' },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'categoryId' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  RemoveArticleCategoryMutation,
+  RemoveArticleCategoryMutationVariables
+>
+export const VoteArticleCategoryDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'VoteArticleCategory' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'articleId' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'categoryId' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'vote' } },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'FeedbackVote' },
+            },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'comment' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: {
+              kind: 'Name',
+              value: 'CreateOrUpdateArticleCategoryFeedback',
+            },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'articleId' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'articleId' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'categoryId' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'categoryId' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'vote' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'vote' },
+                },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'comment' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'comment' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'categoryId' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  VoteArticleCategoryMutation,
+  VoteArticleCategoryMutationVariables
+>
+export const ListArticleCategoryDisagreementsDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'ListArticleCategoryDisagreements' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'articleId' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'GetArticle' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'id' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'articleId' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'articleCategories' },
+                  arguments: [
+                    {
+                      kind: 'Argument',
+                      name: { kind: 'Name', value: 'statuses' },
+                      value: {
+                        kind: 'ListValue',
+                        values: [{ kind: 'EnumValue', value: 'NORMAL' }],
+                      },
+                    },
+                  ],
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'categoryId' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'feedbacks' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'id' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'vote' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'comment' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'user' },
+                              selectionSet: {
+                                kind: 'SelectionSet',
+                                selections: [
+                                  {
+                                    kind: 'Field',
+                                    name: { kind: 'Name', value: 'name' },
+                                  },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  ListArticleCategoryDisagreementsQuery,
+  ListArticleCategoryDisagreementsQueryVariables
+>
 export const GetArticleDocument = {
   kind: 'Document',
   definitions: [
@@ -294,6 +815,91 @@ export const GetArticleDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'id' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'text' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'articleType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'replyRequestCount' },
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'attachmentUrl' },
+                  arguments: [
+                    {
+                      kind: 'Argument',
+                      name: { kind: 'Name', value: 'variant' },
+                      value: { kind: 'EnumValue', value: 'PREVIEW' },
+                    },
+                  ],
+                },
+                {
+                  kind: 'Field',
+                  alias: { kind: 'Name', value: 'originalAttachmentUrl' },
+                  name: { kind: 'Name', value: 'attachmentUrl' },
+                  arguments: [
+                    {
+                      kind: 'Argument',
+                      name: { kind: 'Name', value: 'variant' },
+                      value: { kind: 'EnumValue', value: 'ORIGINAL' },
+                    },
+                  ],
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'articleCategories' },
+                  arguments: [
+                    {
+                      kind: 'Argument',
+                      name: { kind: 'Name', value: 'statuses' },
+                      value: {
+                        kind: 'ListValue',
+                        values: [{ kind: 'EnumValue', value: 'NORMAL' }],
+                      },
+                    },
+                  ],
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'categoryId' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'category' },
+                        selectionSet: {
+                          kind: 'SelectionSet',
+                          selections: [
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'title' },
+                            },
+                            {
+                              kind: 'Field',
+                              name: { kind: 'Name', value: 'description' },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'positiveFeedbackCount' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'negativeFeedbackCount' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'ownVote' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'canUpdateStatus' },
+                      },
+                    ],
+                  },
+                },
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'articleReplies' },
