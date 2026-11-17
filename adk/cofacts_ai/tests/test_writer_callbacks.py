@@ -92,7 +92,7 @@ INVESTIGATOR_TIMEOUT_ERROR = timeout_error(
 )
 
 VERIFIER_TIMEOUT_ERROR = timeout_error(
-    AI_VERIFIER_NAME, "Retry with fewer URLs or claims."
+    AI_VERIFIER_NAME, "Do not retry; report affected claims as 尚未查核."
 )
 
 
@@ -435,17 +435,14 @@ class TestHandleWriterToolError:
             ),
         }
 
-    def test_uses_actual_exception_type_name(self):
+    def test_verifier_failure_is_unverified_without_raw_exception(self):
         result = handle_writer_tool_error(
             tool=make_tool(AI_VERIFIER_NAME),
             args={},
             tool_context=None,
             error=RuntimeError("oops"),
         )
-        assert result == {
-            "error": "RuntimeError",
-            "message": (
-                f"[SYSTEM] Tool '{AI_VERIFIER_NAME}' failed with RuntimeError: oops. "
-                "Please note this failure and continue with available information."
-            ),
-        }
+        assert result is not None
+        assert result["error"] == "permanent"
+        assert "尚未查核" in result["message"]
+        assert "oops" not in result["message"]
