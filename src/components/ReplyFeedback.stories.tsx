@@ -101,19 +101,25 @@ export const Reason: Story = {
   },
 }
 
-/** Penpot Type = report: the last segment is the flag, 檢舉. */
+/**
+ * Not in Penpot: Feedback/ReactionGroup has no flag; one appears only in Content/MessageListItem.
+ * The last segment is 檢舉 and calls `onReport`; the parent opens the report form.
+ */
 export const Report: Story = {
-  args: { type: 'report' },
-  play: async ({ canvasElement }) => {
-    await expect(
-      within(canvasElement).getByRole('button', { name: '檢舉' }),
-    ).toBeVisible()
+  tags: ['not-in-penpot'],
+  args: { type: 'report', onReport: fn() },
+  play: async ({ canvasElement, args }) => {
+    const report = within(canvasElement).getByRole('button', { name: '檢舉' })
+    await expect(report).toBeVisible()
+    await userEvent.click(report)
+    await expect(args.onReport).toHaveBeenCalledTimes(1)
   },
 }
 
 /**
  * Not in Penpot. A downvote asks why. Esc closes the form without sending and puts the focus
- * back on the button that opened it.
+ * back on the button that opened it. Pressing the thumb again also closes it; what was typed is
+ * kept for that vote, and choosing the other vote starts empty.
  */
 export const DownvoteForm: Story = {
   tags: ['not-in-penpot'],
@@ -121,6 +127,7 @@ export const DownvoteForm: Story = {
     const canvas = within(canvasElement)
     const body = popoverOf(canvasElement)
     const down = canvas.getByRole('button', { name: '沒幫助 100' })
+    const up = canvas.getByRole('button', { name: '有幫助 100' })
 
     await userEvent.click(down)
     await body.findByRole('textbox', { name: '為什麼你覺得沒有幫助？' })
@@ -130,12 +137,35 @@ export const DownvoteForm: Story = {
     await expect(args.onSubmitVote).not.toHaveBeenCalled()
     await expect(down).toHaveAttribute('aria-pressed', 'false')
     await waitFor(() => expect(down).toHaveFocus())
+
+    // The thumb closes its own form and keeps the draft.
+    await userEvent.click(down)
+    await userEvent.type(
+      await body.findByRole('textbox', { name: '為什麼你覺得沒有幫助？' }),
+      '沒有出處',
+    )
+    await userEvent.click(down)
+    await waitFor(() => expect(body.queryByRole('textbox')).toBeNull())
+    await userEvent.click(down)
+    await expect(
+      await body.findByRole('textbox', { name: '為什麼你覺得沒有幫助？' }),
+    ).toHaveValue('沒有出處')
+
+    // The other vote starts empty.
+    await userEvent.click(up)
+    await expect(
+      await body.findByRole('textbox', { name: '還有什麼想補充的嗎？' }),
+    ).toHaveValue('')
+    await expect(args.onSubmitVote).not.toHaveBeenCalled()
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(body.queryByRole('textbox')).toBeNull())
   },
 }
 
 /**
- * Not in Penpot. Saving fails: the form stays open with what was typed and says so, and sending
- * again works.
+ * Not in Penpot. Saving fails: the form stays open with what was typed and says so. Closing the
+ * form clears the message; voting again brings back what was typed, and sending again works.
  */
 export const SendFails: Story = {
   tags: ['not-in-penpot'],
@@ -154,6 +184,12 @@ export const SendFails: Story = {
     await expect(await body.findByRole('alert')).toHaveTextContent('送出失敗')
     await expect(body.getByRole('textbox')).toHaveValue('寫了很久')
 
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(body.queryByRole('textbox')).toBeNull())
+    await expect(body.queryByRole('alert')).toBeNull()
+
+    await userEvent.click(canvas.getByRole('button', { name: '有幫助 100' }))
+    await expect(await body.findByRole('textbox')).toHaveValue('寫了很久')
     await userEvent.click(body.getByRole('button', { name: '送出' }))
     await waitFor(() => expect(body.queryByRole('textbox')).toBeNull())
     await expect(args.onSubmitVote).toHaveBeenCalledTimes(2)
@@ -231,6 +267,14 @@ const reasonFixtures: Array<ReplyFeedbackReason> = [
     user: peep('路人甲'),
     reportHref: 'https://example.com/report?id=d',
   },
+  {
+    id: 'e',
+    vote: 'DOWNVOTE',
+    comment: '原文已經下架了。',
+    createdAt: '2026-11-03T00:00:00Z',
+    // A deleted account.
+    user: null,
+  },
 ]
 
 const reasonsOpen = async (canvasElement: HTMLElement) => {
@@ -243,7 +287,8 @@ const reasonsOpen = async (canvasElement: HTMLElement) => {
 /**
  * Not in Penpot. 看理由: a popover under the buttons, with a tab for each vote. People who left
  * a comment come first, the newest first. Arrow keys switch tabs. Only a comment gets a 檢舉
- * link, and only when the parent gave it a `reportHref`.
+ * link, and only when the parent gave it a `reportHref`. A reason whose user is gone shows
+ * 匿名使用者.
  */
 export const ReasonsList: Story = {
   tags: ['not-in-penpot'],
@@ -296,6 +341,11 @@ export const ReasonsList: Story = {
         ),
       ).toBeVisible(),
     )
+    await expect(
+      within(body.getByRole('region', { name: '沒幫助的理由' })).getByText(
+        '匿名使用者',
+      ),
+    ).toBeVisible()
 
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(body.queryByRole('tab')).toBeNull())
@@ -314,11 +364,17 @@ const manyReasons: Array<ReplyFeedbackReason> = Array.from(
   }),
 )
 
-/** Not in Penpot. Ten reasons per vote, then 載入更多 shows the rest. */
+/**
+ * Not in Penpot. Ten reasons per vote, then 載入更多 shows the rest. Pressing 看理由 again closes
+ * the list without fetching it again.
+ */
 export const ReasonsLoadMore: Story = {
   tags: ['not-in-penpot'],
-  args: { reasons: { status: 'success', feedbacks: manyReasons } },
-  play: async ({ canvasElement }) => {
+  args: {
+    reasons: { status: 'success', feedbacks: manyReasons },
+    onLoadReasons: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
     const body = await reasonsOpen(canvasElement)
     const list = await body.findByRole('region', { name: '有幫助的理由' })
 
@@ -326,6 +382,14 @@ export const ReasonsLoadMore: Story = {
     await userEvent.click(body.getByRole('button', { name: '載入更多' }))
     await expect(within(list).getAllByRole('listitem')).toHaveLength(12)
     await expect(body.queryByRole('button', { name: '載入更多' })).toBeNull()
+
+    await userEvent.click(
+      within(canvasElement).getByRole('button', { name: '看理由' }),
+    )
+    await waitFor(() =>
+      expect(body.queryByRole('region', { name: '有幫助的理由' })).toBeNull(),
+    )
+    await expect(args.onLoadReasons).toHaveBeenCalledTimes(1)
   },
 }
 
@@ -354,6 +418,32 @@ export const ReasonsError: Story = {
     await expect(await body.findByRole('alert')).toHaveTextContent('載入失敗')
     await userEvent.click(body.getByRole('button', { name: '重試' }))
     await expect(args.onLoadReasons).toHaveBeenCalledTimes(2)
+  },
+}
+
+/**
+ * Not in Penpot. A parent that gives no `onLoadReasons` and no `reasons`: nothing will load, so
+ * the list says there is nothing rather than 載入中… for good.
+ */
+export const ReasonsWithoutLoader: Story = {
+  tags: ['not-in-penpot'],
+  play: async ({ canvasElement }) => {
+    const body = await reasonsOpen(canvasElement)
+    await waitFor(async () =>
+      expect(await body.findByText('還沒有人留下有幫助的理由。')).toBeVisible(),
+    )
+    await expect(body.queryByText('載入中…')).toBeNull()
+  },
+}
+
+/** Not in Penpot. Fetching failed and the parent can't fetch again: no 重試. */
+export const ReasonsErrorWithoutRetry: Story = {
+  tags: ['not-in-penpot'],
+  args: { reasons: { status: 'error', feedbacks: [] } },
+  play: async ({ canvasElement }) => {
+    const body = await reasonsOpen(canvasElement)
+    await expect(await body.findByRole('alert')).toHaveTextContent('載入失敗')
+    await expect(body.queryByRole('button', { name: '重試' })).toBeNull()
   },
 }
 

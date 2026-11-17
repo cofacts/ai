@@ -66,6 +66,22 @@ describe('sortReasons', () => {
     expect(result.map((r) => r.id)).toEqual(['real', 'blank'])
   })
 
+  it('orders by the time, whatever the ISO form', () => {
+    const result = sortReasons(
+      [
+        reason('no-ms', { comment: 'a', createdAt: '2026-11-01T00:00:00Z' }),
+        reason('ms', { comment: 'b', createdAt: '2026-11-01T00:00:00.500Z' }),
+        // 2026-10-31T23:00:00Z, so the oldest, though its string sorts last.
+        reason('taipei', {
+          comment: 'c',
+          createdAt: '2026-11-01T07:00:00+08:00',
+        }),
+      ],
+      'UPVOTE',
+    )
+    expect(result.map((r) => r.id)).toEqual(['ms', 'no-ms', 'taipei'])
+  })
+
   it('does not change the array it is given', () => {
     const input = [
       reason('a', { createdAt: '2026-01-01T00:00:00.000Z' }),
