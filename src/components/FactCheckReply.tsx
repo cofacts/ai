@@ -229,12 +229,21 @@ function ExpandableText({
   const collapsing = useRef(false)
   const textId = useId()
 
-  // Collapsing a long text from its end leaves the page scrolled past it, with the next card in
-  // view. Bring the button back into view before the browser paints.
+  // Collapsing a long text from its end leaves the page scrolled past the card, with the next
+  // card in view. If the card's top is out of view, scroll it back to the top before the
+  // browser paints, so the title, the clamped text and 閱讀全文 show. scrollIntoView keeps
+  // clear of the page's scroll-padding-top (the sticky nav), so the check does too.
   useLayoutEffect(() => {
     if (expanded || !collapsing.current) return
     collapsing.current = false
-    buttonRef.current?.scrollIntoView({ block: 'nearest' })
+    const card = buttonRef.current?.closest('article')
+    if (!card) return
+    const padding =
+      parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) ||
+      0
+    if (card.getBoundingClientRect().top < padding) {
+      card.scrollIntoView({ block: 'start' })
+    }
   }, [expanded])
 
   useEffect(() => {

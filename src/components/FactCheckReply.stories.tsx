@@ -165,7 +165,7 @@ const veryLongText = Array.from(
 /**
  * Not in Penpot: a long reply in a list, as on /replies. Open it, read to the end and press
  * 收合全文: the page would stay scrolled past the shorter card, showing the next one, so the
- * button is scrolled back into view.
+ * card is scrolled back to the top of the viewport.
  */
 export const LongTextInList: Story = {
   tags: ['not-in-penpot'],
@@ -192,9 +192,21 @@ export const LongTextInList: Story = {
     await userEvent.click(first)
     await expect(first).toHaveAccessibleName('閱讀全文')
     await expect(first).toHaveFocus()
-    const { top, bottom } = first.getBoundingClientRect()
-    await expect(top).toBeGreaterThanOrEqual(0)
-    await expect(bottom).toBeLessThanOrEqual(view.innerHeight)
+
+    // The card's top is at the top of the viewport, and its button shows too.
+    const [card] = canvas.getAllByRole('article')
+    const cardTop = card!.getBoundingClientRect().top
+    await expect(cardTop).toBeGreaterThanOrEqual(0)
+    await expect(cardTop).toBeLessThan(1)
+    await expect(first.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      view.innerHeight,
+    )
+
+    // Collapsing while the card's top is in view moves nothing.
+    await userEvent.click(first)
+    const scrolled = view.scrollY
+    await userEvent.click(first)
+    await expect(view.scrollY).toBe(scrolled)
   },
 }
 
