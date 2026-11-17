@@ -41,6 +41,7 @@ export const MATERIAL_SYMBOLS = [
   'flag_check',
   'format_list_bulleted',
   'format_list_numbered',
+  'graphic_eq',
   'group',
   'help',
   'keyboard_arrow_down',
@@ -66,6 +67,7 @@ export const MATERIAL_SYMBOLS = [
   'thumb_up',
   'trending_up',
   'upload_file',
+  'videocam',
   'warning',
 ] as const satisfies ReadonlyArray<AnyMaterialSymbol>
 
