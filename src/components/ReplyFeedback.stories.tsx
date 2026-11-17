@@ -381,6 +381,10 @@ export const ReasonsLoadMore: Story = {
     await userEvent.click(body.getByRole('button', { name: '載入更多' }))
     await expect(within(list).getAllByRole('listitem')).toHaveLength(12)
     await expect(body.queryByRole('button', { name: '載入更多' })).toBeNull()
+    // The pressed button is gone, so the focus moves to the first reason it revealed.
+    await waitFor(() =>
+      expect(within(list).getAllByRole('listitem')[10]).toHaveFocus(),
+    )
 
     await userEvent.click(
       within(canvasElement).getByRole('button', { name: '看理由' }),

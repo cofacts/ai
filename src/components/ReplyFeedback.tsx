@@ -112,6 +112,15 @@ function ReasonList({
   onExpand: () => void
   onRetry?: () => void
 }) {
+  // 載入更多 disappears once pressed, so its focus moves to the first reason it revealed.
+  const firstMoreRef = useRef<HTMLLIElement>(null)
+  const focusMore = useRef(false)
+  useEffect(() => {
+    if (!expanded || !focusMore.current) return
+    focusMore.current = false
+    firstMoreRef.current?.focus()
+  }, [expanded])
+
   if (reasons?.status === 'error') {
     return (
       <div className="flex flex-col items-start gap-spacing-8">
@@ -158,11 +167,14 @@ function ReasonList({
         className="max-h-[300px] overflow-y-auto overscroll-contain"
       >
         <ul className="flex flex-col">
-          {shown.map((reason) => {
+          {shown.map((reason, index) => {
             const text = reason.comment?.trim()
+            const firstMore = index === REASONS_PAGE
             return (
               <li
                 key={reason.id}
+                ref={firstMore ? firstMoreRef : undefined}
+                tabIndex={firstMore ? -1 : undefined}
                 className="flex gap-spacing-12 border-b border-border-subtle py-spacing-12 last:border-b-0"
               >
                 {reason.user && <UserAvatar user={reason.user} size={36} />}
@@ -195,7 +207,14 @@ function ReasonList({
         </ul>
       </div>
       {!expanded && sorted.length > REASONS_PAGE && (
-        <Button variant="outline" size="sm" onClick={onExpand}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            focusMore.current = true
+            onExpand()
+          }}
+        >
           載入更多
         </Button>
       )}
@@ -302,7 +321,6 @@ export function ReplyFeedback({
         onVote={handleVote}
         onShowReasons={handleShowReasons}
       />
-      {/* Always in the page, so that a screen reader announces the text when it appears. */}
       {/* Always in the page, so that a screen reader announces the text when it appears. Hidden
           while empty so it adds no gap. */}
       <div
