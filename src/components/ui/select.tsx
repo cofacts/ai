@@ -39,7 +39,7 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        'flex w-fit items-center justify-between gap-spacing-4 rounded-radius-5 border border-border-control bg-surface-base text-type-ui-m whitespace-nowrap text-text-primary data-placeholder:text-text-tertiary data-[size=default]:h-[36px] data-[size=default]:px-spacing-16 data-[size=sm]:h-[28px] data-[size=sm]:px-spacing-12 *:data-[slot=select-value]:line-clamp-1 aria-invalid:border-status-incorrect disabled:pointer-events-none disabled:opacity-50',
+        'flex w-fit items-center justify-between gap-[6px] rounded-radius-5 border border-border-control bg-surface-base text-type-ui-m whitespace-nowrap text-text-primary data-placeholder:text-text-tertiary data-[size=default]:h-[36px] data-[size=default]:px-spacing-12 data-[size=sm]:h-[28px] data-[size=sm]:px-spacing-8 *:data-[slot=select-value]:line-clamp-1 aria-invalid:border-status-incorrect disabled:pointer-events-none disabled:opacity-50',
         className,
       )}
       {...props}
@@ -47,24 +47,31 @@ function SelectTrigger({
       {children}
       {/*
         Children replace Base UI's default ▼ glyph. The chevron is ~9px wide in its 20px box, so
-        -4px pulls the box into the padding to keep the visible gap at the edge close to the
-        padding; 1px down centers it on CJK text, whose glyphs sit low in the line box.
+        it has ~5.5px of blank space on each side. A 6px gap and -6px here make the visible space
+        on both sides of the chevron ~12px, the same as the padding before the text (and the
+        items' padding in the popup). 1px down centers it on CJK text, whose glyphs sit low.
       */}
-      <SelectPrimitive.Icon className="-mr-[4px] flex translate-y-[1px] text-icon-default">
+      <SelectPrimitive.Icon className="-mr-[6px] flex translate-y-[1px] text-icon-default">
         <MaterialIcon name="keyboard_arrow_down" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
 }
 
+/**
+ * The popup opens below the trigger, left edges aligned. Its 1px border + 4px inset + the items'
+ * 8px padding put the item text 13px from the edge, the same as the trigger's text (1px border +
+ * 12px padding), so the text lines up. The group label has the items' padding too, so it is as
+ * far from the first item as the items are from each other.
+ */
 function SelectContent({
   className,
   children,
   side = 'bottom',
   sideOffset = 4,
-  align = 'center',
+  align = 'start',
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  alignItemWithTrigger = false,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
@@ -85,7 +92,7 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            'border border-border-control bg-surface-base py-spacing-12 px-spacing-4 text-text-primary data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-[2px] data-[side=left]:slide-in-from-right-[2px] data-[side=right]:slide-in-from-left-[2px] data-[side=top]:slide-in-from-bottom-[2px] min-w-[144px] rounded-radius-5 shadow-btn-shadow duration-100 data-[side=inline-start]:slide-in-from-right-[2px] data-[side=inline-end]:slide-in-from-left-[2px] relative isolate z-50 max-h-(--available-height) w-(--anchor-width) origin-(--transform-origin) overflow-x-hidden overflow-y-auto data-[align-trigger=true]:animate-none',
+            'border border-border-control bg-surface-base py-spacing-8 px-spacing-4 text-text-primary data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-[2px] data-[side=left]:slide-in-from-right-[2px] data-[side=right]:slide-in-from-left-[2px] data-[side=top]:slide-in-from-bottom-[2px] min-w-[144px] rounded-radius-5 shadow-btn-shadow duration-100 data-[side=inline-start]:slide-in-from-right-[2px] data-[side=inline-end]:slide-in-from-left-[2px] relative isolate z-50 max-h-(--available-height) w-(--anchor-width) origin-(--transform-origin) overflow-x-hidden overflow-y-auto data-[align-trigger=true]:animate-none',
             className,
           )}
           {...props}
@@ -109,7 +116,7 @@ function SelectLabel({
     <SelectPrimitive.GroupLabel
       data-slot="select-label"
       className={cn(
-        'px-spacing-12 text-type-ui-m text-text-tertiary',
+        'px-spacing-8 py-spacing-4 text-type-ui-m text-text-tertiary',
         className,
       )}
       {...props}
@@ -130,7 +137,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        'relative flex w-full cursor-default scroll-my-spacing-4 items-center gap-spacing-8 rounded-radius-5 py-spacing-4 pr-[36px] pl-spacing-12 text-type-ui-m text-text-primary outline-hidden select-none focus-visible:[box-shadow:none] data-highlighted:bg-surface-accent-subtle data-highlighted:text-text-on-accent data-disabled:pointer-events-none data-disabled:opacity-50',
+        'relative flex w-full cursor-default scroll-my-spacing-4 items-center gap-spacing-8 rounded-radius-5 py-spacing-4 pr-[32px] pl-spacing-8 text-type-ui-m text-text-primary outline-hidden select-none focus-visible:[box-shadow:none] data-highlighted:bg-surface-accent-subtle data-highlighted:text-text-on-accent data-disabled:pointer-events-none data-disabled:opacity-50',
         className,
       )}
       {...props}
@@ -140,7 +147,7 @@ function SelectItem({
       </SelectPrimitive.ItemText>
       <SelectPrimitive.ItemIndicator
         render={
-          <span className="pointer-events-none absolute right-spacing-12 flex size-spacing-20 items-center justify-center" />
+          <span className="pointer-events-none absolute right-spacing-8 flex size-spacing-20 items-center justify-center" />
         }
       >
         <MaterialIcon name="check" />

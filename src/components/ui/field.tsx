@@ -3,13 +3,20 @@ import { cn } from '@/lib/utils'
 /**
  * Penpot Base/Input, Type = Field-*: a title above the control. Use `Label htmlFor` for the title,
  * pointing at the control's `id`.
+ *
+ * Children are 4px apart, and the title gets 4px more below it. Body text (a hint, the error)
+ * already shows about 5px of line height above and below its letters, so with this every gap in
+ * the field looks the same, about 8–9px.
  */
 function Field({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       role="group"
       data-slot="field"
-      className={cn('flex w-full flex-col gap-spacing-4', className)}
+      className={cn(
+        'flex w-full flex-col gap-spacing-4 *:data-[slot=label]:mb-spacing-4',
+        className,
+      )}
       {...props}
     />
   )

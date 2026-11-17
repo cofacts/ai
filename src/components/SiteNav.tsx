@@ -6,6 +6,7 @@ import type { CofactsUser } from '@/lib/auth'
 import { Logo } from '@/components/Logo'
 import { UserAvatar } from '@/components/UserAvatar'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { inputBoxClassName } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -179,7 +180,7 @@ export function SiteNav({
                 rel="noopener noreferrer"
                 className={cn(
                   buttonVariants({ variant: 'outline', withIcon: true }),
-                  'hidden min-h-[40px] border-transparent bg-surface-raised xl:inline-flex',
+                  'hidden border-transparent bg-surface-raised xl:inline-flex',
                 )}
               >
                 <LineMark />
@@ -190,7 +191,7 @@ export function SiteNav({
                 aria-current={current === 'report' ? 'page' : undefined}
                 className={cn(
                   buttonVariants({ variant: 'primary', withIcon: true }),
-                  'hidden min-h-[40px] lg:inline-flex',
+                  'hidden lg:inline-flex',
                 )}
               >
                 <MaterialIcon name="flag_2" filled />
@@ -376,7 +377,7 @@ function AccountControl({
       <Button
         variant="secondary"
         iconStart="account_circle"
-        className={cn('min-h-[40px]', className)}
+        className={className}
         onClick={onLogin}
       >
         登入
@@ -432,7 +433,10 @@ function SearchForm({ onClose }: { onClose: () => void }) {
           type="search"
           autoFocus
           placeholder="搜尋可疑訊息或查核報告..."
-          className="min-h-[36px] w-full rounded-radius-5 border-[0.5px] border-border-control bg-surface-base py-spacing-8 pr-spacing-12 pl-[40px] text-type-ui-s text-text-primary placeholder:text-text-tertiary focus:border focus:border-border-accent"
+          className={cn(
+            inputBoxClassName,
+            'min-h-[36px] py-spacing-8 pr-spacing-12 pl-[40px] text-type-ui-s',
+          )}
         />
       </label>
       <Button

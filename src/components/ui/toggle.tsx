@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * Penpot Base/Toggle (e.g. 收藏). `<button aria-pressed>`; pressed shows a strong border and the
- * icon's solid version (bookmark → filled bookmark).
+ * icon's solid version in the brand color (bookmark → filled yellow bookmark).
  */
 function Toggle({
   className,
@@ -35,7 +35,7 @@ function Toggle({
           <MaterialIcon
             name={icon}
             filled
-            className="hidden group-data-pressed/toggle:inline-flex"
+            className="hidden text-icon-brand group-data-pressed/toggle:inline-flex"
           />
         </>
       )}

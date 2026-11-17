@@ -6,19 +6,24 @@ import type { MaterialSymbol } from '@/components/icons/material-symbols'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
-/** Penpot Base/Button: Size × Style × Icon. */
+/**
+ * Penpot Base/Button: Size × Style × Icon × State. State (Hover / Active / Disabled) is drawn
+ * for each Style at Size = Medium and applies to every size: hover and active are the
+ * `*-hover` / `*-pressed` tokens, disabled is the default look at 50% opacity (R5).
+ */
 const buttonVariants = cva(
   'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-radius-5 select-none disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
   {
     variants: {
       variant: {
         primary:
-          'bg-surface-accent text-text-on-accent hover:bg-surface-accent-subtle',
+          'bg-surface-accent text-text-on-accent hover:bg-surface-accent-hover active:bg-surface-accent-pressed',
         outline:
-          'border border-border-control text-text-primary hover:bg-surface-raised',
+          'border border-border-control text-text-primary hover:bg-surface-raised active:border-border-strong active:bg-surface-selected',
         secondary:
-          'bg-surface-secondary text-text-on-secondary hover:opacity-90',
-        line: 'bg-surface-line text-text-on-line hover:opacity-90',
+          'bg-surface-secondary text-text-on-secondary hover:bg-surface-secondary-hover active:bg-surface-secondary-pressed',
+        // LINE green has no hover / pressed tokens (brand color), so it lightens and darkens.
+        line: 'bg-surface-line text-text-on-line hover:brightness-110 active:brightness-90',
         'on-dark':
           'border border-border-on-dark bg-surface-dark text-text-on-dark hover:bg-surface-dark-raised',
       },
@@ -36,7 +41,7 @@ const buttonVariants = cva(
       { size: 'md', withIcon: true, className: 'px-spacing-12' },
       { size: 'md', iconOnly: true, className: 'size-[36px] p-spacing-8' },
       { size: 'sm', iconOnly: true, className: 'size-[28px] p-spacing-4' },
-      { size: 'lg', iconOnly: true, className: 'size-[44px] p-spacing-12' },
+      { size: 'lg', iconOnly: true, className: 'size-[44px] p-[10px]' },
     ],
     defaultVariants: {
       variant: 'primary',
@@ -70,6 +75,8 @@ function Button({
   ...props
 }: ButtonProps) {
   const iconOnly = children === undefined || children === null
+  // The 44px icon-only button gets a 24px icon; every other button keeps Penpot's 20px.
+  const iconSize = size === 'lg' && iconOnly ? 24 : undefined
   return (
     <ButtonPrimitive
       data-slot="button"
@@ -84,7 +91,7 @@ function Button({
       )}
       {...props}
     >
-      {iconStart && <MaterialIcon name={iconStart} />}
+      {iconStart && <MaterialIcon name={iconStart} size={iconSize} />}
       {children}
       {iconEnd && <MaterialIcon name={iconEnd} />}
     </ButtonPrimitive>
