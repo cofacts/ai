@@ -63,14 +63,19 @@ describe('draftSubmitProblem', () => {
   })
 })
 
-const lookup = (id: string, articleId: string, found = true) => ({
+const lookup = (
+  id: string,
+  articleId: string,
+  found = true,
+  text: string | null = `訊息 ${articleId}`,
+) => ({
   id,
   name: 'get_single_cofacts_article',
   args: { article_id: articleId },
   resp: found
     ? {
         article_id: articleId,
-        article: { id: articleId, text: `訊息 ${articleId}` },
+        article: { id: articleId, text },
       }
     : { article_id: articleId, error: 'not found' },
 })
@@ -89,6 +94,13 @@ describe('lookedUpArticles', () => {
     ])
     expect(lookedUpArticles({})).toEqual([])
   })
+
+  test('an article without text (image, video) gets empty text', () => {
+    const invocations = {
+      a: lookup('a', 'IMG', true, null),
+    } as unknown as Record<string, ToolInvocation>
+    expect(lookedUpArticles(invocations)).toEqual([{ id: 'IMG', text: '' }])
+  })
 })
 
 describe('draftTargetArticleIds', () => {
@@ -101,9 +113,13 @@ describe('draftTargetArticleIds', () => {
     ).toEqual(['B2', 'C3'])
   })
 
-  test('without article_ids, falls back only to a single looked-up article', () => {
+  test('an empty list means not on Cofacts, never the looked-up article', () => {
+    // The writer may have opened a similar article for a pasted message.
+    expect(draftTargetArticleIds({ article_ids: [] }, one)).toEqual([])
+  })
+
+  test('a draft from before article_ids falls back only to a single looked-up article', () => {
     expect(draftTargetArticleIds({}, one)).toEqual(['A1'])
-    expect(draftTargetArticleIds({ article_ids: [] }, one)).toEqual(['A1'])
     // A similar article the writer looked at must never become the target by guessing.
     expect(draftTargetArticleIds({}, two)).toEqual([])
     expect(draftTargetArticleIds({}, [])).toEqual([])
@@ -113,6 +129,8 @@ describe('draftTargetArticleIds', () => {
     expect(draftTargetProblem(['A1'], one)).toBeNull()
     expect(draftTargetProblem([], [])).toMatch(/沒有對應的 Cofacts 訊息/)
     expect(draftTargetProblem([], two)).toMatch(/沒有指定/)
+    const eleven = Array.from({ length: 11 }, (_, i) => `A${i}`)
+    expect(draftTargetProblem(eleven, one)).toMatch(/最多只能送到 10 則/)
   })
 })
 

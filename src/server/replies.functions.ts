@@ -14,7 +14,11 @@ import type { TypedDocumentNode } from '@graphql-typed-document-node/core'
 
 import type { ReplyCategory } from '@/lib/factCheckDraft'
 import { AUTH_EXPIRED_MESSAGE } from '@/lib/authExpired'
-import { draftSubmitProblem, isReplyCategory } from '@/lib/factCheckDraft'
+import {
+  MAX_REPLY_ARTICLES,
+  draftSubmitProblem,
+  isReplyCategory,
+} from '@/lib/factCheckDraft'
 import { cofactsExec } from '@/server/cofacts.server'
 import { SESSION_COOKIE_NAME } from '@/server/sessionCookie'
 
@@ -69,6 +73,9 @@ interface MyArticleRepliesResult {
   } | null
 }
 
+/** The query key's operation name; per user, so `clearUserScopedCache` removes it on logout. */
+export const MY_ARTICLE_REPLIES_QUERY = 'MyArticleRepliesForAi'
+
 // selfOnly: only the logged-in user's replies; NORMAL: not the ones they deleted.
 const MyArticleRepliesDocument = parse(`
   query MyArticleRepliesForAi($id: String!) {
@@ -80,14 +87,11 @@ const MyArticleRepliesDocument = parse(`
   }
 `) as unknown as TypedDocumentNode<MyArticleRepliesResult, { id: string }>
 
-/** At most this many articles per reply, so a bad draft can't fan out without bound. */
-const MAX_ARTICLES = 10
-
 function validArticleIds(articleIds: unknown): Array<string> {
   if (
     !Array.isArray(articleIds) ||
     articleIds.length === 0 ||
-    articleIds.length > MAX_ARTICLES ||
+    articleIds.length > MAX_REPLY_ARTICLES ||
     !articleIds.every((id) => typeof id === 'string' && id)
   )
     throw new Error('Invalid articleIds')

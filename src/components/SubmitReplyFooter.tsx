@@ -63,7 +63,7 @@ function SubmitButtonLabel({
  */
 export function SubmitReplyFooter({
   userName,
-  existingReplies = [],
+  existingReplyIds = [],
   checked,
   onCheckedChange,
   problem,
@@ -73,8 +73,8 @@ export function SubmitReplyFooter({
 }: {
   /** The logged-in user's display name; null when it could not be loaded. */
   userName: string | null
-  /** The user's own replies to the target article(s); non-empty means this would be another. */
-  existingReplies?: Array<{ articleId: string; replyId: string }>
+  /** The user's own replies to the target article(s), each once; non-empty means another. */
+  existingReplyIds?: Array<string>
   checked: boolean
   onCheckedChange: (checked: boolean) => void
   /** Why this draft cannot be submitted (no article, empty fields); null when it can. */
@@ -110,18 +110,18 @@ export function SubmitReplyFooter({
         </>
       )}
 
-      {existingReplies.length > 0 && (
+      {existingReplyIds.length > 0 && (
         <p
           role="note"
           className="flex flex-wrap items-center gap-x-spacing-8 text-type-caption text-text-secondary"
         >
           <span>你已經對這則訊息送出過查核回應：</span>
-          {existingReplies.map(({ replyId }, i) => (
+          {existingReplyIds.map((replyId, i) => (
             <ExternalLink
               key={replyId}
               href={`https://cofacts.tw/reply/${replyId}`}
             >
-              {existingReplies.length > 1
+              {existingReplyIds.length > 1
                 ? `查看回應 ${i + 1}`
                 : '查看你的回應'}
             </ExternalLink>
@@ -136,7 +136,7 @@ export function SubmitReplyFooter({
       )}
 
       <Button
-        variant={existingReplies.length > 0 ? 'outline' : 'primary'}
+        variant={existingReplyIds.length > 0 ? 'outline' : 'primary'}
         className="w-full min-w-0"
         iconStart="send"
         disabled={!!problem || !checked || pending}
@@ -149,7 +149,7 @@ export function SubmitReplyFooter({
         ) : (
           <SubmitButtonLabel
             userName={userName}
-            again={existingReplies.length > 0}
+            again={existingReplyIds.length > 0}
           />
         )}
       </Button>

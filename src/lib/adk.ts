@@ -155,7 +155,8 @@ export type AllTools = {
       error?: string
       article?: {
         id: string
-        text: string
+        // null for some image and video articles
+        text: string | null
         createdAt: string
         articleType: string
         attachmentUrl: string | null

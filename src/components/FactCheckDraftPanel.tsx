@@ -248,15 +248,14 @@ export function FactCheckDraftPanel({
   // What the draft holds before any unsent edits: the version last sent to the AI, if any.
   const base = sentEdit ?? original
   const [edit, setEdit] = useDraftEdit(sessionId, toolCallId)
-  const [submittedReplyId, setSubmitted] = useSubmittedReply(
-    sessionId,
-    toolCallId,
-  )
+  const [submitted, setSubmitted] = useSubmittedReply(sessionId, toolCallId)
   const lockReason = context.lockReason
-  const editable = lockReason === null && !submittedReplyId
-  // A submitted draft keeps showing what was submitted; any other locked one, what was sent.
-  const fields: DraftFields =
-    (editable || submittedReplyId) && edit ? edit : base
+  const editable = lockReason === null && !submitted
+  // The latest draft shows the user's edits (also while the AI answers and after submitting);
+  // an older one shows what was last sent to the AI.
+  const showsEdit =
+    !!submitted || lockReason === null || lockReason === 'streaming'
+  const fields: DraftFields = showsEdit && edit ? edit : base
   const isEdited = !draftFieldsEqual(fields, original)
 
   const update = (patch: Partial<DraftFields>) => {
@@ -281,10 +280,14 @@ export function FactCheckDraftPanel({
         },
       })
     },
-    onSuccess: ({ replyId }) => {
+    onSuccess: ({ replyId, unlinkedArticleIds }) => {
       // Keep the edit: it is what was submitted, and the panel keeps showing it.
       if (!edit) setEdit(fields)
-      setSubmitted(replyId)
+      setSubmitted({
+        replyId,
+        articleIds: targetArticleIds,
+        unlinkedArticleIds,
+      })
       onSubmitted?.()
     },
   })
@@ -294,15 +297,24 @@ export function FactCheckDraftPanel({
         ? submit.error.message
         : '送出失敗'
       : null
-  const unlinkedArticleIds = submit.data?.unlinkedArticleIds ?? []
+  // A submitted draft keeps the targets it was sent to, whatever the chat looks up later.
+  const shownTargetIds = submitted?.articleIds.length
+    ? submitted.articleIds
+    : targetArticleIds
+  const unlinkedArticleIds = submitted?.unlinkedArticleIds ?? []
 
   const problem =
     draftTargetProblem(targetArticleIds, articles) ?? draftSubmitProblem(fields)
-  const existingReplies = targetArticleIds.flatMap((articleId) =>
-    (myReplies[articleId] ?? []).map((replyId) => ({ articleId, replyId })),
-  )
-  // Say which message the reply goes to whenever the chat involves more than one.
-  const showTargets = articles.length > 1 || targetArticleIds.length > 1
+  // One reply linked to several targets is listed once.
+  const existingReplyIds = [
+    ...new Set(targetArticleIds.flatMap((id) => myReplies[id] ?? [])),
+  ]
+  // Say which message the reply goes to whenever that isn't obvious: the chat involves more
+  // than one, or the target is one the chat never opened.
+  const showTargets =
+    articles.length > 1 ||
+    shownTargetIds.length > 1 ||
+    shownTargetIds.some((id) => !articles.some((a) => a.id === id))
 
   const textId = useId()
   const referencesId = useId()
@@ -310,7 +322,7 @@ export function FactCheckDraftPanel({
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-surface-raised">
       <div className="flex-1 overflow-y-auto p-spacing-16 space-y-spacing-20">
-        {submittedReplyId ? (
+        {submitted ? (
           <div
             role="status"
             className="flex items-start gap-spacing-8 rounded-radius-10 border border-border-subtle bg-surface-base p-spacing-12 text-type-body-s text-text-primary"
@@ -322,7 +334,7 @@ export function FactCheckDraftPanel({
             />
             <div className="space-y-spacing-4">
               <p className="font-bold">已用你的帳號送出到 Cofacts</p>
-              {targetArticleIds.map((articleId) => (
+              {shownTargetIds.map((articleId) => (
                 <a
                   key={articleId}
                   href={`https://cofacts.tw/article/${articleId}`}
@@ -331,7 +343,7 @@ export function FactCheckDraftPanel({
                   className="flex items-center gap-spacing-4 text-text-link underline"
                 >
                   在 Cofacts 查看
-                  {targetArticleIds.length > 1 &&
+                  {shownTargetIds.length > 1 &&
                     `（${articleSnippet(articleId, articles)}）`}
                   <MaterialIcon name="open_in_new" size={24} />
                 </a>
@@ -368,7 +380,7 @@ export function FactCheckDraftPanel({
         )}
 
         {showTargets && (
-          <TargetArticles ids={targetArticleIds} articles={articles} />
+          <TargetArticles ids={shownTargetIds} articles={articles} />
         )}
 
         <ClassificationPicker
@@ -466,7 +478,7 @@ export function FactCheckDraftPanel({
       {editable && (
         <SubmitReplyFooter
           userName={userName}
-          existingReplies={existingReplies}
+          existingReplyIds={existingReplyIds}
           checked={reviewed}
           onCheckedChange={setReviewed}
           problem={problem}

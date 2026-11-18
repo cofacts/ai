@@ -153,23 +153,27 @@ export function lookedUpArticles(
     if (inv.name !== 'get_single_cofacts_article') continue
     const article = inv.resp?.article
     if (article?.id && !articles.has(article.id))
-      articles.set(article.id, { id: article.id, text: article.text })
+      // rumors-api's text is null for some image and video articles.
+      articles.set(article.id, { id: article.id, text: article.text ?? '' })
   }
   return [...articles.values()]
 }
 
+/** The most articles one reply may go to; `draft_factcheck_response` checks the same. */
+export const MAX_REPLY_ARTICLES = 10
+
 /**
- * The articles a draft replies to: the writer's `article_ids`. A draft without them (proposed
- * before the tool took `article_ids`, or with an empty list) falls back to the only article the
- * chat looked up; with several, the target is unknown and the draft cannot be submitted.
+ * The articles a draft replies to: the writer's `article_ids`. An empty list means the message
+ * is not on Cofacts. Only a draft proposed before the tool took `article_ids` falls back, to the
+ * only article the chat looked up; with several, its target is unknown and it can't be submitted.
  */
 export function draftTargetArticleIds(
   args: Extract<ToolInvocation, { name: 'draft_factcheck_response' }>['args'],
   lookedUp: Array<LookedUpArticle>,
 ): Array<string> {
-  const ids = (args.article_ids ?? []).filter(Boolean)
-  if (ids.length > 0) return [...new Set(ids)]
-  return lookedUp.length === 1 ? [lookedUp[0]!.id] : []
+  if (args.article_ids === undefined)
+    return lookedUp.length === 1 ? [lookedUp[0]!.id] : []
+  return [...new Set(args.article_ids.filter(Boolean))]
 }
 
 /** Why a draft with these targets cannot be submitted, or null when it can. */
@@ -177,6 +181,8 @@ export function draftTargetProblem(
   targetIds: Array<string>,
   lookedUp: Array<LookedUpArticle>,
 ): string | null {
+  if (targetIds.length > MAX_REPLY_ARTICLES)
+    return `一則查核回應最多只能送到 ${MAX_REPLY_ARTICLES} 則訊息，請請 AI 減少要回應的訊息。`
   if (targetIds.length > 0) return null
   return lookedUp.length === 0
     ? '這段對話沒有對應的 Cofacts 訊息，無法直接送出。請從 Cofacts 的訊息頁開始查核。'

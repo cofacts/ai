@@ -65,6 +65,12 @@ export interface StartStreamOptions {
     newMessage?: { role: string; parts: Array<AdkPart> }
     invocationId?: string
   }
+  /**
+   * Parts of the user message being sent. Edited drafts in them count as sent only once the
+   * first event comes back: ADK has stored the message by then, so a request that fails
+   * before that leaves the edits unsent, to be attached again with the next message.
+   */
+  userParts?: Array<AdkPart>
 }
 
 /**
@@ -105,6 +111,7 @@ export async function startChatStream({
   queryClient,
   sessionId,
   payload = {},
+  userParts,
 }: StartStreamOptions) {
   const queryKey = chatCacheKey(sessionId)
 
@@ -166,6 +173,21 @@ export async function startChatStream({
             }
           }
           if (data) {
+            if (userParts) {
+              const sentParts = userParts
+              userParts = undefined
+              queryClient.setQueryData<ChatSessionState>(queryKey, (prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      sentDraftEdits: recordSentDraftEdits(
+                        prev.sentDraftEdits,
+                        sentParts,
+                      ),
+                    }
+                  : prev,
+              )
+            }
             try {
               processEventIntoCache(
                 queryClient,
@@ -260,7 +282,6 @@ export async function sendChatMessage(
     if (!prev) return INITIAL_CHAT_STATE
     return {
       ...prev,
-      sentDraftEdits: recordSentDraftEdits(prev.sentDraftEdits, parts),
       messages: [
         ...prev.messages,
         {
@@ -284,6 +305,7 @@ export async function sendChatMessage(
         parts,
       },
     },
+    userParts: parts,
   })
 }
 

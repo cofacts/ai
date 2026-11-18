@@ -133,7 +133,7 @@ export const Failed: Story = {
 /** The user already replied to this article: a link to it, and a plain outline button. */
 export const AlreadyReplied: Story = {
   args: {
-    existingReplies: [{ articleId: 'article-1', replyId: 'reply-1' }],
+    existingReplyIds: ['reply-1'],
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)

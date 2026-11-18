@@ -7,7 +7,10 @@ import { useChat } from '@/hooks/useChat'
 import { RightDrawer } from '@/components/RightDrawer'
 import { useAuth } from '@/lib/auth'
 import { draftTargetArticleIds } from '@/lib/factCheckDraft'
-import { getMyArticleReplies } from '@/server/replies.functions'
+import {
+  MY_ARTICLE_REPLIES_QUERY,
+  getMyArticleReplies,
+} from '@/server/replies.functions'
 
 export const Route = createFileRoute(
   '/_ai/session/$sessionId/tool/$toolCallId',
@@ -76,9 +79,12 @@ function ToolDrawer() {
 
   // The user's own replies to the target articles, so the drawer can warn before a second one.
   // Only the editable draft can be submitted, so only it asks.
-  const myRepliesKey = ['my-article-replies', ...targetArticleIds] as const
   const { data: myReplies = {} } = useQuery({
-    queryKey: myRepliesKey,
+    // Per user: clearUserScopedCache drops it on logout.
+    queryKey: [
+      MY_ARTICLE_REPLIES_QUERY,
+      { articleIds: targetArticleIds },
+    ] as const,
     queryFn: () => getMyArticleReplies({ data: targetArticleIds }),
     enabled: !!user && lockReason === null && targetArticleIds.length > 0,
     staleTime: 60_000,
@@ -97,7 +103,9 @@ function ToolDrawer() {
         articles,
         myReplies,
         onSubmitted: () =>
-          queryClient.invalidateQueries({ queryKey: ['my-article-replies'] }),
+          queryClient.invalidateQueries({
+            queryKey: [MY_ARTICLE_REPLIES_QUERY],
+          }),
         userName: user?.name ?? null,
         onOpenLatestDraft:
           lastReplyDraftId && lastReplyDraftId !== toolCallId

@@ -79,20 +79,54 @@ export function useDraftEdit(sessionId: string, draftId: string) {
   return [data, setEdit] as const
 }
 
-/** The Cofacts reply id this draft was submitted as, or null. */
+/**
+ * A draft that was submitted: the Cofacts reply, the articles it went to, and those the reply
+ * could not be linked to. Kept so the drawer shows the same result after a reload, no matter
+ * what the chat looks up later.
+ */
+export interface SubmittedReply {
+  replyId: string
+  articleIds: Array<string>
+  unlinkedArticleIds: Array<string>
+}
+
+/** Earlier builds stored just the reply id. */
+function loadSubmitted(sessionId: string, draftId: string) {
+  const stored = load<SubmittedReply | string>(
+    storageKey('draft-submitted', sessionId, draftId),
+  )
+  return typeof stored === 'string'
+    ? { replyId: stored, articleIds: [], unlinkedArticleIds: [] }
+    : stored
+}
+
+/** Whether this draft has been submitted, for code outside React. */
+export function readSubmittedReply(
+  queryClient: QueryClient,
+  sessionId: string,
+  draftId: string,
+): SubmittedReply | null {
+  const cached = queryClient.getQueryData<SubmittedReply | null>(
+    submittedKey(sessionId, draftId),
+  )
+  if (cached !== undefined) return cached
+  return typeof window === 'undefined'
+    ? null
+    : loadSubmitted(sessionId, draftId)
+}
+
 export function useSubmittedReply(sessionId: string, draftId: string) {
   const queryClient = useQueryClient()
   const { data = null } = useQuery({
     queryKey: submittedKey(sessionId, draftId),
-    queryFn: () =>
-      load<string>(storageKey('draft-submitted', sessionId, draftId)),
+    queryFn: () => loadSubmitted(sessionId, draftId),
     staleTime: Infinity,
     gcTime: Infinity,
   })
   const setSubmitted = useCallback(
-    (replyId: string) => {
-      queryClient.setQueryData(submittedKey(sessionId, draftId), replyId)
-      save(storageKey('draft-submitted', sessionId, draftId), replyId)
+    (submitted: SubmittedReply) => {
+      queryClient.setQueryData(submittedKey(sessionId, draftId), submitted)
+      save(storageKey('draft-submitted', sessionId, draftId), submitted)
     },
     [queryClient, sessionId, draftId],
   )

@@ -10,7 +10,7 @@ import {
   startChatStream,
 } from '@/lib/chatCache'
 import { getSession } from '@/lib/chatSessions.functions'
-import { readDraftEdit } from '@/hooks/useDraftEdit'
+import { readDraftEdit, readSubmittedReply } from '@/hooks/useDraftEdit'
 import {
   draftFieldsEqual,
   draftFieldsFromArgs,
@@ -65,7 +65,12 @@ export function useChat({ sessionId }: UseChatOptions) {
       const draftId = state?.lastReplyDraftId
       const draft = draftId ? state.toolInvocations[draftId] : undefined
       let editedDraft
-      if (draftId && draft?.name === 'draft_factcheck_response') {
+      // A submitted draft is done: its fields are what went to Cofacts, not a revision request.
+      if (
+        draftId &&
+        draft?.name === 'draft_factcheck_response' &&
+        !readSubmittedReply(queryClient, sessionId, draftId)
+      ) {
         const edit = readDraftEdit(queryClient, sessionId, draftId)
         const base =
           state.sentDraftEdits[draftId] ?? draftFieldsFromArgs(draft.args)

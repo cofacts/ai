@@ -505,6 +505,16 @@ def draft_factcheck_response(
             ),
         }
 
+    MAX_ARTICLES = 10  # src/lib/factCheckDraft.ts MAX_REPLY_ARTICLES; change both
+    if isinstance(article_ids, list) and len(article_ids) > MAX_ARTICLES:
+        return {
+            "success": False,
+            "text": (
+                f"article_ids lists {len(article_ids)} articles; one reply can go to at most "
+                f"{MAX_ARTICLES}. Keep only the messages the user asked you to answer, then call "
+                "draft_factcheck_response again."
+            ),
+        }
     if not isinstance(article_ids, list) or not all(
         isinstance(a, str) and re.fullmatch(r"[A-Za-z0-9_-]+", a) for a in article_ids
     ):

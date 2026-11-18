@@ -30,9 +30,10 @@ def test_accepts_ids(article_ids):
         ["abc 123"],
         "abc123",
         [123],
+        [f"id{i}" for i in range(11)],
     ],
 )
-def test_rejects_urls_and_non_ids(article_ids):
+def test_rejects_urls_non_ids_and_too_many(article_ids):
     result = draft(article_ids)
     assert result["success"] is False
     assert "article_ids" in result["text"]
