@@ -49,7 +49,7 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** Penpot Type = reason. Click the votes: pressed shows the strong border and yellow icon. */
+/** Penpot Type = reason. Click the votes: the pressed one shows its solid icon in the brand yellow. */
 export const Reason: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
