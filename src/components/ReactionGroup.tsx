@@ -16,7 +16,8 @@ export type Reaction = 'up' | 'down' | null
  * the outline, a pressed one is solid in the brand color (State = Up / Down).
  *
  * The three segments share their borders: each one has the full border and overlaps the previous
- * one by 1px, so the line between them stays 1px.
+ * one by 1px, so the line between them stays 1px. Later segments paint over earlier ones, so the
+ * focused segment is raised (`focus-visible:z-10`) to keep its focus ring whole.
  */
 export function ReactionGroup({
   helpfulCount,
@@ -104,7 +105,7 @@ export function ReactionGroup({
 
 /** One segment: 36px high, control border, base background; hover raises it. */
 const segment =
-  'relative inline-flex h-[36px] shrink-0 items-center border border-border-control bg-surface-base text-type-ui-m whitespace-nowrap text-text-primary hover:bg-surface-raised'
+  'relative focus-visible:z-10 inline-flex h-[36px] shrink-0 items-center border border-border-control bg-surface-base text-type-ui-m whitespace-nowrap text-text-primary hover:bg-surface-raised'
 
 function ReactionToggle({
   icon,
