@@ -129,3 +129,22 @@ export const Failed: Story = {
     ).toBeEnabled()
   },
 }
+
+/** The user already replied to this article: a link to it, and a plain outline button. */
+export const AlreadyReplied: Story = {
+  args: {
+    existingReplies: [{ articleId: 'article-1', replyId: 'reply-1' }],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(
+      canvas.getByRole('link', { name: '查看你的回應' }),
+    ).toHaveAttribute('href', 'https://cofacts.tw/reply/reply-1')
+    const submit = canvas.getByRole('button', {
+      name: /以.Jack5566.的身份再次送出新回應/,
+    })
+    await expect(submit).toBeDisabled()
+    await userEvent.click(canvas.getByText('我已經檢查過回應內文與出處'))
+    await expect(submit).toBeEnabled()
+  },
+}

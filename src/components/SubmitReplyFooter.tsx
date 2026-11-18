@@ -27,13 +27,21 @@ function ExternalLink({
  * with CSS (`truncate`) so the label stays on one line in a phone-width drawer; the accessible
  * name and the `title` keep the full name.
  */
-function SubmitButtonLabel({ userName }: { userName: string | null }) {
-  if (!userName) return <>用你的帳號送出查核回應</>
+function SubmitButtonLabel({
+  userName,
+  again,
+}: {
+  userName: string | null
+  again: boolean
+}) {
+  const action = again ? '再次送出新回應' : '送出查核回應'
+  if (!userName)
+    return <>{again ? `以你的帳號${action}` : `用你的帳號${action}`}</>
   return (
     <span className="flex min-w-0">
-      <span className="shrink-0">用&nbsp;</span>
+      <span className="shrink-0">{again ? '以' : '用'}&nbsp;</span>
       <span className="truncate">{userName}</span>
-      <span className="shrink-0">&nbsp;的身份送出查核回應</span>
+      <span className="shrink-0">&nbsp;的身份{action}</span>
     </span>
   )
 }
@@ -45,12 +53,17 @@ function SubmitButtonLabel({ userName }: { userName: string | null }) {
  * right above the button, which names the account and stays disabled until the box is checked.
  * It repeats the license notice from LoginModal.
  *
+ * When the user has already replied to a target article, a notice links to that reply, and the
+ * button says 「再次送出新回應」 in the plain outline style instead of the yellow primary: a
+ * second reply is allowed, but it shouldn't be the obvious next step.
+ *
  * The parent keeps `checked`, so it is not reset when the user edits the draft after checking.
  * Getting replies submitted is the point of Cofacts.ai, so the wording states the consequences
  * plainly without legal weight (no 「文責」).
  */
 export function SubmitReplyFooter({
   userName,
+  existingReplies = [],
   checked,
   onCheckedChange,
   problem,
@@ -60,6 +73,8 @@ export function SubmitReplyFooter({
 }: {
   /** The logged-in user's display name; null when it could not be loaded. */
   userName: string | null
+  /** The user's own replies to the target article(s); non-empty means this would be another. */
+  existingReplies?: Array<{ articleId: string; replyId: string }>
   checked: boolean
   onCheckedChange: (checked: boolean) => void
   /** Why this draft cannot be submitted (no article, empty fields); null when it can. */
@@ -95,6 +110,25 @@ export function SubmitReplyFooter({
         </>
       )}
 
+      {existingReplies.length > 0 && (
+        <p
+          role="note"
+          className="flex flex-wrap items-center gap-x-spacing-8 text-type-caption text-text-secondary"
+        >
+          <span>你已經對這則訊息送出過查核回應：</span>
+          {existingReplies.map(({ replyId }, i) => (
+            <ExternalLink
+              key={replyId}
+              href={`https://cofacts.tw/reply/${replyId}`}
+            >
+              {existingReplies.length > 1
+                ? `查看回應 ${i + 1}`
+                : '查看你的回應'}
+            </ExternalLink>
+          ))}
+        </p>
+      )}
+
       {error && (
         <p role="alert" className="text-type-caption text-status-incorrect">
           送出失敗：{error}
@@ -102,6 +136,7 @@ export function SubmitReplyFooter({
       )}
 
       <Button
+        variant={existingReplies.length > 0 ? 'outline' : 'primary'}
         className="w-full min-w-0"
         iconStart="send"
         disabled={!!problem || !checked || pending}
@@ -109,7 +144,14 @@ export function SubmitReplyFooter({
         title={userName ?? undefined}
         onClick={onSubmit}
       >
-        {pending ? '送出中…' : <SubmitButtonLabel userName={userName} />}
+        {pending ? (
+          '送出中…'
+        ) : (
+          <SubmitButtonLabel
+            userName={userName}
+            again={existingReplies.length > 0}
+          />
+        )}
       </Button>
 
       <p className="text-type-caption text-text-tertiary">

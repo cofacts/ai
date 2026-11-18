@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ChatSessionState } from '@/lib/chatCache'
 import {
@@ -14,7 +14,7 @@ import { readDraftEdit } from '@/hooks/useDraftEdit'
 import {
   draftFieldsEqual,
   draftFieldsFromArgs,
-  findArticleId,
+  lookedUpArticles,
 } from '@/lib/factCheckDraft'
 
 interface UseChatOptions {
@@ -53,9 +53,9 @@ export function useChat({ sessionId }: UseChatOptions) {
    * This immediately updates the global cache.
    *
    * If the user has unsent edits to the latest draft, they go along with the message so the AI
-   * revises from the user's version, and that draft locks (see `factCheckDraft.ts`). The edits
-   * stay in storage: if the message never reaches ADK, a reload finds the draft unlocked with
-   * the user's edits still there.
+   * revises from the user's version (see `factCheckDraft.ts`). "Unsent" means different from
+   * what was last sent for that draft, or from the AI's version if nothing was. The edits stay
+   * in storage: if the message never reaches ADK, a reload still has them.
    */
   const sendMessage = useCallback(
     (text: string, files: Array<File> = []) => {
@@ -65,13 +65,11 @@ export function useChat({ sessionId }: UseChatOptions) {
       const draftId = state?.lastReplyDraftId
       const draft = draftId ? state.toolInvocations[draftId] : undefined
       let editedDraft
-      if (
-        draftId &&
-        draft?.name === 'draft_factcheck_response' &&
-        !state.lockedDraftIds.includes(draftId)
-      ) {
+      if (draftId && draft?.name === 'draft_factcheck_response') {
         const edit = readDraftEdit(queryClient, sessionId, draftId)
-        if (edit && !draftFieldsEqual(edit, draftFieldsFromArgs(draft.args))) {
+        const base =
+          state.sentDraftEdits[draftId] ?? draftFieldsFromArgs(draft.args)
+        if (edit && !draftFieldsEqual(edit, base)) {
           editedDraft = { draftId, fields: edit }
         }
       }
@@ -101,14 +99,19 @@ export function useChat({ sessionId }: UseChatOptions) {
     abortControllers.get(sessionId)?.abort()
   }, [sessionId])
 
+  const articles = useMemo(
+    () => lookedUpArticles(data.toolInvocations),
+    [data.toolInvocations],
+  )
+
   return {
     messages: data.messages,
     isStreaming: data.isStreaming,
     error,
     toolInvocations: data.toolInvocations,
     lastReplyDraftId: data.lastReplyDraftId,
-    lockedDraftIds: data.lockedDraftIds,
-    articleId: findArticleId(data.toolInvocations),
+    sentDraftEdits: data.sentDraftEdits,
+    articles,
     sendMessage,
     resumeRun,
     stopGeneration,

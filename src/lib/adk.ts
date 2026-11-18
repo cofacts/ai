@@ -139,6 +139,7 @@ export type AllTools = {
       classification?: string
       text?: string
       references?: string
+      article_ids?: Array<string>
       claim_sources?: Array<{
         claim?: string
         source_url?: string

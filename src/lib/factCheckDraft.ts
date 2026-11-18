@@ -5,13 +5,17 @@
  * user may edit the LATEST successful draft and submit it to Cofacts under their own account.
  * Two rules tie the edits to the chat:
  *
- * 1. Only the latest draft is editable. A draft locks once the user's in-progress edits to it
- *    have been sent to the AI with a chat message, once a newer draft replaces it, and while
- *    the AI is answering (it may be about to propose a newer one).
+ * 1. Only the latest draft is editable, and only once the AI's turn has ended. A draft locks
+ *    while the AI is answering (it may be about to propose a newer one) and once a newer draft
+ *    replaces it. Nothing else locks it: if the user's edits went to the AI and no new draft
+ *    came back, the draft stays editable.
  * 2. When the user sends a chat message while holding unsent edits, the edited draft is
  *    attached to the message as one extra text part (`formatEditedDraftPart`), so the writer
- *    revises from the user's version. The part names the draft it was based on, which is how a
- *    reloaded session knows that draft is locked (`lockedDraftIds`).
+ *    revises from the user's version. The part names the draft it was based on; the drawer
+ *    shows that draft as the user last sent it (`sentDraftEdits`), even after reload.
+ *
+ * The writer names the article(s) each draft replies to (`article_ids`), so a similar article it
+ * looked up along the way is never the target (`draftTargetArticleIds`).
  *
  * This file is pure (no React, no storage) so the cache reducer and its tests can use it.
  */
@@ -130,23 +134,53 @@ export function parseEditedDraftPart(
   }
 }
 
-// ── Which Cofacts article the session is about ───────────────────
+// ── Which Cofacts article(s) a draft replies to ──────────────────
+
+export interface LookedUpArticle {
+  id: string
+  text: string
+}
 
 /**
- * The Cofacts article this chat is fact-checking: the last `get_single_cofacts_article` call
- * that found one. `toolInvocations` keeps insertion (= chronological) order. Null when the user
- * pasted a message that is not on Cofacts, in which case there is nothing to reply to.
+ * Every Cofacts article the chat looked up with `get_single_cofacts_article`, in the order they
+ * were first looked up (`toolInvocations` keeps insertion order).
  */
-export function findArticleId(
+export function lookedUpArticles(
   toolInvocations: Record<string, ToolInvocation>,
-): string | null {
-  let articleId: string | null = null
+): Array<LookedUpArticle> {
+  const articles = new Map<string, LookedUpArticle>()
   for (const inv of Object.values(toolInvocations)) {
     if (inv.name !== 'get_single_cofacts_article') continue
-    const id = inv.resp?.article?.id
-    if (id) articleId = id
+    const article = inv.resp?.article
+    if (article?.id && !articles.has(article.id))
+      articles.set(article.id, { id: article.id, text: article.text })
   }
-  return articleId
+  return [...articles.values()]
+}
+
+/**
+ * The articles a draft replies to: the writer's `article_ids`. A draft without them (proposed
+ * before the tool took `article_ids`, or with an empty list) falls back to the only article the
+ * chat looked up; with several, the target is unknown and the draft cannot be submitted.
+ */
+export function draftTargetArticleIds(
+  args: Extract<ToolInvocation, { name: 'draft_factcheck_response' }>['args'],
+  lookedUp: Array<LookedUpArticle>,
+): Array<string> {
+  const ids = (args.article_ids ?? []).filter(Boolean)
+  if (ids.length > 0) return [...new Set(ids)]
+  return lookedUp.length === 1 ? [lookedUp[0]!.id] : []
+}
+
+/** Why a draft with these targets cannot be submitted, or null when it can. */
+export function draftTargetProblem(
+  targetIds: Array<string>,
+  lookedUp: Array<LookedUpArticle>,
+): string | null {
+  if (targetIds.length > 0) return null
+  return lookedUp.length === 0
+    ? '這段對話沒有對應的 Cofacts 訊息，無法直接送出。請從 Cofacts 的訊息頁開始查核。'
+    : 'AI 沒有指定這份草稿要回應哪一則 Cofacts 訊息，無法送出。請請 AI 重新產生草稿。'
 }
 
 // ── The 「查核回應草稿」 button at the end of a turn ─────────────

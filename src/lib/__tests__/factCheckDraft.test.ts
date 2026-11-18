@@ -3,8 +3,10 @@ import { INITIAL_CHAT_STATE, applyEventToState } from '../chatCache'
 import {
   draftButtonsByMessage,
   draftSubmitProblem,
-  findArticleId,
+  draftTargetArticleIds,
+  draftTargetProblem,
   formatEditedDraftPart,
+  lookedUpArticles,
   parseEditedDraftPart,
 } from '../factCheckDraft'
 import type { AdkEvent, ChatMessage, ToolInvocation } from '../adk'
@@ -61,46 +63,91 @@ describe('draftSubmitProblem', () => {
   })
 })
 
-describe('findArticleId', () => {
-  test('uses the last lookup that found an article', () => {
+const lookup = (id: string, articleId: string, found = true) => ({
+  id,
+  name: 'get_single_cofacts_article',
+  args: { article_id: articleId },
+  resp: found
+    ? {
+        article_id: articleId,
+        article: { id: articleId, text: `訊息 ${articleId}` },
+      }
+    : { article_id: articleId, error: 'not found' },
+})
+
+describe('lookedUpArticles', () => {
+  test('lists found articles once, in first-lookup order', () => {
     const invocations = {
-      a: {
-        id: 'a',
-        name: 'get_single_cofacts_article',
-        args: { article_id: 'A1' },
-        resp: { article_id: 'A1', article: { id: 'A1' } },
-      },
-      b: {
-        id: 'b',
-        name: 'get_single_cofacts_article',
-        args: { article_id: 'missing' },
-        resp: { article_id: 'missing', error: 'not found' },
-      },
+      a: lookup('a', 'A1'),
+      b: lookup('b', 'missing', false),
+      c: lookup('c', 'B2'),
+      d: lookup('d', 'A1'),
     } as unknown as Record<string, ToolInvocation>
-    expect(findArticleId(invocations)).toBe('A1')
-    expect(findArticleId({})).toBeNull()
+    expect(lookedUpArticles(invocations)).toEqual([
+      { id: 'A1', text: '訊息 A1' },
+      { id: 'B2', text: '訊息 B2' },
+    ])
+    expect(lookedUpArticles({})).toEqual([])
   })
 })
 
-describe('applyEventToState / lockedDraftIds', () => {
+describe('draftTargetArticleIds', () => {
+  const one = [{ id: 'A1', text: '' }]
+  const two = [...one, { id: 'B2', text: '' }]
+
+  test("uses the writer's article_ids, deduplicated", () => {
+    expect(
+      draftTargetArticleIds({ article_ids: ['B2', 'B2', 'C3'] }, two),
+    ).toEqual(['B2', 'C3'])
+  })
+
+  test('without article_ids, falls back only to a single looked-up article', () => {
+    expect(draftTargetArticleIds({}, one)).toEqual(['A1'])
+    expect(draftTargetArticleIds({ article_ids: [] }, one)).toEqual(['A1'])
+    // A similar article the writer looked at must never become the target by guessing.
+    expect(draftTargetArticleIds({}, two)).toEqual([])
+    expect(draftTargetArticleIds({}, [])).toEqual([])
+  })
+
+  test('explains why there is no target', () => {
+    expect(draftTargetProblem(['A1'], one)).toBeNull()
+    expect(draftTargetProblem([], [])).toMatch(/沒有對應的 Cofacts 訊息/)
+    expect(draftTargetProblem([], two)).toMatch(/沒有指定/)
+  })
+})
+
+describe('applyEventToState / sentDraftEdits', () => {
   const userEvent = (text: string): AdkEvent =>
     ({
       author: 'user',
       content: { role: 'user', parts: [{ text }] },
     }) as unknown as AdkEvent
 
-  test('a user message carrying edits locks the draft it was based on', () => {
+  test('a user message carrying edits records them under the draft they were based on', () => {
     const state = applyEventToState(
       INITIAL_CHAT_STATE,
       userEvent(formatEditedDraftPart('adk-9', fields)),
     )
-    expect(state.lockedDraftIds).toEqual(['adk-9'])
+    expect(state.sentDraftEdits).toEqual({ 'adk-9': fields })
     expect(state.messages).toHaveLength(1)
   })
 
-  test('an ordinary user message locks nothing', () => {
+  test('the latest edits sent for a draft win', () => {
+    const newer = { ...fields, text: '再改一次' }
+    let state = applyEventToState(
+      INITIAL_CHAT_STATE,
+      userEvent(formatEditedDraftPart('adk-9', fields)),
+    )
+    state = applyEventToState(
+      state,
+      userEvent(formatEditedDraftPart('adk-9', newer)),
+    )
+    expect(state.sentDraftEdits['adk-9']).toEqual(newer)
+  })
+
+  test('an ordinary user message records nothing', () => {
     const state = applyEventToState(INITIAL_CHAT_STATE, userEvent('hi'))
-    expect(state.lockedDraftIds).toEqual([])
+    expect(state.sentDraftEdits).toEqual({})
   })
 })
 

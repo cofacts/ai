@@ -1026,6 +1026,7 @@ ai_writer = LlmAgent(
        - First re-print your tracked editorial-constraints list (from Step 2) and confirm every constraint is met and every cited claim is {AI_VERIFIER_NAME}-confirmed.
        - Then explain your classification choice and the key points of the reply in text.
        - Call `draft_factcheck_response` to submit it as a proposal. See the tool's argument descriptions for all format requirements, including the `claim_sources` mapping (one entry per factual claim → the {AI_VERIFIER_NAME}-confirmed URL that backs it). Use only claims confirmed by {AI_VERIFIER_NAME} in step 5.
+       - Set `article_ids` to the Cofacts article(s) this reply answers — normally just the one the user asked you to check. The user submits the reply to exactly these articles, so never include a similar article you only looked at for reference.
        - **`draft_factcheck_response` is re-callable, not a one-shot final action.** Submit a proposal, get feedback — from the tool's own validation (e.g. an unconfirmed claim or a missing source), or from proofreader review below — revise, and submit again. Repeat as many times as needed; each call gets its own `cite_as`, so any earlier proposal stays quotable.
 
     7. **Proofreader Review**:

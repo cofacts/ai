@@ -18,10 +18,10 @@ export interface ChatSessionState {
   toolInvocations: Record<string, ToolInvocation>
   lastReplyDraftId: string | null
   /**
-   * Drafts the user can no longer edit because their edits to it were sent to the AI with a
-   * chat message (see `factCheckDraft.ts`). Rebuilt from the messages on reload.
+   * The user's edits that were sent to the AI with a chat message, by the draft they were based
+   * on; the latest one wins (see `factCheckDraft.ts`). Rebuilt from the messages on reload.
    */
-  lockedDraftIds: Array<string>
+  sentDraftEdits: Record<string, DraftFields>
 }
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
@@ -30,18 +30,20 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   error: null,
   toolInvocations: {},
   lastReplyDraftId: null,
-  lockedDraftIds: [],
+  sentDraftEdits: {},
 }
 
-/** Adds the drafts that `parts` carries edits of to `locked`. */
-function lockDraftsEditedIn(
-  locked: Array<string>,
+/** Records the draft edits that `parts` carries, keeping the latest per draft. */
+function recordSentDraftEdits(
+  sent: Record<string, DraftFields>,
   parts: Array<AdkPart>,
-): Array<string> {
-  const ids = parts
-    .map((p) => (p.text ? parseEditedDraftPart(p.text)?.basedOn : undefined))
-    .filter((id): id is string => !!id && !locked.includes(id))
-  return ids.length > 0 ? [...locked, ...ids] : locked
+): Record<string, DraftFields> {
+  let next = sent
+  for (const p of parts) {
+    const edited = p.text ? parseEditedDraftPart(p.text) : null
+    if (edited) next = { ...next, [edited.basedOn]: edited.fields }
+  }
+  return next
 }
 
 export function chatCacheKey(): readonly ['chat']
@@ -258,7 +260,7 @@ export async function sendChatMessage(
     if (!prev) return INITIAL_CHAT_STATE
     return {
       ...prev,
-      lockedDraftIds: lockDraftsEditedIn(prev.lockedDraftIds, parts),
+      sentDraftEdits: recordSentDraftEdits(prev.sentDraftEdits, parts),
       messages: [
         ...prev.messages,
         {
@@ -366,7 +368,7 @@ export function applyEventToState(
       ...prev,
       toolInvocations,
       lastReplyDraftId,
-      lockedDraftIds: lockDraftsEditedIn(prev.lockedDraftIds, userParts),
+      sentDraftEdits: recordSentDraftEdits(prev.sentDraftEdits, userParts),
       messages: [
         ...prev.messages,
         {

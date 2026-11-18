@@ -160,11 +160,18 @@ is checked, the button 「用 OOO 的身份送出查核回應」 sends it with n
 article the chat looked up with `get_single_cofacts_article`. The drawer is the only place a reply
 is submitted from; the agent never submits.
 
-Only the latest draft is editable. If the user sends a chat message while holding edits, the edited
-draft is attached to the message as a `<user_edited_draft based_on="…">` text part and that draft
-locks; the writer's instruction tells it to revise from the user's version and propose again. Unsent
-edits live in the TanStack Query cache, mirrored to localStorage. The rules are in
-`src/lib/factCheckDraft.ts`. After each passed proposal, the writer ends with a one-sentence
+Only the latest draft is editable, and not while the AI is answering. If the user sends a chat
+message while holding edits, the edited draft is attached to the message as a
+`<user_edited_draft based_on="…">` text part; the writer's instruction tells it to revise from the
+user's version and propose again. The drawer shows each draft as the user last sent it, and a draft
+whose turn ended without a newer one stays editable. Unsent edits live in the TanStack Query cache,
+mirrored to localStorage. The rules are in `src/lib/factCheckDraft.ts`.
+
+The writer names the article(s) a reply answers in `draft_factcheck_response`'s `article_ids`;
+submitting creates the reply on the first and links it to the rest (`CreateArticleReply`). When the
+chat looked at more than one article, the drawer shows which one the reply is for. If the user has
+already replied to a target article (`articleReplies(selfOnly: true)`), the footer links to that reply
+and the button becomes a plain 「以 OOO 的身份再次送出新回應」. After each passed proposal, the writer ends with a one-sentence
 conclusion and the three steps of 「接下來需要你做的事」. The last agent message of every turn that
 proposed a passed draft carries a 「查核回應草稿」 button that opens that draft (decided in the
 frontend, `draftButtonsByMessage`), so the user never scrolls back to the tool call.

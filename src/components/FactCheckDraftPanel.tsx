@@ -1,13 +1,18 @@
 import { useId, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import type { AllTools } from '@/lib/adk'
-import type { DraftFields, ReplyCategory } from '@/lib/factCheckDraft'
+import type {
+  DraftFields,
+  LookedUpArticle,
+  ReplyCategory,
+} from '@/lib/factCheckDraft'
 import type { MaterialSymbol } from '@/components/icons/material-symbols'
 import {
   REPLY_CATEGORY_LABELS,
   draftFieldsEqual,
   draftFieldsFromArgs,
   draftSubmitProblem,
+  draftTargetProblem,
 } from '@/lib/factCheckDraft'
 import { useDraftEdit, useSubmittedReply } from '@/hooks/useDraftEdit'
 import { submitFactCheckReply } from '@/server/replies.functions'
@@ -21,7 +26,6 @@ import { cn } from '@/lib/utils'
 /** Why a draft is read-only; null when the user may edit and submit it. */
 export type DraftLockReason =
   | 'streaming' // the AI is answering and may propose a newer draft
-  | 'sent' // the user's edits were sent to the AI with a chat message
   | 'superseded' // a newer draft exists
   | 'rejected' // the proposal failed the tool's own validation
   | null
@@ -29,8 +33,16 @@ export type DraftLockReason =
 export interface DraftPanelContext {
   sessionId: string
   lockReason: DraftLockReason
-  /** The Cofacts article this chat is about; submitting needs it. */
-  articleId: string | null
+  /** The user's edits last sent to the AI for this draft; the draft shows them over the AI's. */
+  sentEdit: DraftFields | null
+  /** The Cofacts article(s) this draft replies to (`draftTargetArticleIds`). */
+  targetArticleIds: Array<string>
+  /** Every article the chat looked up, for showing the targets' text. */
+  articles: Array<LookedUpArticle>
+  /** The user's own reply ids per target article, for the 「再次送出」 warning. */
+  myReplies: Record<string, Array<string>>
+  /** Called after a reply is submitted. */
+  onSubmitted?: () => void
   /** Opens the latest draft, offered from a locked one. */
   onOpenLatestDraft?: () => void
   /** The logged-in user's name, shown on the submit button. */
@@ -78,7 +90,6 @@ const CATEGORIES: Array<{
 
 const LOCK_MESSAGES: Record<Exclude<DraftLockReason, null>, string> = {
   streaming: 'AI 正在回覆，回覆完成後才能編輯這份草稿。',
-  sent: '你的修改已經和訊息一起交給 AI 參考，這份草稿已鎖定。請在 AI 產出的最新草稿上繼續編輯。',
   superseded: '這是較早的草稿。只有最新的草稿可以編輯和送出。',
   rejected: 'AI 的這次提案沒有通過來源檢查，不能送出。請看最新的草稿。',
 }
@@ -155,6 +166,60 @@ function ClassificationPicker({
   )
 }
 
+/** The start of a looked-up article's text, or its id when the chat never looked it up. */
+function articleSnippet(id: string, articles: Array<LookedUpArticle>) {
+  const text = articles.find((a) => a.id === id)?.text.trim()
+  if (!text) return id
+  const chars = Array.from(text.replace(/\s+/g, ' '))
+  return chars.length > 20 ? `${chars.slice(0, 20).join('')}…` : text
+}
+
+/** Which Cofacts message(s) the reply answers, shown when the chat involves more than one. */
+function TargetArticles({
+  ids,
+  articles,
+}: {
+  ids: Array<string>
+  articles: Array<LookedUpArticle>
+}) {
+  const headingId = useId()
+  return (
+    <section aria-labelledby={headingId} className="space-y-spacing-8">
+      <h3
+        id={headingId}
+        className="text-type-caption font-bold text-text-tertiary"
+      >
+        這則回應要回覆的訊息
+      </h3>
+      {ids.length === 0 ? (
+        <p className="text-type-body-s text-text-secondary">（AI 沒有指定）</p>
+      ) : (
+        <ul className="space-y-spacing-4">
+          {ids.map((id) => (
+            <li key={id}>
+              <a
+                href={`https://cofacts.tw/article/${id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-spacing-4 rounded-radius-10 border border-border-subtle bg-surface-base p-spacing-8 text-type-body-s text-text-primary hover:bg-surface-selected"
+              >
+                <span className="min-w-0 flex-1 line-clamp-2">
+                  {articles.find((a) => a.id === id)?.text || id}
+                </span>
+                <MaterialIcon
+                  name="open_in_new"
+                  size={24}
+                  className="shrink-0 text-text-tertiary"
+                />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 /**
  * The fact-check reply draft in the right drawer. The latest draft is editable and can be
  * submitted to Cofacts under the user's own account; every other draft is read-only and says
@@ -169,8 +234,19 @@ export function FactCheckDraftPanel({
   args: AllTools['draft_factcheck_response']['args']
   context: DraftPanelContext
 }) {
-  const { sessionId, articleId, onOpenLatestDraft, userName } = context
+  const {
+    sessionId,
+    sentEdit,
+    targetArticleIds,
+    articles,
+    myReplies,
+    onSubmitted,
+    onOpenLatestDraft,
+    userName,
+  } = context
   const original = draftFieldsFromArgs(args)
+  // What the draft holds before any unsent edits: the version last sent to the AI, if any.
+  const base = sentEdit ?? original
   const [edit, setEdit] = useDraftEdit(sessionId, toolCallId)
   const [submittedReplyId, setSubmitted] = useSubmittedReply(
     sessionId,
@@ -178,23 +254,27 @@ export function FactCheckDraftPanel({
   )
   const lockReason = context.lockReason
   const editable = lockReason === null && !submittedReplyId
-  // A locked draft shows what the AI proposed; the user's sent edits are in the chat message.
-  const fields: DraftFields = editable && edit ? edit : original
-  const isEdited = editable && !!edit && !draftFieldsEqual(edit, original)
+  // A submitted draft keeps showing what was submitted; any other locked one, what was sent.
+  const fields: DraftFields =
+    (editable || submittedReplyId) && edit ? edit : base
+  const isEdited = !draftFieldsEqual(fields, original)
 
   const update = (patch: Partial<DraftFields>) => {
     const next = { ...fields, ...patch }
-    setEdit(draftFieldsEqual(next, original) ? null : next)
+    setEdit(draftFieldsEqual(next, base) ? null : next)
   }
+  const restoreAiVersion = () =>
+    setEdit(draftFieldsEqual(original, base) ? null : original)
 
   // Not reset when the user edits after checking; see SubmitReplyFooter.
   const [reviewed, setReviewed] = useState(false)
   const submit = useMutation({
     mutationFn: () => {
-      if (!articleId || !fields.classification) throw new Error('無法送出')
+      if (targetArticleIds.length === 0 || !fields.classification)
+        throw new Error('無法送出')
       return submitFactCheckReply({
         data: {
-          articleId,
+          articleIds: targetArticleIds,
           classification: fields.classification,
           text: fields.text,
           references: fields.references,
@@ -202,8 +282,10 @@ export function FactCheckDraftPanel({
       })
     },
     onSuccess: ({ replyId }) => {
+      // Keep the edit: it is what was submitted, and the panel keeps showing it.
+      if (!edit) setEdit(fields)
       setSubmitted(replyId)
-      setEdit(null)
+      onSubmitted?.()
     },
   })
   const submitError =
@@ -212,10 +294,15 @@ export function FactCheckDraftPanel({
         ? submit.error.message
         : '送出失敗'
       : null
+  const unlinkedArticleIds = submit.data?.unlinkedArticleIds ?? []
 
-  const problem = !articleId
-    ? '這段對話沒有對應的 Cofacts 訊息，無法直接送出。請從 Cofacts 的訊息頁開始查核。'
-    : draftSubmitProblem(fields)
+  const problem =
+    draftTargetProblem(targetArticleIds, articles) ?? draftSubmitProblem(fields)
+  const existingReplies = targetArticleIds.flatMap((articleId) =>
+    (myReplies[articleId] ?? []).map((replyId) => ({ articleId, replyId })),
+  )
+  // Say which message the reply goes to whenever the chat involves more than one.
+  const showTargets = articles.length > 1 || targetArticleIds.length > 1
 
   const textId = useId()
   const referencesId = useId()
@@ -235,16 +322,28 @@ export function FactCheckDraftPanel({
             />
             <div className="space-y-spacing-4">
               <p className="font-bold">已用你的帳號送出到 Cofacts</p>
-              {articleId && (
+              {targetArticleIds.map((articleId) => (
                 <a
+                  key={articleId}
                   href={`https://cofacts.tw/article/${articleId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-spacing-4 text-text-link underline"
+                  className="flex items-center gap-spacing-4 text-text-link underline"
                 >
                   在 Cofacts 查看
+                  {targetArticleIds.length > 1 &&
+                    `（${articleSnippet(articleId, articles)}）`}
                   <MaterialIcon name="open_in_new" size={24} />
                 </a>
+              ))}
+              {unlinkedArticleIds.length > 0 && (
+                <p role="alert" className="text-status-incorrect">
+                  這則回應沒能連到其中 {unlinkedArticleIds.length} 則訊息，請到
+                  Cofacts 手動加上：
+                  {unlinkedArticleIds
+                    .map((id) => articleSnippet(id, articles))
+                    .join('、')}
+                </p>
               )}
             </div>
           </div>
@@ -266,6 +365,10 @@ export function FactCheckDraftPanel({
               </div>
             </div>
           )
+        )}
+
+        {showTargets && (
+          <TargetArticles ids={targetArticleIds} articles={articles} />
         )}
 
         <ClassificationPicker
@@ -342,7 +445,7 @@ export function FactCheckDraftPanel({
           )}
         </div>
 
-        {isEdited && (
+        {editable && isEdited && (
           <div className="flex flex-wrap items-center gap-spacing-8 text-type-caption text-text-tertiary">
             <span>
               修改會保留在這裡；如果繼續和 AI 對話，修改會一起交給 AI 參考。
@@ -351,7 +454,7 @@ export function FactCheckDraftPanel({
               variant="outline"
               size="sm"
               iconStart="undo"
-              onClick={() => setEdit(null)}
+              onClick={restoreAiVersion}
             >
               還原成 AI 的版本
             </Button>
@@ -363,6 +466,7 @@ export function FactCheckDraftPanel({
       {editable && (
         <SubmitReplyFooter
           userName={userName}
+          existingReplies={existingReplies}
           checked={reviewed}
           onCheckedChange={setReviewed}
           problem={problem}
