@@ -127,11 +127,26 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
   .inputValidator((input: UpdateSessionInput) => input)
   .handler(async ({ data: { sessionId, title } }) => {
     const userId = await resolveAdkUserIdOrThrow()
-    // Same StaleSessionError hazard as markSessionOpened; a rename can wait.
-    if (await isRunGoing(userId, sessionId)) {
-      throw new Error(SESSION_BUSY_MESSAGE)
+    const stateDelta = { [SESSION_TITLE_KEY]: title }
+
+    // Same StaleSessionError hazard as markSessionOpened. ADK's /state
+    // writes only when no run holds the session, and holds the session while
+    // it writes so that no run can start in between.
+    const res = await fetch(adkSessionUrl(userId, sessionId, '/state'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stateDelta }),
+    })
+    if (res.ok) {
+      const { deferred } = (await res.json()) as { deferred: boolean }
+      if (deferred) throw new Error(SESSION_BUSY_MESSAGE)
+      return { ok: true }
     }
-    const { data, error } = await adkClient.PATCH(
+    if (!(await isRunsDisabled(res))) handleAdkResponseError(res)
+
+    // Background runs off: runs are tied to an open stream, and the sidebar
+    // hides renaming while one streams.
+    const { error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
         params: {
@@ -141,13 +156,11 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
             session_id: sessionId,
           },
         },
-        body: {
-          stateDelta: { [SESSION_TITLE_KEY]: title },
-        },
+        body: { stateDelta },
       },
     )
     if (error) handleAdkError(error)
-    return data
+    return { ok: true }
   })
 
 /**
@@ -241,11 +254,3 @@ function adkSessionUrl(userId: string, sessionId: string, suffix: string) {
 
 /** Thrown by updateSessionTitle while a run holds the session. */
 export const SESSION_BUSY_MESSAGE = '對話還在執行中，請等回覆完成後再改名。'
-
-async function isRunGoing(userId: string, sessionId: string) {
-  const res = await fetch(adkSessionUrl(userId, sessionId, '/runs/status'))
-  if (res.ok) return ((await res.json()) as { running: boolean }).running
-  // Background runs off: no run can hold the session. Any other failure:
-  // assume one might, and let the rename wait.
-  return !(await isRunsDisabled(res))
-}

@@ -9,6 +9,7 @@ import {
   isTurnInterrupted,
   rebuildChatState,
   sendChatMessage,
+  stopRun,
   syncChatSession,
   watchRun,
 } from '../chatCache'
@@ -49,8 +50,11 @@ const toolCall = (inv: string) =>
     },
   }) as unknown as AdkEvent
 
-function sse(events: Array<AdkEvent>) {
-  const body = events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')
+/** An SSE body; `end` adds the server's end frame (the run is over). */
+function sse(events: Array<AdkEvent>, end?: string) {
+  const body =
+    events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') +
+    (end ? `event: end\ndata: ${end}\n\n` : '')
   return new Response(body, {
     status: 200,
     headers: { 'Content-Type': 'text/event-stream' },
@@ -152,13 +156,21 @@ describe('watching and starting runs', () => {
       rebuildChatState(INITIAL_CHAT_STATE, [ev('cur', 'user', 'q')], null),
     )
     fetchMock.mockResolvedValueOnce(
-      sse([
-        ev('cur', 'user', 'q'),
-        ev('cur', 'model', '一', { partial: true }),
-        ev('cur', 'model', '二', { partial: true }),
-        ev('cur', 'model', '一二'),
-      ]),
+      sse(
+        [
+          ev('cur', 'user', 'q'),
+          ev('cur', 'model', '一', { partial: true }),
+          ev('cur', 'model', '二', { partial: true }),
+          ev('cur', 'model', '一二'),
+        ],
+        'completed',
+      ),
     )
+    // After the end frame the stored session is the record.
+    getSession.mockResolvedValueOnce({
+      events: [ev('cur', 'user', 'q'), ev('cur', 'model', '一二')],
+      state: {},
+    })
     await watchRun(qc, 's')
 
     const s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
@@ -167,6 +179,7 @@ describe('watching and starting runs', () => {
     expect(s?.live).toBeNull()
     expect(s?.historyEvents.map((e) => e.invocationId)).toEqual(['cur', 'cur'])
     expect(fetchMock).toHaveBeenCalledTimes(1) // no status check needed
+    expect(getSession).toHaveBeenCalledTimes(1)
     expect(abortControllers.has('s')).toBe(false)
   })
 
@@ -180,13 +193,20 @@ describe('watching and starting runs', () => {
       )
       .mockResolvedValueOnce(json({ running: true, invocationId: 'cur' }))
       .mockResolvedValueOnce(
-        sse([
-          ev('cur', 'user', 'q'),
-          ev('cur', 'model', '一', { partial: true }),
-          ev('cur', 'model', '二', { partial: true }),
-          ev('cur', 'model', '一二'),
-        ]),
+        sse(
+          [
+            ev('cur', 'user', 'q'),
+            ev('cur', 'model', '一', { partial: true }),
+            ev('cur', 'model', '二', { partial: true }),
+            ev('cur', 'model', '一二'),
+          ],
+          'completed',
+        ),
       )
+    getSession.mockResolvedValueOnce({
+      events: [ev('cur', 'user', 'q'), ev('cur', 'model', '一二')],
+      state: {},
+    })
     await watchRun(qc, 's')
     const s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
     expect(texts(s)).toEqual(['q', '一二']) // replayed, not duplicated
@@ -214,13 +234,19 @@ describe('watching and starting runs', () => {
   })
 
   test('send: 202 then watch; the optimistic message is replaced', async () => {
-    getSession.mockResolvedValue({ events: [], state: {} })
+    getSession.mockResolvedValue({
+      events: [ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')],
+      state: {},
+    })
     fetchMock.mockImplementation((url: string) => {
       if (url === '/api/runs/s/start')
         return Promise.resolve(json({ invocationId: 'cur' }, 202))
       if (url === '/api/runs/s/stream')
         return Promise.resolve(
-          sse([ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')]),
+          sse(
+            [ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')],
+            'completed',
+          ),
         )
       return Promise.reject(new Error(url))
     })
@@ -243,9 +269,16 @@ describe('watching and starting runs', () => {
         return Promise.resolve(json({ invocationId: 'other' }, 409))
       if (url === '/api/runs/s/stream')
         return Promise.resolve(
-          sse([ev('other', 'user', 'theirs'), ev('other', 'model', 'done')]),
+          sse(
+            [ev('other', 'user', 'theirs'), ev('other', 'model', 'done')],
+            'completed',
+          ),
         )
       return Promise.reject(new Error(url))
+    })
+    getSession.mockResolvedValue({
+      events: [ev('other', 'user', 'theirs'), ev('other', 'model', 'done')],
+      state: {},
     })
     expect(await sendChatMessage(qc, 's', 'mine')).toBe(false)
     await vi.waitFor(() =>
@@ -263,7 +296,10 @@ describe('watching and starting runs', () => {
     // before the start request has taken the lock.
     let releaseStart!: () => void
     const startGate = new Promise<void>((r) => (releaseStart = r))
-    getSession.mockResolvedValue({ events: [], state: {} })
+    getSession.mockResolvedValue({
+      events: [ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')],
+      state: {},
+    })
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/api/runs/s/start') {
         await startGate
@@ -272,7 +308,10 @@ describe('watching and starting runs', () => {
       if (url === '/api/runs/s/status')
         return json({ running: false, invocationId: null })
       if (url === '/api/runs/s/stream')
-        return sse([ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')])
+        return sse(
+          [ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')],
+          'completed',
+        )
       throw new Error(url)
     })
     const sent = sendChatMessage(qc, 's', 'hello')
@@ -321,5 +360,57 @@ describe('watching and starting runs', () => {
       '/api/runs/s/start',
       '/api/run-sse',
     ])
+  })
+  test('a drop right after a text message is not taken as the end', async () => {
+    // The writer often says something, then calls a tool. A connection
+    // dropping between the two must not end the turn on screen.
+    fetchMock
+      .mockResolvedValueOnce(
+        sse([ev('cur', 'user', 'q'), ev('cur', 'model', '我先查一下')]),
+      )
+      .mockResolvedValueOnce(json({ running: true, invocationId: 'cur' }))
+      .mockResolvedValueOnce(
+        sse(
+          [
+            ev('cur', 'user', 'q'),
+            ev('cur', 'model', '我先查一下'),
+            toolCall('cur'),
+          ],
+          'completed',
+        ),
+      )
+    getSession.mockResolvedValueOnce({ events: [], state: {} })
+    await watchRun(qc, 's')
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
+      '/api/runs/s/stream',
+      '/api/runs/s/status',
+      '/api/runs/s/stream',
+    ])
+  })
+
+  test('stop pressed while the start request is in flight cancels the run', async () => {
+    let releaseStart!: () => void
+    const startGate = new Promise<void>((r) => (releaseStart = r))
+    getSession.mockResolvedValue({ events: [], state: {} })
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/runs/s/start') {
+        await startGate
+        return json({ invocationId: 'cur' }, 202)
+      }
+      if (url === '/api/runs/s/cancel') return json({}, 202)
+      if (url === '/api/runs/s/stream')
+        return sse([ev('cur', 'user', 'hello')], 'cancelled')
+      throw new Error(url)
+    })
+    const sent = sendChatMessage(qc, 's', 'hello')
+    await stopRun(qc, 's') // no lock yet: remembered, not sent
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(['/api/runs/s/start'])
+    releaseStart()
+    await sent
+    await vi.waitFor(() =>
+      expect(fetchMock.mock.calls.map((c) => c[0])).toContain(
+        '/api/runs/s/cancel',
+      ),
+    )
   })
 })

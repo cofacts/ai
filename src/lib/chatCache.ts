@@ -73,6 +73,8 @@ const legacyStreams = new Set<string>()
  * decide the session is idle meanwhile.
  */
 const pendingSends = new Set<string>()
+/** Stop pressed during a send in flight; carried out once the run starts. */
+const pendingStops = new Set<string>()
 
 // Messages are only ever appended or have their last entry updated, so a
 // message's position is a stable id: recomputing the screen from events
@@ -118,6 +120,8 @@ export function fileToInlineDataPart(file: File): Promise<AdkPart> {
 async function readSse(
   body: ReadableStream<Uint8Array>,
   onEvent: (event: AdkEvent) => void,
+  /** `event: end` frame from /api/runs/:id/stream, with the run's outcome. */
+  onEnd?: (outcome: string) => void,
 ) {
   const reader = body.getReader()
   const decoder = new TextDecoder()
@@ -133,8 +137,14 @@ async function readSse(
 
       for (const part of parts) {
         let data = ''
+        let type = ''
         for (const line of part.split('\n')) {
           if (line.startsWith('data: ')) data += line.slice(6)
+          else if (line.startsWith('event: ')) type = line.slice(7)
+        }
+        if (type === 'end') {
+          onEnd?.(data)
+          continue
         }
         if (!data) continue
         let event: AdkEvent
@@ -285,6 +295,7 @@ async function trackSend<T>(sessionId: string, send: () => Promise<T>) {
     return await send()
   } finally {
     pendingSends.delete(sessionId)
+    pendingStops.delete(sessionId)
   }
 }
 
@@ -348,6 +359,14 @@ async function sendParts(
   }
 
   if (await isRunsDisabled(response)) {
+    if (pendingStops.has(sessionId)) {
+      // Stopped before anything ran: just don't start.
+      setChat(queryClient, sessionId, (prev) => ({
+        ...rebuildChatState(prev, prev.historyEvents, null),
+        isStreaming: false,
+      }))
+      return true
+    }
     // Background runs are off (no Redis): the old stream, tied to this tab.
     void startChatStream({
       queryClient,
@@ -392,6 +411,7 @@ async function sendParts(
   // Refetch the history too: another window may have added turns since this
   // one last loaded it.
   void watchRun(queryClient, sessionId, { refreshHistory: true })
+  if (pendingStops.has(sessionId)) void requestCancel(sessionId)
   return true
 }
 
@@ -477,7 +497,7 @@ export async function watchRun(
     for (;;) {
       // Written from the readSse callback, so not plain `let`s that
       // TypeScript would narrow to their initial values after the await.
-      const seen = { first: true, last: null as AdkEvent | null }
+      const seen = { first: true, last: null as AdkEvent | null, end: '' }
       try {
         const response = await fetch(
           `/api/runs/${encodeURIComponent(sessionId)}/stream`,
@@ -487,40 +507,49 @@ export async function watchRun(
         if (!response.ok || !response.body) {
           throw new Error(`Stream request failed: HTTP ${response.status}`)
         }
-        await readSse(response.body, (event) => {
-          const first = seen.first
-          seen.first = false
-          seen.last = event
-          setChat(queryClient, sessionId, (prev) => {
-            if (first) {
-              // The replay starts over from the run's first event.
-              return rebuildChatState(prev, prev.historyEvents, {
-                invocationId: event.invocationId,
-                events: [event],
-              })
-            }
-            return {
-              ...applyEventToState(prev, event),
-              live: {
-                invocationId: event.invocationId,
-                events: [...(prev.live?.events ?? []), event],
-              },
-            }
-          })
-        })
+        await readSse(
+          response.body,
+          (event) => {
+            const first = seen.first
+            seen.first = false
+            seen.last = event
+            setChat(queryClient, sessionId, (prev) => {
+              if (first) {
+                // The replay starts over from the run's first event.
+                return rebuildChatState(prev, prev.historyEvents, {
+                  invocationId: event.invocationId,
+                  events: [event],
+                })
+              }
+              return {
+                ...applyEventToState(prev, event),
+                live: {
+                  invocationId: event.invocationId,
+                  events: [...(prev.live?.events ?? []), event],
+                },
+              }
+            })
+          },
+          (outcome) => {
+            seen.end = outcome
+          },
+        )
       } catch (err) {
         if (controller.signal.aborted) return
         console.warn(`Run stream for ${sessionId} dropped:`, err)
       }
       if (!isCurrent()) return
 
-      const last = seen.last
-      if (last && isRunEndEvent(last)) {
-        finishRun(queryClient, sessionId)
+      if (seen.end) {
+        // The server says the run is over. Its stored events are the
+        // record: they include anything the stream missed (a failed batch
+        // write, entries trimmed by MAXLEN).
+        await reloadHistory(queryClient, sessionId)
         return
       }
-      // Closed without the end in sight: ended just now, the owner died, or
-      // the connection dropped.
+      const last = seen.last
+      // Closed without an end frame: the owner died, or the connection
+      // dropped. The status decides.
       const status = await fetchRunStatus(sessionId).catch(() => null)
       if (!isCurrent()) return
       if (status?.running && reattaches < MAX_REATTACHES) {
@@ -545,24 +574,6 @@ export async function watchRun(
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
     }
   }
-}
-
-/** The watched run ended normally: its events join the history. */
-function finishRun(queryClient: QueryClient, sessionId: string) {
-  setChat(queryClient, sessionId, (prev) => {
-    const liveId = prev.live?.invocationId
-    const historyEvents = [
-      ...prev.historyEvents.filter((e) => !liveId || e.invocationId !== liveId),
-      ...completeEvents(prev.live?.events),
-    ]
-    return {
-      ...prev,
-      historyEvents,
-      live: null,
-      lastEventTime: undefined,
-      interrupted: isTurnInterrupted(historyEvents),
-    }
-  })
 }
 
 async function reloadHistory(queryClient: QueryClient, sessionId: string) {
@@ -633,14 +644,23 @@ export async function stopRun(queryClient: QueryClient, sessionId: string) {
     abortControllers.get(sessionId)?.abort()
     return
   }
-  const res = await fetch(`/api/runs/${encodeURIComponent(sessionId)}/cancel`, {
-    method: 'POST',
-  })
+  if (pendingSends.has(sessionId)) {
+    // The run has no lock yet, so a cancel now would find nothing.
+    pendingStops.add(sessionId)
+    return
+  }
+  const res = await requestCancel(sessionId)
   // On success the run's viewers get the stopped message and the stream
   // closes. 404: it had already ended.
   if (res.status === 404 && !abortControllers.has(sessionId)) {
     await reloadHistory(queryClient, sessionId)
   }
+}
+
+function requestCancel(sessionId: string) {
+  return fetch(`/api/runs/${encodeURIComponent(sessionId)}/cancel`, {
+    method: 'POST',
+  })
 }
 
 function completeEvents(events: Array<AdkEvent> | undefined) {

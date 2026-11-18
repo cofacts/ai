@@ -420,3 +420,77 @@ def test_serialize_event_splits_artifact_delta_like_run_sse():
         "f.png": 0
     }
     assert first["invocationId"] == "e"  # camelCase, like /run_sse
+
+
+async def test_stream_ends_with_the_outcome(redis, sessions):
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
+    await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    chunks = [c async for c in bus.stream(USER, "s1")]
+    assert chunks[-1] == b"event: end\ndata: completed\n\n"
+
+
+async def test_state_write_holds_off_a_run_start(redis, sessions, monkeypatch):
+    """No run can start between write_state()'s check and its write."""
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
+    gate = asyncio.Event()
+    real_append = rb.append_state_delta
+
+    async def slow_append(*a, **kw):
+        await gate.wait()
+        return await real_append(*a, **kw)
+
+    monkeypatch.setattr(rb, "append_state_delta", slow_append)
+    write = asyncio.create_task(bus.write_state(USER, "s1", {"title": "x"}))
+    await asyncio.sleep(0.05)
+    assert (await bus.status(USER, "s1"))["running"] is False  # not a run
+    start = asyncio.create_task(
+        bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    )
+    await asyncio.sleep(0.1)
+    assert not start.done()  # waits for the write
+    gate.set()
+    assert await write is False
+    assert (await start).started
+    await wait_idle(bus)
+    session = await sessions.get_session(app_name=APP, user_id=USER, session_id="s1")
+    assert session.state["title"] == "x"
+
+
+async def test_state_write_is_deferred_while_running(redis, sessions):
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer(delay=0.05)))
+    await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    assert await bus.write_state(USER, "s1", {"title": "x"}) is True
+    await wait_idle(bus)
+
+
+async def test_start_racing_shutdown_releases_the_lock(redis, sessions):
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
+    real_set = redis.set
+
+    async def set_then_shutdown(*a, **kw):
+        ok = await real_set(*a, **kw)
+        await bus.shutdown()  # SIGTERM lands while start() holds the lock
+        return ok
+
+    redis.set = set_then_shutdown
+    with pytest.raises(rb.RunBusUnavailable):
+        await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    redis.set = real_set
+    assert await redis.get(rb.lock_key(USER, "s1")) is None
+    assert bus.running_count() == 0
+
+
+async def test_lock_released_even_if_done_marker_fails(redis, sessions):
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
+    real_xadd = redis.xadd
+
+    async def failing_xadd(key, fields, **kw):
+        if fields.get("type") == "done":
+            raise ConnectionError("redis blip")
+        return await real_xadd(key, fields, **kw)
+
+    redis.xadd = failing_xadd
+    await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    await wait_idle(bus)
+    redis.xadd = real_xadd
+    assert await redis.get(rb.lock_key(USER, "s1")) is None

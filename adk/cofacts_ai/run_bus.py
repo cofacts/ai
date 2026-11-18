@@ -71,6 +71,9 @@ STREAM_TTL_SECONDS = 60
 STREAM_TTL_AFTER_DONE_SECONDS = 30
 STREAM_MAXLEN = 20_000
 CANCEL_TTL_SECONDS = 600
+# A session-state write (lastOpenedAt, a rename) holds the lock this long at
+# most, so a run can't start between the "no run" check and the write.
+STATE_WRITE_LOCK_MS = 5_000
 CANCEL_POLL_SECONDS = 1.0
 WRITE_BATCH_SECONDS = 0.05
 # A viewer waits this long on XREAD before sending a heartbeat and checking
@@ -94,6 +97,11 @@ SESSION_LAST_EVENT_TIME_KEY = "lastEventTime"
 SESSION_LAST_OPENED_KEY = "lastOpenedAt"
 
 HEARTBEAT = b": heartbeat\n\n"
+
+
+def end_frame(outcome: str) -> bytes:
+    """Tells viewers the run is over: completed, cancelled or interrupted."""
+    return f"event: end\ndata: {outcome}\n\n".encode()
 
 
 def run_timeout_seconds() -> float:
@@ -358,6 +366,13 @@ class RunBus:
         except ValueError:
             return None
 
+    async def read_run_lock(
+        self, user_id: str, session_id: str
+    ) -> dict[str, Any] | None:
+        """The lock if a run holds it; None when free or held by a state write."""
+        lock = await self.read_lock(user_id, session_id)
+        return lock if lock is not None and "runId" in lock else None
+
     async def _lock_held(self, user_id: str, session_id: str, run_id: str) -> bool:
         lock = await self.read_lock(user_id, session_id)
         return lock is not None and lock.get("runId") == run_id
@@ -382,12 +397,22 @@ class RunBus:
 
         run_id = uuid.uuid4().hex
         lock_value = json.dumps({"runId": run_id, "owner": self.owner_id})
-        acquired = await self.redis.set(
-            lock_key(user_id, session_id), lock_value, nx=True, px=LOCK_TTL_MS
-        )
-        if not acquired:
+        key = lock_key(user_id, session_id)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + STATE_WRITE_LOCK_MS / 1000
+        while not await self.redis.set(key, lock_value, nx=True, px=LOCK_TTL_MS):
             lock = await self.read_lock(user_id, session_id)
-            return StartResult(False, (lock or {}).get("invocationId"))
+            if lock is not None and "runId" in lock:
+                return StartResult(False, lock.get("invocationId"))
+            # A state write holds the session for a moment; wait it out.
+            if loop.time() > deadline:
+                return StartResult(False, None)
+            await asyncio.sleep(0.05)
+
+        if self._closing:
+            # shutdown() began while we took the lock; it won't see this run.
+            await self.redis.eval(_RELEASE_LOCK, 1, key, lock_value)  # type: ignore[misc]
+            raise RunBusUnavailable("shutting down")
 
         # The stream key is per session; drop whatever a previous run left.
         await self.redis.delete(stream_key(user_id, session_id))
@@ -498,6 +523,10 @@ class RunBus:
                     approximate=True,
                 )
                 await self.redis.expire(key, STREAM_TTL_AFTER_DONE_SECONDS)
+            except Exception:
+                logger.exception("Writing the end of run %s failed", run.run_id)
+            # Separately: a lock left behind makes the session look busy.
+            try:
                 await self.redis.eval(  # type: ignore[misc]
                     _RELEASE_LOCK,
                     1,
@@ -584,7 +613,7 @@ class RunBus:
     # ---- viewers --------------------------------------------------------
 
     async def status(self, user_id: str, session_id: str) -> dict[str, Any]:
-        lock = await self.read_lock(user_id, session_id)
+        lock = await self.read_run_lock(user_id, session_id)
         if lock is None:
             return {"running": False, "invocationId": None}
         return {"running": True, "invocationId": lock.get("invocationId")}
@@ -595,7 +624,7 @@ class RunBus:
         Ends (the connection closes) when the run ends, or right away when
         there is no run.
         """
-        lock = await self.read_lock(user_id, session_id)
+        lock = await self.read_run_lock(user_id, session_id)
         if lock is None:
             return
         run_id = str(lock.get("runId"))
@@ -604,8 +633,10 @@ class RunBus:
         raw = cast(list[tuple[Any, dict[Any, Any]]], await self.redis.xrange(key))
         entries = [_entry(i, f) for i, f in raw]
         mine = [e for e in entries if e.run_id == run_id]
-        if any(e.type == "done" for e in mine):
-            return  # just ended; the history has it all
+        done = next((e for e in mine if e.type == "done"), None)
+        if done is not None:
+            yield end_frame(done.data)  # just ended; the history has it all
+            return
         backlog = [sse_frame(e.data) for e in compact_backlog(mine)]
         if backlog:
             yield b"".join(backlog)
@@ -628,6 +659,7 @@ class RunBus:
                     if e.run_id != run_id:
                         continue
                     if e.type == "done":
+                        yield end_frame(e.data)
                         return
                     yield sse_frame(e.data)
 
@@ -637,7 +669,7 @@ class RunBus:
         if run is not None:
             run.stop("cancelled")
             return True
-        lock = await self.read_lock(user_id, session_id)
+        lock = await self.read_run_lock(user_id, session_id)
         if lock is None:
             return False
         # Another process owns it; it checks this key every second.
@@ -646,23 +678,38 @@ class RunBus:
         )
         return True
 
-    async def mark_opened(self, user_id: str, session_id: str) -> bool:
-        """Records that the user opened the session, unless a run is going.
+    async def write_state(
+        self, user_id: str, session_id: str, state_delta: dict[str, Any]
+    ) -> bool:
+        """Writes session state, unless a run is going. Returns True if deferred.
 
         Any write to the session while a run is going makes the run's next
-        write fail with StaleSessionError, killing it. Returns True when the
-        write was deferred; the client calls again once the run ends.
+        write fail with StaleSessionError, killing it. The write holds the
+        session lock while it happens, so a run can't start in between
+        (start() waits for it). Callers retry a deferred write once the run
+        ends.
         """
-        if await self.read_lock(user_id, session_id) is not None:
+        key = lock_key(user_id, session_id)
+        token = json.dumps({"stateWrite": uuid.uuid4().hex})
+        if not await self.redis.set(key, token, nx=True, px=STATE_WRITE_LOCK_MS):
             return True
-        await append_state_delta(
-            self.session_service,
-            app_name=self.app_name,
-            user_id=user_id,
-            session_id=session_id,
-            state_delta={SESSION_LAST_OPENED_KEY: time.time()},
-        )
+        try:
+            await append_state_delta(
+                self.session_service,
+                app_name=self.app_name,
+                user_id=user_id,
+                session_id=session_id,
+                state_delta=state_delta,
+            )
+        finally:
+            await self.redis.eval(_RELEASE_LOCK, 1, key, token)  # type: ignore[misc]
         return False
+
+    async def mark_opened(self, user_id: str, session_id: str) -> bool:
+        """Records lastOpenedAt; see write_state(). True if deferred."""
+        return await self.write_state(
+            user_id, session_id, {SESSION_LAST_OPENED_KEY: time.time()}
+        )
 
     # ---- shutdown -------------------------------------------------------
 

@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Any
 
 import uvicorn
 from dotenv import load_dotenv
@@ -221,8 +222,38 @@ async def session_opened(app_name: str, user_id: str, session_id: str):
     return OpenedResult(deferred=deferred)
 
 
+class StateWriteRequest(_CamelModel):
+    state_delta: dict[str, Any]
+
+
+@app.post(
+    _SESSION_PATH + "/state",
+    response_model=OpenedResult,
+    response_model_by_alias=True,
+)
+async def write_session_state(
+    app_name: str, user_id: str, session_id: str, req: StateWriteRequest
+):
+    """ADK's PATCH /sessions/{id}, but never while a run is going.
+
+    deferred: true means nothing was written because a run holds the
+    session (the write would kill it).
+    """
+    try:
+        deferred = await _bus(app_name).write_state(
+            user_id, session_id, req.state_delta
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return OpenedResult(deferred=deferred)
+
+
 class _Server(uvicorn.Server):
     """Interrupts background runs as soon as SIGTERM arrives.
+
+    Used by `python main.py` (the Docker image). `pnpm dev:agent` runs plain
+    uvicorn with --timeout-graceful-shutdown instead: on a reload it cuts
+    the open streams after a few seconds, then the lifespan stops the runs.
 
     uvicorn waits for open connections to close before running the
     lifespan shutdown, and viewers' streams stay open until their run ends.

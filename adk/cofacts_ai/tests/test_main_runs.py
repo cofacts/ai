@@ -65,7 +65,8 @@ async def test_start_status_stream_opened(client):
 
     r = await c.get(BASE + "/runs/stream")
     assert r.headers["content-type"].startswith("text/event-stream")
-    assert r.text.count("data: ") == 5
+    assert r.text.count("\ndata: {") + r.text.startswith("data: {") == 5
+    assert r.text.endswith("event: end\ndata: completed\n\n")
 
     while bus.running_count():
         await asyncio.sleep(0.01)
