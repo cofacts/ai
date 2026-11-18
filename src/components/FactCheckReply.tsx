@@ -12,7 +12,7 @@ import type { CofactsUser } from '@/lib/auth'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { Button } from '@/components/ui/button'
 import { splitLinks } from '@/lib/linkify'
-import { formatTimeAgo } from '@/lib/timeAgo'
+import { formatDate, formatDateTime } from '@/lib/timeAgo'
 import { cn } from '@/lib/utils'
 
 export type FactCheckReplyProps = {
@@ -31,10 +31,13 @@ export type FactCheckReplyProps = {
   }
   /** The reply text. Collapsed to a few lines behind 閱讀全文 when it's long. */
   text: string
-  /** When the reply was written (rumors-api `createdAt`, ISO string). 「回應於 N 天前」. */
+  /**
+   * When the reply was written (rumors-api `createdAt`, ISO string). 「回應於 3 小時前」 within
+   * 48 hours, the date after that (「回應於 11月4日」), and the full time on hover.
+   */
   createdAt: string | Date
   /**
-   * The time 「N 天前」 counts from. The route loader takes it once and passes it down, so the
+   * The time the date is read against. The route loader takes it once and passes it down, so the
    * server render and the browser agree; `new Date()` here would differ between them.
    */
   now: string | Date
@@ -158,8 +161,11 @@ export function FactCheckReply({
             {hasCreatedAt && (
               <>
                 回應於{' '}
-                <time dateTime={created.toISOString()}>
-                  {formatTimeAgo(created, new Date(now))}
+                <time
+                  dateTime={created.toISOString()}
+                  title={formatDateTime(created)}
+                >
+                  {formatDate(created, new Date(now))}
                 </time>
                 ｜
               </>

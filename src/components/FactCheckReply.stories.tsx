@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { expect, fn, userEvent, within } from 'storybook/test'
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
 
 import { viewportOptions } from '../../.storybook/viewports'
 import { FactCheckReply } from './FactCheckReply'
@@ -95,14 +95,23 @@ export const Default: Story = {
     // 資料佐證 is for with-link only.
     await expect(canvas.queryByText('資料佐證')).toBeNull()
 
-    const open = canvas.getByRole('button', { name: '閱讀全文' })
-    await expect(open).toHaveAttribute('aria-expanded', 'false')
-    await userEvent.click(open)
-    const close = canvas.getByRole('button', { name: '收合全文' })
-    await expect(close).toHaveAttribute('aria-expanded', 'true')
-    const text = document.getElementById(close.getAttribute('aria-controls')!)!
+    // The button shows once the text is measured as cut off.
+    const button = await canvas.findByRole('button', { name: '閱讀全文' })
+    await expect(button).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(button)
+    await expect(button).toHaveAttribute('aria-expanded', 'true')
+    await expect(button).toHaveAccessibleName('收合全文')
+    // Expanded, the whole text shows.
+    const text = document.getElementById(button.getAttribute('aria-controls')!)!
     await expect(text.scrollHeight).toBeLessThanOrEqual(text.clientHeight + 1)
-    await userEvent.click(close)
+    // Collapsing measures again, so the button stays, with the focus on it.
+    await userEvent.click(button)
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: '閱讀全文' })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      ),
+    )
     await expect(canvas.getByRole('button', { name: '閱讀全文' })).toHaveFocus()
   },
 }
@@ -151,8 +160,12 @@ export const WithLink: Story = {
 export const ShortText: Story = {
   args: { text: '假的。目前沒有研究可以證實雨水會傳播病毒。' },
   play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    // Wait for the reply to render, then for the measurement that would add the button.
+    await canvas.findByText(/目前沒有研究/)
+    await new Promise((resolve) => requestAnimationFrame(resolve))
     await expect(
-      within(canvasElement).queryByRole('button', { name: '閱讀全文' }),
+      canvas.queryByRole('button', { name: /閱讀全文|收合全文/ }),
     ).toBeNull()
   },
 }
@@ -166,5 +179,19 @@ export const UnparseableDate: Story = {
     await expect(canvas.getByText('被引用 2 次')).toBeVisible()
     await expect(canvas.queryByText(/回應於/)).toBeNull()
     await expect(canvasElement.querySelector('time')).toBeNull()
+  },
+}
+
+/**
+ * Not in Penpot: a reply older than 48 hours shows its date, with the full date and time in the
+ * title.
+ */
+export const OlderReply: Story = {
+  tags: ['not-in-penpot'],
+  args: { createdAt: '2026-11-04T09:05:00+08:00' },
+  play: async ({ canvasElement }) => {
+    const time = within(canvasElement).getByText('11月4日')
+    await expect(time.tagName).toBe('TIME')
+    await expect(time).toHaveAttribute('title', '2026年11月4日 上午9:05')
   },
 }
