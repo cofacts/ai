@@ -64,7 +64,7 @@ export type FactCheckReplyProps = {
 
 /**
  * [Penpot Content/FactCheckReply](https://design.penpot.app/?screen=workspace&team-id=1710bc7f-8249-8127-8007-d006475d6947&file-id=81f57451-85cc-819d-8008-71f291481dd2&page-id=86907e95-1cb8-8122-8008-4f4d51befa98&layout=layers&board-id=f402ced6-616c-80b4-8008-6d27620b7d42) (desktop) and
- * [Content/ReplyCard-Mobile](https://design.penpot.app/?screen=workspace&team-id=1710bc7f-8249-8127-8007-d006475d6947&file-id=81f57451-85cc-819d-8008-71f291481dd2&page-id=86907e95-1cb8-8122-8008-4f4d51befa98&layout=layers&board-id=f402ced6-616c-80b4-8008-680c33d7f6ab) as one responsive
+ * [Content/ReplyCard-Mobile](https://design.penpot.app/?screen=workspace&team-id=1710bc7f-8249-8127-8007-d006475d6947&file-id=81f57451-85cc-819d-8008-71f291481dd2&page-id=86907e95-1cb8-8122-8008-4f4d51befa98&layout=layers&board-id=4a16248d-0aca-8082-8008-724112c375ea) as one responsive
  * component: one reply with its result, text, author, and feedback. Mobile drops the avatar and
  * stacks the date line over a full-width ReactionGroup.
  *
