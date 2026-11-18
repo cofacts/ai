@@ -45,7 +45,7 @@ export const Default: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement)
     const submit = canvas.getByRole('button', {
-      name: '用 Jack5566 的身份送出查核回應',
+      name: /用.Jack5566.的身份送出查核回應/,
     })
     await expect(submit).toBeDisabled()
     await userEvent.click(canvas.getByText('我已經檢查過回應內文與出處'))
@@ -66,16 +66,32 @@ export const UnknownName: Story = {
   },
 }
 
-/** Names over 10 characters are cut so the button stays on one line. */
+/**
+ * A long name is cut with an ellipsis so the label stays inside the button at phone width (a
+ * 320px screen minus the drawer's padding). The accessible name keeps the full name.
+ */
 export const LongName: Story = {
   args: { userName: '一個非常非常非常長的使用者暱稱' },
+  decorators: [
+    (Story) => (
+      <div className="w-[288px]">
+        <Story />
+      </div>
+    ),
+  ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await expect(
-      canvas.getByRole('button', {
-        name: '用 一個非常非常非常長的… 的身份送出查核回應',
-      }),
-    ).toBeVisible()
+    const button = canvas.getByRole('button', {
+      name: /用.一個非常非常非常長的使用者暱稱.的身份送出查核回應/,
+    })
+    await userEvent.click(canvas.getByText('我已經檢查過回應內文與出處'))
+    const label = button.querySelector('span.flex')
+    await expect(label).not.toBeNull()
+    // Nothing spills out of the button.
+    await expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth)
+    await expect(label!.getBoundingClientRect().right).toBeLessThanOrEqual(
+      button.getBoundingClientRect().right,
+    )
   },
 }
 

@@ -1049,7 +1049,7 @@ ai_writer = LlmAgent(
        **接下來需要你做的事**
        1. 點下方的「查核回應草稿」打開草稿，檢查內容，修改不精確的地方
        2. 點開佐證資料，確認來源和回應內容一致
-       3. 確認沒問題後，按「送出查核回應」，用你的帳號送出
+       3. 確認沒問題後，勾選「我已經檢查過回應內文與出處」，再按下方的送出按鈕，用你的帳號送出
        ```
        - The conclusion is ONE sentence a reader with no background can follow; do not restate the
          whole reply. The category in it must be the `classification` of the proposal you just

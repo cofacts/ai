@@ -53,7 +53,7 @@ export const Editable: Story = {
       canvas.getByRole('radio', { name: /含有不實訊息/ }),
     ).toHaveAttribute('aria-checked', 'true')
     const submit = canvas.getByRole('button', {
-      name: '用 Jack5566 的身份送出查核回應',
+      name: /用.Jack5566.的身份送出查核回應/,
     })
     await expect(submit).toBeDisabled()
     await userEvent.click(canvas.getByText('我已經檢查過回應內文與出處'))

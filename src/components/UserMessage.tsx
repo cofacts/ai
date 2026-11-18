@@ -4,14 +4,10 @@ import type { AdkPart, ChatMessage } from '@/lib/adk'
 import type { DraftFields } from '@/lib/factCheckDraft'
 import { stripUploadPrefix } from '@/lib/adk'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
-import { parseEditedDraftPart } from '@/lib/factCheckDraft'
-
-const CATEGORY_LABELS: Record<string, string> = {
-  NOT_ARTICLE: '不在查證範圍',
-  RUMOR: '含有不實訊息',
-  NOT_RUMOR: '含有正確訊息',
-  OPINIONATED: '含有個人意見',
-}
+import {
+  REPLY_CATEGORY_LABELS,
+  parseEditedDraftPart,
+} from '@/lib/factCheckDraft'
 
 /** The user's edited draft that was sent along with this message for the AI to revise from. */
 function EditedDraftPart({ fields }: { fields: DraftFields }) {
@@ -28,7 +24,7 @@ function EditedDraftPart({ fields }: { fields: DraftFields }) {
       <div className="space-y-spacing-8 border-t border-border-subtle p-spacing-8 whitespace-pre-wrap break-all">
         {fields.classification && (
           <p className="font-bold">
-            {CATEGORY_LABELS[fields.classification] ?? fields.classification}
+            {REPLY_CATEGORY_LABELS[fields.classification]}
           </p>
         )}
         <p>{fields.text}</p>

@@ -10,7 +10,7 @@ import {
   startChatStream,
 } from '@/lib/chatCache'
 import { getSession } from '@/lib/chatSessions.functions'
-import { readDraftEdit, writeDraftEdit } from '@/hooks/useDraftEdit'
+import { readDraftEdit } from '@/hooks/useDraftEdit'
 import {
   draftFieldsEqual,
   draftFieldsFromArgs,
@@ -53,7 +53,9 @@ export function useChat({ sessionId }: UseChatOptions) {
    * This immediately updates the global cache.
    *
    * If the user has unsent edits to the latest draft, they go along with the message so the AI
-   * revises from the user's version, and that draft locks (see `factCheckDraft.ts`).
+   * revises from the user's version, and that draft locks (see `factCheckDraft.ts`). The edits
+   * stay in storage: if the message never reaches ADK, a reload finds the draft unlocked with
+   * the user's edits still there.
    */
   const sendMessage = useCallback(
     (text: string, files: Array<File> = []) => {
@@ -72,7 +74,6 @@ export function useChat({ sessionId }: UseChatOptions) {
         if (edit && !draftFieldsEqual(edit, draftFieldsFromArgs(draft.args))) {
           editedDraft = { draftId, fields: edit }
         }
-        if (edit) writeDraftEdit(queryClient, sessionId, draftId, null)
       }
       sendChatMessage(queryClient, sessionId, text, files, editedDraft)
     },

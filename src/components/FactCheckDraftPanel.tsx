@@ -4,6 +4,7 @@ import type { AllTools } from '@/lib/adk'
 import type { DraftFields, ReplyCategory } from '@/lib/factCheckDraft'
 import type { MaterialSymbol } from '@/components/icons/material-symbols'
 import {
+  REPLY_CATEGORY_LABELS,
   draftFieldsEqual,
   draftFieldsFromArgs,
   draftSubmitProblem,
@@ -45,7 +46,7 @@ const CATEGORIES: Array<{
 }> = [
   {
     key: 'NOT_ARTICLE',
-    label: '不在查證範圍',
+    label: REPLY_CATEGORY_LABELS.NOT_ARTICLE,
     icon: 'warning',
     colorClass: 'text-status-outofscope',
     activeClass:
@@ -53,7 +54,7 @@ const CATEGORIES: Array<{
   },
   {
     key: 'RUMOR',
-    label: '含有不實訊息',
+    label: REPLY_CATEGORY_LABELS.RUMOR,
     icon: 'cancel',
     colorClass: 'text-status-incorrect',
     activeClass:
@@ -61,14 +62,14 @@ const CATEGORIES: Array<{
   },
   {
     key: 'NOT_RUMOR',
-    label: '含有正確訊息',
+    label: REPLY_CATEGORY_LABELS.NOT_RUMOR,
     icon: 'check_circle',
     colorClass: 'text-status-correct',
     activeClass: 'bg-surface-raised border-border-subtle text-status-correct',
   },
   {
     key: 'OPINIONATED',
-    label: '含有個人意見',
+    label: REPLY_CATEGORY_LABELS.OPINIONATED,
     icon: 'comment',
     colorClass: 'text-status-opinion',
     activeClass: 'bg-surface-raised border-border-subtle text-text-link',

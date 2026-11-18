@@ -3,9 +3,6 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { EDITOR_FACEBOOK_GROUP, LICENSE_URL, TERMS_URL } from '@/lib/legal'
 
-/** Longer display names are cut so the submit button stays on one line in the drawer. */
-const MAX_NAME_LENGTH = 10
-
 function ExternalLink({
   href,
   children,
@@ -25,16 +22,20 @@ function ExternalLink({
   )
 }
 
-/** The submit button's label, naming whose account the reply goes out under. */
-export function submitButtonLabel(userName: string | null): string {
-  if (!userName) return '用你的帳號送出查核回應'
-  // Count code points, not UTF-16 units, so an emoji in a name isn't split in half.
-  const chars = Array.from(userName)
-  const name =
-    chars.length > MAX_NAME_LENGTH
-      ? `${chars.slice(0, MAX_NAME_LENGTH).join('')}…`
-      : userName
-  return `用 ${name} 的身份送出查核回應`
+/**
+ * The submit button's label, naming whose account the reply goes out under. A long name is cut
+ * with CSS (`truncate`) so the label stays on one line in a phone-width drawer; the accessible
+ * name and the `title` keep the full name.
+ */
+function SubmitButtonLabel({ userName }: { userName: string | null }) {
+  if (!userName) return <>用你的帳號送出查核回應</>
+  return (
+    <span className="flex min-w-0">
+      <span className="shrink-0">用&nbsp;</span>
+      <span className="truncate">{userName}</span>
+      <span className="shrink-0">&nbsp;的身份送出查核回應</span>
+    </span>
+  )
 }
 
 /**
@@ -101,14 +102,14 @@ export function SubmitReplyFooter({
       )}
 
       <Button
-        className="w-full"
+        className="w-full min-w-0"
         iconStart="send"
         disabled={!!problem || !checked || pending}
         aria-busy={pending || undefined}
         title={userName ?? undefined}
         onClick={onSubmit}
       >
-        {pending ? '送出中…' : submitButtonLabel(userName)}
+        {pending ? '送出中…' : <SubmitButtonLabel userName={userName} />}
       </Button>
 
       <p className="text-type-caption text-text-tertiary">

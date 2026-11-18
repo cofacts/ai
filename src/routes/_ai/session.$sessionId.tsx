@@ -33,17 +33,9 @@ function SessionPage() {
 
   const openedCallIds = useRef<Set<string>>(new Set())
 
-  const handleToolBadgeClick = useCallback(
+  /** Opens a tool call (or a draft) in the right drawer. */
+  const handleOpenDraft = useCallback(
     (id: string) => {
-      if (toolCallId === id) {
-        navigate({
-          to: '/session/$sessionId',
-          params: { sessionId },
-          viewTransition: true,
-          replace: true,
-        })
-        return
-      }
       navigate({
         to: '/session/$sessionId/tool/$toolCallId',
         params: { sessionId, toolCallId: id },
@@ -51,19 +43,20 @@ function SessionPage() {
         replace: toolCallId !== undefined,
       })
     },
-    [toolCallId, sessionId, navigate],
+    [sessionId, toolCallId, navigate],
   )
 
-  const handleOpenDraft = useCallback(
-    (draftId: string) => {
+  const handleToolBadgeClick = useCallback(
+    (id: string) => {
+      if (toolCallId !== id) return handleOpenDraft(id)
       navigate({
-        to: '/session/$sessionId/tool/$toolCallId',
-        params: { sessionId, toolCallId: draftId },
+        to: '/session/$sessionId',
+        params: { sessionId },
         viewTransition: true,
-        replace: toolCallId !== undefined,
+        replace: true,
       })
     },
-    [sessionId, toolCallId, navigate],
+    [toolCallId, sessionId, navigate, handleOpenDraft],
   )
 
   // Auto-open: lastReplyDraftId is pre-computed by the cache reducer

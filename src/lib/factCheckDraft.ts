@@ -31,6 +31,14 @@ export const REPLY_CATEGORIES: ReadonlyArray<ReplyCategory> = [
   'OPINIONATED',
 ]
 
+/** How each category is labelled in the drawer and in the chat bubble. */
+export const REPLY_CATEGORY_LABELS: Record<ReplyCategory, string> = {
+  NOT_ARTICLE: '不在查證範圍',
+  RUMOR: '含有不實訊息',
+  NOT_RUMOR: '含有正確訊息',
+  OPINIONATED: '含有個人意見',
+}
+
 export function isReplyCategory(value: unknown): value is ReplyCategory {
   return REPLY_CATEGORIES.includes(value as ReplyCategory)
 }
