@@ -156,7 +156,9 @@ closes when the run ends. Stop is `POST .../cancel`. A run stopped by the user, 
 becomes visible and when sending. Session-state writes wait while a run holds the session
 (`POST /apps/.../sessions/:id/opened`), since they would kill it. Redis is the rumors-line-bot
 container on GCE and Redis Cloud on Cloud Run (`REDIS_URL`); without it, the frontend falls back to
-`/api/run-sse`, where closing the tab stops the run.
+`/api/run-sse`, where closing the tab stops the run. On Cloud Run (dev.cofacts.ai, PR previews)
+an instance with no open request may be scaled in, which interrupts its runs once every window is
+closed; production on GCE has no such limit.
 → decision: [background runs on Redis Streams](decisions/20261114-background-runs-redis-streams.md).
 
 ## Data & sessions

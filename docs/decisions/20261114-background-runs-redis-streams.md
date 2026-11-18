@@ -88,6 +88,14 @@ How it works:
 - Bad, because a redeploy interrupts the turns in progress; users are asked to ask again.
 - Bad, because Cloud Run needs CPU throttling off (instance-based billing) when Redis is set,
   since the run works after its HTTP response has ended.
+- Bad, because on Cloud Run (dev.cofacts.ai and PR previews, not production) a run can still
+  be cut short once every window is closed. With no open request, Cloud Run counts the
+  instance as idle and may scale it in; it keeps idle instances only "up to 15 minutes" (see
+  [instance autoscaling](https://cloud.google.com/run/docs/about-instance-autoscaling)).
+  Scale-in sends SIGTERM, so the run is sealed as `interrupted` like on a redeploy, and the
+  next visit shows the text typed so far with 重新提問. We accept this rather than set
+  `minScale: 1`: these environments are for developers, and closing every window usually
+  means they are done testing. Production on GCE doesn't scale in.
 - Neutral: Redis holds only runs in progress; every key has a TTL and the `cofacts-ai:`
   prefix, because the production Redis is shared with rumors-line-bot and has no `maxmemory`.
 
