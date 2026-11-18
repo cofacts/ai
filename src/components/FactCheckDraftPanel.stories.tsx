@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { expect, fn, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, userEvent, within } from 'storybook/test'
 
 import { FactCheckDraftPanel } from './FactCheckDraftPanel'
 import type { Meta, StoryObj } from '@storybook/tanstack-react'
@@ -52,20 +52,16 @@ export const Editable: Story = {
     await expect(
       canvas.getByRole('radio', { name: /含有不實訊息/ }),
     ).toHaveAttribute('aria-checked', 'true')
-    await userEvent.click(canvas.getByRole('button', { name: '送出查核回應' }))
-    // The confirmation dialog renders in a portal, outside the canvas.
-    const dialog = within(document.body)
-    await expect(await dialog.findByRole('dialog')).toBeVisible()
-    await expect(
-      dialog.getByRole('button', { name: '確定送出' }),
-    ).toBeDisabled()
-    await userEvent.click(dialog.getByText('我已經檢查過回應內文與出處'))
-    await userEvent.click(dialog.getByText(/我願意用「Jack5566」的身份/))
-    await expect(dialog.getByRole('button', { name: '確定送出' })).toBeEnabled()
+    const submit = canvas.getByRole('button', {
+      name: '用 Jack5566 的身份送出查核回應',
+    })
+    await expect(submit).toBeDisabled()
+    await userEvent.click(canvas.getByText('我已經檢查過回應內文與出處'))
+    await expect(submit).toBeEnabled()
+    // Editing after checking keeps the check.
+    await userEvent.type(text, '！')
+    await expect(submit).toBeEnabled()
     // Undo the edits so localStorage doesn't carry them into the next run.
-    await userEvent.click(dialog.getByRole('button', { name: '取消' }))
-    // Wait out the close animation.
-    await waitFor(() => expect(dialog.queryByRole('dialog')).toBeNull())
     await userEvent.click(
       canvas.getByRole('button', { name: /還原成 AI 的版本/ }),
     )
@@ -85,7 +81,7 @@ export const NoArticle: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await expect(
-      canvas.getByRole('button', { name: '送出查核回應' }),
+      canvas.getByRole('button', { name: /送出查核回應/ }),
     ).toBeDisabled()
   },
 }
@@ -105,7 +101,7 @@ export const LockedAfterSending: Story = {
     const canvas = within(canvasElement)
     await expect(canvas.queryByRole('textbox')).toBeNull()
     await expect(
-      canvas.queryByRole('button', { name: '送出查核回應' }),
+      canvas.queryByRole('button', { name: /送出查核回應/ }),
     ).toBeNull()
   },
 }

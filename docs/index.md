@@ -147,8 +147,9 @@ Design record: the kb doc
 
 The writer proposes replies with `draft_factcheck_response`; the latest successful proposal opens
 in the right drawer (`src/components/FactCheckDraftPanel.tsx`). The user edits it there and
-submits it with 「送出查核回應」: a server function (`src/server/replies.functions.ts`) calls
-rumors-api's `CreateReply` with the user's own session token, so the reply is theirs, on the
+submits it from the drawer's footer (`src/components/SubmitReplyFooter.tsx`): once 「我已經檢查過回應內文與出處」
+is checked, the button 「用 OOO 的身份送出查核回應」 sends it with no confirmation dialog. A server function
+(`src/server/replies.functions.ts`) calls rumors-api's `CreateReply` with the user's own session token, so the reply is theirs, on the
 article the chat looked up with `get_single_cofacts_article`. The drawer is the only place a reply
 is submitted from; the agent never submits.
 

@@ -1,6 +1,6 @@
 /**
  * Links for Cofacts' terms and content license, shown wherever a user agrees to them: when
- * logging in (LoginModal) and again when submitting a reply (SubmitReplyDialog). The terms are
+ * logging in (LoginModal) and again when submitting a reply (SubmitReplyFooter). The terms are
  * rumors-api's LEGAL.md, published at cofacts.tw/terms.
  */
 export const TERMS_URL = 'https://cofacts.tw/terms'

@@ -13,7 +13,7 @@ import { submitFactCheckReply } from '@/server/replies.functions'
 import { isAuthExpiredError } from '@/lib/authExpired'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { SubmitReplyDialog } from '@/components/SubmitReplyDialog'
+import { SubmitReplyFooter } from '@/components/SubmitReplyFooter'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
 
@@ -32,7 +32,7 @@ export interface DraftPanelContext {
   articleId: string | null
   /** Opens the latest draft, offered from a locked one. */
   onOpenLatestDraft?: () => void
-  /** The logged-in user's name, shown in the submit confirmation. */
+  /** The logged-in user's name, shown on the submit button. */
   userName: string | null
 }
 
@@ -186,7 +186,8 @@ export function FactCheckDraftPanel({
     setEdit(draftFieldsEqual(next, original) ? null : next)
   }
 
-  const [confirming, setConfirming] = useState(false)
+  // Not reset when the user edits after checking; see SubmitReplyFooter.
+  const [reviewed, setReviewed] = useState(false)
   const submit = useMutation({
     mutationFn: () => {
       if (!articleId || !fields.classification) throw new Error('無法送出')
@@ -202,7 +203,6 @@ export function FactCheckDraftPanel({
     onSuccess: ({ replyId }) => {
       setSubmitted(replyId)
       setEdit(null)
-      setConfirming(false)
     },
   })
   const submitError =
@@ -360,30 +360,18 @@ export function FactCheckDraftPanel({
 
       {/* Submit — the only place a reply is sent from */}
       {editable && (
-        <div className="shrink-0 border-t border-border-subtle bg-surface-base p-spacing-16 space-y-spacing-8">
-          {problem && (
-            <p className="text-type-caption text-text-tertiary">{problem}</p>
-          )}
-          <Button
-            className="w-full"
-            iconStart="send"
-            disabled={!!problem}
-            onClick={() => {
-              submit.reset()
-              setConfirming(true)
-            }}
-          >
-            送出查核回應
-          </Button>
-          <SubmitReplyDialog
-            open={confirming}
-            onOpenChange={setConfirming}
-            userName={userName}
-            pending={submit.isPending}
-            error={submitError}
-            onConfirm={() => submit.mutate()}
-          />
-        </div>
+        <SubmitReplyFooter
+          userName={userName}
+          checked={reviewed}
+          onCheckedChange={setReviewed}
+          problem={problem}
+          pending={submit.isPending}
+          error={submitError}
+          onSubmit={() => {
+            submit.reset()
+            submit.mutate()
+          }}
+        />
       )}
     </div>
   )
