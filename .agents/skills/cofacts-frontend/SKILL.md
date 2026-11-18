@@ -41,8 +41,9 @@ this skill is the current, executable form of it.
   `bg-surface-inverse` → `text-text-inverse`. A name that doesn't match is a bug.
 - **Disabled = default look + `opacity-50`**, plus `disabled` or `aria-disabled="true"` (R5).
 - **Focus is global.** Never add `focus-visible:ring-*` or per-component focus styles. Put
-  `data-surface="dark"` on fixed-dark containers. The one exception is Select options (yellow
-  background instead of the ring; see `references/a11y.md`).
+  `data-surface="dark"` on fixed-dark containers. The exceptions are text fields (a 2px
+  `border-strong` outline inside the box: `textFieldFocusClassName`) and Select options (yellow
+  background); see `references/a11y.md`.
 - **Merge classes with `cn()`** (`@/lib/utils`), which knows the token names. Variants use cva.
 - **Components don't fetch data.** Shared components and `-components/` take typed props; only
   route components call query hooks. See `references/data-layer.md`.

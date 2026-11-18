@@ -62,25 +62,39 @@ export function FeedbackButtons({ traceId }: FeedbackButtonsProps) {
         }}
       >
         <div className="flex gap-spacing-12">
+          {/* Like Penpot's ReactionGroup and the 收藏 Toggle: outline icon, then the solid icon in
+              the brand color once chosen. */}
           <PopoverTrigger
             onClick={() => handleFeedback(1)}
-            className={`p-spacing-4 rounded-radius-5 transition-colors ${
+            aria-label="讚"
+            aria-pressed={feedbackGiven === 1}
+            className={`p-spacing-4 rounded-radius-5 transition-colors hover:bg-surface-raised ${
               feedbackGiven === 1
-                ? 'bg-surface-accent-subtle text-text-on-accent'
-                : 'text-text-tertiary hover:bg-surface-raised hover:text-text-secondary'
-            }`}
-          >
-            <MaterialIcon name="thumb_up" size={24} />
-          </PopoverTrigger>
-          <PopoverTrigger
-            onClick={() => handleFeedback(-1)}
-            className={`p-spacing-4 rounded-radius-5 hover:bg-surface-raised transition-colors ${
-              feedbackGiven === -1
-                ? 'text-status-incorrect'
+                ? 'text-icon-brand'
                 : 'text-text-tertiary hover:text-text-secondary'
             }`}
           >
-            <MaterialIcon name="thumb_down" size={24} />
+            <MaterialIcon
+              name="thumb_up"
+              filled={feedbackGiven === 1}
+              size={24}
+            />
+          </PopoverTrigger>
+          <PopoverTrigger
+            onClick={() => handleFeedback(-1)}
+            aria-label="倒讚"
+            aria-pressed={feedbackGiven === -1}
+            className={`p-spacing-4 rounded-radius-5 transition-colors hover:bg-surface-raised ${
+              feedbackGiven === -1
+                ? 'text-icon-brand'
+                : 'text-text-tertiary hover:text-text-secondary'
+            }`}
+          >
+            <MaterialIcon
+              name="thumb_down"
+              filled={feedbackGiven === -1}
+              size={24}
+            />
           </PopoverTrigger>
         </div>
         <PopoverContent align="start">

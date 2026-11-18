@@ -53,7 +53,10 @@ export function FeedbackPopoverContent({
   return (
     <div className="flex flex-col gap-spacing-16">
       <div className="flex flex-col gap-spacing-8">
-        <h4 className="text-type-body-s">Tell us more</h4>
+        {/* The same grey title as a Select's group label (排序方式). */}
+        <h4 className="text-type-ui-m text-text-tertiary">
+          {isPositive ? '哪些地方做得好？' : '哪些地方需要改進？'}
+        </h4>
         {options.map((option) => (
           <label
             key={option}
@@ -68,13 +71,13 @@ export function FeedbackPopoverContent({
         ))}
       </div>
       <Textarea
-        placeholder="Additional comments..."
+        placeholder="其他意見（選填）"
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         className="min-h-[80px]"
       />
       <Button onClick={handleSubmit} size="sm">
-        Submit
+        送出
       </Button>
     </div>
   )

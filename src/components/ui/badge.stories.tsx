@@ -23,7 +23,7 @@ export const Pressed: Story = { args: { defaultPressed: true } }
 /** Type = disable. */
 export const Disabled: Story = { args: { disabled: true } }
 
-/** Type = icon-default / icon-active: an icon before the text. Pressed, only the border goes away. */
+/** Type = icon-default / icon-active: an icon before the text. */
 export const WithIcon: Story = {
   args: {
     children: '含有不實訊息',
@@ -55,6 +55,14 @@ export const Types: Story = {
         }
       >
         含有正確訊息
+      </Badge>
+      <Badge
+        disabled
+        icon={
+          <StatusIcon type="RUMOR" className="size-[22px] md:size-[22px]" />
+        }
+      >
+        含有不實訊息
       </Badge>
     </div>
   ),

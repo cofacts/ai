@@ -1,0 +1,37 @@
+/*
+ * Loading: the soft yellow gradient border runs around the pill. Part of it fades out to
+ * transparent (about a quarter turn), so the movement shows without a hard highlight. Tailwind can't animate a gradient's angle,
+ * so it lives here. @property makes --ai-angle animatable; with reduced motion the border stays
+ * still (same gradient, no rotation).
+ */
+@property --ai-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes ai-border-run {
+  to {
+    --ai-angle: 360deg;
+  }
+}
+
+.loading {
+  background:
+    linear-gradient(var(--color-surface-base), var(--color-surface-base))
+      padding-box,
+    conic-gradient(
+        from var(--ai-angle),
+        var(--brand-500-main) 0deg,
+        var(--brand-300) 100deg,
+        transparent 170deg 260deg,
+        var(--brand-500-main) 360deg
+      )
+      border-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .loading {
+    animation: ai-border-run 1.6s linear infinite;
+  }
+}
