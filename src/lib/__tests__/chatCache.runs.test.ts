@@ -9,6 +9,7 @@ import {
   isTurnInterrupted,
   rebuildChatState,
   sendChatMessage,
+  syncChatSession,
   watchRun,
 } from '../chatCache'
 import type { ChatSessionState } from '../chatCache'
@@ -256,5 +257,69 @@ describe('watching and starting runs', () => {
     expect(qc.getQueryData<ChatSessionState>(chatCacheKey('s'))?.notice).toBe(
       BUSY_NOTICE,
     )
+  })
+  test('a sync while a send is in flight leaves the optimistic turn alone', async () => {
+    // New session from the landing page: the session page mounts and syncs
+    // before the start request has taken the lock.
+    let releaseStart!: () => void
+    const startGate = new Promise<void>((r) => (releaseStart = r))
+    getSession.mockResolvedValue({ events: [], state: {} })
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/runs/s/start') {
+        await startGate
+        return json({ invocationId: 'cur' }, 202)
+      }
+      if (url === '/api/runs/s/status')
+        return json({ running: false, invocationId: null })
+      if (url === '/api/runs/s/stream')
+        return sse([ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')])
+      throw new Error(url)
+    })
+    const sent = sendChatMessage(qc, 's', 'hello')
+    await syncChatSession(qc, 's')
+
+    let s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
+    expect(texts(s)).toEqual(['hello'])
+    expect(s?.isStreaming).toBe(true)
+    expect(getSession).not.toHaveBeenCalled()
+
+    releaseStart()
+    await sent
+    await vi.waitFor(() =>
+      expect(
+        qc.getQueryData<ChatSessionState>(chatCacheKey('s'))?.isStreaming,
+      ).toBe(false),
+    )
+    s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
+    expect(texts(s)).toEqual(['hello', 'answer'])
+  })
+
+  test('503 while ADK shuts down is an error, not a fallback to /run_sse', async () => {
+    qc.setQueryData(chatCacheKey('s'), INITIAL_CHAT_STATE)
+    fetchMock.mockResolvedValueOnce(
+      json({ detail: { reason: 'shutting_down' } }, 503),
+    )
+    await sendChatMessage(qc, 's', 'hello')
+    const s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(['/api/runs/s/start'])
+    expect(s?.isStreaming).toBe(false)
+    expect(s?.error).toMatch(/503/)
+  })
+
+  test('503 with background runs off falls back to /api/run-sse', async () => {
+    qc.setQueryData(chatCacheKey('s'), INITIAL_CHAT_STATE)
+    fetchMock
+      .mockResolvedValueOnce(json({ detail: { reason: 'disabled' } }, 503))
+      .mockResolvedValueOnce(sse([ev('x', 'model', 'answer')]))
+    await sendChatMessage(qc, 's', 'hello')
+    await vi.waitFor(() =>
+      expect(
+        qc.getQueryData<ChatSessionState>(chatCacheKey('s'))?.isStreaming,
+      ).toBe(false),
+    )
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
+      '/api/runs/s/start',
+      '/api/run-sse',
+    ])
   })
 })

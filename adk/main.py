@@ -133,7 +133,9 @@ def _bus(app_name: str) -> RunBus:
     if app_name != APP_NAME:
         raise HTTPException(status_code=404, detail="Unknown app")
     if run_bus is None:
-        raise HTTPException(status_code=503, detail="Background runs are off")
+        # The client falls back to /run_sse only on this reason; any other
+        # 503 (shutting down, Cloud Run itself) is just an error to retry.
+        raise HTTPException(status_code=503, detail={"reason": "disabled"})
     return run_bus
 
 
@@ -156,7 +158,7 @@ async def start_run(app_name: str, user_id: str, session_id: str, req: StartRunR
             user_id=user_id, session_id=session_id, new_message=req.new_message
         )
     except RunBusUnavailable:
-        raise HTTPException(status_code=503, detail="Shutting down")
+        raise HTTPException(status_code=503, detail={"reason": "shutting_down"})
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
     info = RunInfo(invocation_id=res.invocation_id).model_dump(by_alias=True)

@@ -1,5 +1,6 @@
 import { handleAuthExpired } from './authExpired'
 import { UPLOAD_FILENAME_PREFIX } from './adk'
+import { isRunsDisabled } from './adkRuns'
 import { getSession, listSessions } from './chatSessions.functions'
 import type { SessionListItem } from './chatSessions.functions'
 import type { QueryClient } from '@tanstack/react-query'
@@ -66,6 +67,12 @@ export function chatCacheKey(sessionId?: string) {
  */
 export const abortControllers = new Map<string, AbortController>()
 const legacyStreams = new Set<string>()
+/**
+ * Sessions with a send in flight: between the click and the run's stream
+ * being attached (reading attachments, the start request). Nothing else may
+ * decide the session is idle meanwhile.
+ */
+const pendingSends = new Set<string>()
 
 // Messages are only ever appended or have their last entry updated, so a
 // message's position is a stable id: recomputing the screen from events
@@ -233,11 +240,22 @@ export function isTurnInterrupted(events: Array<AdkEvent>): boolean {
  * Resolves to false when the message was not sent because another window's
  * run holds the session; the caller should give the user their draft back.
  */
-export async function sendChatMessage(
+export function sendChatMessage(
   queryClient: QueryClient,
   sessionId: string,
   text: string,
   files: Array<File> = [],
+): Promise<boolean> {
+  return trackSend(sessionId, () =>
+    buildAndSend(queryClient, sessionId, text, files),
+  )
+}
+
+async function buildAndSend(
+  queryClient: QueryClient,
+  sessionId: string,
+  text: string,
+  files: Array<File>,
 ): Promise<boolean> {
   // Set isStreaming:true before any async work so that components mounting
   // during file reading (e.g. after navigate()) don't see isStreaming:false
@@ -258,6 +276,16 @@ export async function sendChatMessage(
     parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
   }
   return sendParts(queryClient, sessionId, parts)
+}
+
+/** Marks a send in flight until `send` has attached (or failed). */
+async function trackSend<T>(sessionId: string, send: () => Promise<T>) {
+  pendingSends.add(sessionId)
+  try {
+    return await send()
+  } finally {
+    pendingSends.delete(sessionId)
+  }
 }
 
 /** Sends the last user message of an interrupted turn again. */
@@ -285,7 +313,7 @@ export function retryInterruptedTurn(
     notice: null,
     interrupted: false,
   }))
-  void sendParts(queryClient, sessionId, parts)
+  void trackSend(sessionId, () => sendParts(queryClient, sessionId, parts))
 }
 
 async function sendParts(
@@ -319,7 +347,7 @@ async function sendParts(
     return true
   }
 
-  if (response.status === 503) {
+  if (await isRunsDisabled(response)) {
     // Background runs are off (no Redis): the old stream, tied to this tab.
     void startChatStream({
       queryClient,
@@ -559,8 +587,13 @@ export async function syncChatSession(
   sessionId: string,
   { checkHistory = false }: { checkHistory?: boolean } = {},
 ) {
-  if (abortControllers.has(sessionId)) return
+  // A send in flight or a stream already open owns the state; the status
+  // could predate the run's lock. Check again after the request returns.
+  const busy = () =>
+    abortControllers.has(sessionId) || pendingSends.has(sessionId)
+  if (busy()) return
   const status = await fetchRunStatus(sessionId)
+  if (busy()) return
   if (status.running) {
     void watchRun(queryClient, sessionId, { refreshHistory: checkHistory })
     return
@@ -568,7 +601,7 @@ export async function syncChatSession(
   const state = queryClient.getQueryData<ChatSessionState>(
     chatCacheKey(sessionId),
   )
-  if (state?.isStreaming && !abortControllers.has(sessionId)) {
+  if (state?.isStreaming) {
     // loadChatState saw a run that has ended since.
     await reloadHistory(queryClient, sessionId)
     return

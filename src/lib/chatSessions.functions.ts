@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { ADK_APP_NAME, adkClient } from './adkClient'
 import { handleAdkError, handleAdkResponseError } from './adk-errors'
+import { isRunsDisabled } from './adkRuns'
 import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
 
 const ADK_BASE_URL = process.env.ADK_URL || 'http://localhost:8000'
@@ -202,6 +203,10 @@ export const markSessionOpened = createServerFn({ method: 'POST' })
       const { deferred } = (await opened.json()) as { deferred: boolean }
       return { ok: true, deferred }
     }
+    if (opened.status === 503 && !(await isRunsDisabled(opened))) {
+      // ADK is restarting; its runs are being sealed. Try again later.
+      return { ok: true, deferred: true }
+    }
     if (opened.status !== 503) handleAdkResponseError(opened)
 
     // ADK without Redis (background runs off): runs are tied to the open
@@ -239,6 +244,8 @@ export const SESSION_BUSY_MESSAGE = '對話還在執行中，請等回覆完成�
 
 async function isRunGoing(userId: string, sessionId: string) {
   const res = await fetch(adkSessionUrl(userId, sessionId, '/runs/status'))
-  if (!res.ok) return false // 503: background runs off
-  return ((await res.json()) as { running: boolean }).running
+  if (res.ok) return ((await res.json()) as { running: boolean }).running
+  // Background runs off: no run can hold the session. Any other failure:
+  // assume one might, and let the rename wait.
+  return !(await isRunsDisabled(res))
 }

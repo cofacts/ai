@@ -88,4 +88,16 @@ async def test_off_without_redis(monkeypatch):
     monkeypatch.setattr(main, "run_bus", None)
     transport = httpx.ASGITransport(app=main.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
-        assert (await c.get(BASE + "/runs/status")).status_code == 503
+        r = await c.get(BASE + "/runs/status")
+        # The client falls back to /run_sse only on this exact reason.
+        assert r.status_code == 503
+        assert r.json() == {"detail": {"reason": "disabled"}}
+
+
+async def test_shutting_down_is_a_different_503(client):
+    c, bus = client
+    await bus.shutdown()
+    body = {"newMessage": {"role": "user", "parts": [{"text": "hi"}]}}
+    r = await c.post(BASE + "/runs", json=body)
+    assert r.status_code == 503
+    assert r.json() == {"detail": {"reason": "shutting_down"}}
