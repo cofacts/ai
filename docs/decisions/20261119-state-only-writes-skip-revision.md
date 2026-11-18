@@ -24,8 +24,8 @@ reloaded the session silently, so the same writes, present since May 2026, were 
 the 1.26 → 2.12 upgrade ([#163](https://github.com/cofacts/ai/pull/163), first released in
 `release/20261025`).
 
-Scope: the ADK backend's session service (`adk/cofacts_ai/session_service.py`, wired in
-`adk/main.py`). Frontend and BFF are unchanged. Issue:
+Scope: the ADK backend's session service (`adk/cofacts_ai/session_service.py`, registered in
+`adk/services.py`). Frontend and BFF are unchanged. Issue:
 [cofacts/ai#204](https://github.com/cofacts/ai/issues/204); full investigation in
 [its comment](https://github.com/cofacts/ai/issues/204#issuecomment-6955765536).
 
@@ -86,14 +86,18 @@ How it works:
   builds.
 - For such an event, `_append_state_only_event` takes the same per-session lock as ADK's
   `append_event` (the in-process lock, plus `SELECT … FOR UPDATE` on Postgres). It then merges
-  the app, user and session deltas (temp keys trimmed), stores the event, and commits without
-  touching `update_time`.
+  the app, user and session deltas, stores the event, and commits without touching
+  `update_time`. As in ADK, `temp:` keys reach the caller's in-memory session but not storage.
+- Because there is no stale check, the caller's session copy may be older than storage (ADK's
+  PATCH handler loads it before appending). Its state is refreshed from the locked rows, so the
+  PATCH response shows the current state, though not events a turn appended meanwhile.
 - A turn's later appends re-select the session row and merge their own delta into the stored
   state, so both sides' keys survive.
-- `register_session_service(DATABASE_URL)` registers our factory for the URL's scheme. ADK
-  matches factories by exact scheme, and `postgresql+asyncpg` / `sqlite+aiosqlite` are not
-  registered, so without this ADK falls back to a plain `DatabaseSessionService`. The call sits
-  before `get_fast_api_app()` in `main.py`.
+- `adk/services.py` registers our factory for the `postgresql+asyncpg` and `sqlite+aiosqlite`
+  schemes. `get_fast_api_app` imports `services.py` from the agents directory, so `main.py`,
+  `adk web` and `adk api_server` all pick it up. ADK matches factories by exact scheme and
+  registers neither of these, so before this it fell back to a plain `DatabaseSessionService`.
+  ADK's built-in schemes (`sqlite`, `memory`, `postgresql`, …) are left alone.
 
 ### Consequences
 
@@ -106,15 +110,26 @@ How it works:
 - Good, because a second turn writing to the same session still gets `StaleSessionError`.
 - Bad, because `_append_state_only_event` reuses ADK internals: `_with_session_lock`,
   `_rollback_on_exception_session`, `_get_schema_classes`, `_supports_row_level_locking`,
-  `_trim_temp_delta_state`, `_commit_event_to_session`, `_select_required_state` and
+  `_apply_temp_state`, `_trim_temp_delta_state`, `_select_required_state`, `_merge_state` and
   `_session_util.extract_json_safe_state_delta`.
+- Bad, because ADK only logs a warning when `services.py` fails to import, and then silently
+  uses a plain `DatabaseSessionService`. A test builds the app through `get_fast_api_app` to
+  catch that.
 - Bad, because a state-only write is recognised by convention (the `p-` prefix ADK's PATCH
   route uses). Anything else that appends `p-` events with only a `state_delta` takes this path
   too.
-- Neutral, because a running turn's in-memory state doesn't see the PATCHed values. Neither key
-  is read by an agent. If a turn writes the same key later, the turn wins: e.g. the first turn's
-  generated `title` would replace a rename made during that turn. The sidebar already hides
-  rename while the turn streams in that tab.
+- Bad, because a rename made during a session's first turn is still lost. The turn's in-memory
+  state doesn't see the PATCHed `title`, and `generate_session_title` (an after-agent callback on
+  the first turn) writes the generated title over it when the turn ends. The rename now succeeds
+  and then reverts, where before it killed the turn. The sidebar hides rename while the turn
+  streams in that tab, so this needs another tab or a reload. Until `generate_session_title`
+  skips a title set after the turn started, refusing a rename during a turn (as #197 does) is
+  still needed for this case.
+- Neutral, because otherwise a running turn not seeing the PATCHed values doesn't matter:
+  `lastOpenedAt` is not read by any agent.
+- Bad, because local development with `DATABASE_URL` unset is not covered. ADK then uses its own
+  `SqliteSessionService`, which keeps its stale check, so the bug still reproduces locally. A
+  `DATABASE_URL` of `sqlite+aiosqlite:///…` (as the backend image sets) gets the fix.
 - Neutral, because `update_time` can now be older than the newest event. ADK uses it only as
   the marker and for list ordering. Its marker-less fallback, which compares the newest event
   id, applies only to sessions not loaded by `DatabaseSessionService`, which we don't have.
@@ -130,9 +145,13 @@ How it works:
   both keys are stored.
 - A real `Runner` turn whose tool triggers a PATCH: it finishes with its final answer.
 - Two turns on one session still conflict.
-- `user:`, `app:` and `temp:` handling, a missing session, and the event predicate.
-- `get_fast_api_app`'s service factory returns `CofactsSessionService` for `sqlite+aiosqlite`
-  and `postgresql+asyncpg` URLs.
+- `user:`, `app:` and `temp:` handling, a missing session, the event predicate, and a PATCH
+  response that includes a turn's newer state.
+- The production wiring: the app is built with `get_fast_api_app` (so `services.py` is loaded the
+  way `main.py` loads it), a turn's copy comes from a plain `DatabaseSessionService`, and the
+  PATCH goes through ADK's own route. This fails if ADK changes the route's event or stops
+  loading `services.py`.
+- Built-in schemes such as `sqlite://` still get ADK's own services.
 
 On each ADK upgrade, diff `DatabaseSessionService.append_event` against
 `_append_state_only_event`.
@@ -206,7 +225,8 @@ On each ADK upgrade, diff `DatabaseSessionService.append_event` against
 
 - Issue: [cofacts/ai#204](https://github.com/cofacts/ai/issues/204). Background-runs PR:
   [cofacts/ai#197](https://github.com/cofacts/ai/pull/197). With this in place, #197's `/opened`
-  deferral and its rename refusal are no longer needed to protect a turn.
+  deferral is no longer needed to protect a turn. Its rename refusal still is, for the first-turn
+  title case above.
 - ADK references (2.12.0): `DatabaseSessionService.append_event`
   (`google/adk/sessions/database_session_service.py`), the PATCH route `update_session`
   (`google/adk/cli/api_server.py`), the marker `StorageSession.get_update_marker`

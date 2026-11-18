@@ -14,11 +14,15 @@ production keeps sessions and row locks are real.
 from __future__ import annotations
 
 import os
+import sys
 import uuid
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from google.adk.agents.llm_agent import LlmAgent
+from google.adk.cli.fast_api import get_fast_api_app
 from google.adk.cli.service_registry import get_service_registry
 from google.adk.cli.utils.service_factory import create_session_service_from_options
 from google.adk.errors._stale_session_error import StaleSessionError
@@ -28,13 +32,14 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.runners import Runner
 from google.adk.sessions.database_session_service import DatabaseSessionService
+from google.adk.sessions.sqlite_session_service import SqliteSessionService
 from google.adk.tools.function_tool import FunctionTool
 from google.genai import types
 
 from cofacts_ai.session_service import (
     CofactsSessionService,
     is_state_only_write,
-    register_session_service,
+    register_session_services,
 )
 
 APP = "cofacts_ai"
@@ -276,33 +281,97 @@ async def test_real_runner_turn_survives_a_patch_while_its_tool_runs(service):
     assert stored.events[-1].content.parts[0].text == "查核完成"
 
 
+async def test_patch_temp_keys_reach_the_caller_but_not_storage(service):
+    """Like ADK's append_event: temp: lives in memory for the call only."""
+    sid = await new_session(service)
+    caller = await load(service, sid)
+
+    await service.append_event(caller, patch_event({"temp:x": 1, "k": 2}))
+
+    assert caller.state["temp:x"] == 1
+    assert caller.state["k"] == 2
+    assert "temp:x" not in (await load(service, sid)).state
+
+
+async def test_patch_response_includes_a_turns_newer_state(service):
+    """ADK's PATCH handler loads the session, then appends. A turn appending in
+    between used to make that PATCH fail; now it succeeds, and the copy it
+    returns as the response must not drop the turn's state."""
+    sid = await new_session(service)
+    handler_copy = await load(service, sid)
+    turn = await load(service, sid)
+    await service.append_event(turn, turn_event("hi", {"lastEventTime": 5.0}))
+
+    await service.append_event(handler_copy, patch_event({"lastOpenedAt": 6.0}))
+
+    assert handler_copy.state["lastEventTime"] == 5.0
+    assert handler_copy.state["lastOpenedAt"] == 6.0
+
+
+ADK_DIR = Path(__file__).resolve().parents[2]
+
+
 @pytest.fixture
-def clean_registry():
+def fresh_services_module():
+    """get_fast_api_app imports adk/services.py as `services`, once per process.
+    Drop it and our registrations so each app build loads it again."""
     registry = get_service_registry()
     saved = dict(registry._session_factories)
-    yield
+    sys.modules.pop("services", None)
+    yield registry
+    sys.modules.pop("services", None)
     registry._session_factories.clear()
     registry._session_factories.update(saved)
 
 
-@pytest.mark.parametrize(
-    "url",
-    ["sqlite+aiosqlite:///{tmp}/s.db", "postgresql+asyncpg://u@localhost/adk"],
-)
-async def test_get_fast_api_app_picks_our_service(url, tmp_path, clean_registry):
-    url = url.format(tmp=tmp_path)
-    register_session_service(url)
+async def test_patch_route_through_get_fast_api_app_keeps_the_turn_going(
+    db_url, fresh_services_module
+):
+    """The production wiring end to end: get_fast_api_app (as main.py calls it)
+    loads adk/services.py, and ADK's own PATCH route builds the event. Guards
+    against ADK changing either the route's event or how services are loaded.
+    The turn's copy comes from a plain DatabaseSessionService: the turn only
+    survives if the app's PATCH left the stored revision alone."""
+    app = get_fast_api_app(
+        agents_dir=str(ADK_DIR), session_service_uri=db_url, web=False
+    )
+    turn_service = DatabaseSessionService(db_url)
+    try:
+        with TestClient(app) as client:
+            sid = str(uuid.uuid4())
+            url = f"/apps/{APP}/users/{USER}/sessions/{sid}"
+            assert client.post(url, json={"title": "t"}).status_code == 200
 
-    svc = create_session_service_from_options(
-        base_dir=tmp_path, session_service_uri=url
+            turn = await load(turn_service, sid)
+            await turn_service.append_event(turn, turn_event("calling verifier"))
+
+            res = client.patch(url, json={"stateDelta": {"lastOpenedAt": 1.0}})
+            assert res.status_code == 200
+            assert res.json()["state"]["lastOpenedAt"] == 1.0
+
+            await turn_service.append_event(turn, turn_event("verifier returned"))
+    finally:
+        await turn_service.close()
+
+    stored = await load(turn_service, sid)
+    assert stored.state["lastOpenedAt"] == 1.0
+    assert stored.events[-1].content
+    assert stored.events[-1].content.parts
+    assert stored.events[-1].content.parts[0].text == "verifier returned"
+
+
+def test_builtin_schemes_are_left_to_adk(tmp_path, fresh_services_module):
+    """Only our async URLs get CofactsSessionService; e.g. a plain sqlite://
+    URL still gets ADK's SqliteSessionService rather than crashing."""
+    register_session_services()
+
+    ours = create_session_service_from_options(
+        base_dir=tmp_path,
+        session_service_uri=f"sqlite+aiosqlite:///{tmp_path}/a.db",
+    )
+    adks = create_session_service_from_options(
+        base_dir=tmp_path, session_service_uri=f"sqlite:///{tmp_path}/b.db"
     )
 
-    assert type(svc) is CofactsSessionService
-    await svc.close()
-
-
-def test_register_without_url_is_a_noop(clean_registry):
-    before = dict(get_service_registry()._session_factories)
-    register_session_service(None)
-    register_session_service("")
-    assert get_service_registry()._session_factories == before
+    assert type(ours) is CofactsSessionService
+    assert type(adks) is SqliteSessionService

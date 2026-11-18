@@ -6,7 +6,6 @@ from fastapi import Request
 from google.adk.cli.fast_api import get_fast_api_app
 
 from cofacts_ai.auth_context import cofacts_token_var
-from cofacts_ai.session_service import register_session_service
 from instrumentation import setup_instrumentation
 
 _agents_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,15 +19,10 @@ load_dotenv(os.path.join(_agents_dir, "cofacts_ai", ".env"))
 setup_instrumentation()
 
 _gcs_bucket = os.environ.get("GCS_ARTIFACT_BUCKET")
-_database_url = os.environ.get("DATABASE_URL")
-
-# State-only PATCHes (lastOpenedAt, rename) must not kill a running turn with
-# StaleSessionError; see cofacts_ai/session_service.py.
-register_session_service(_database_url)
 
 app = get_fast_api_app(
     agents_dir=_agents_dir,
-    session_service_uri=_database_url,
+    session_service_uri=os.environ.get("DATABASE_URL"),
     artifact_service_uri=f"gs://{_gcs_bucket}" if _gcs_bucket else None,
     web=False,
 )
