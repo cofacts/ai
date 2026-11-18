@@ -171,7 +171,7 @@ function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       data-inset={inset}
       className={cn(
-        "data-highlighted:bg-surface-accent-subtle data-highlighted:text-text-on-accent focus-visible:[box-shadow:none] data-highlighted:**:text-text-on-accent gap-spacing-8 rounded-radius-5 py-spacing-4 pr-[32px] pl-spacing-8 text-type-ui-m data-inset:pl-[32px] [&_svg:not([class*='size-'])]:size-spacing-16 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "data-highlighted:bg-surface-accent-subtle data-highlighted:text-text-on-accent focus-visible:[box-shadow:none] data-highlighted:**:text-text-on-accent gap-spacing-8 rounded-radius-5 py-spacing-4 pr-spacing-32 pl-spacing-8 text-type-ui-m data-inset:pl-[32px] [&_svg:not([class*='size-'])]:size-spacing-16 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className,
       )}
       checked={checked}
@@ -212,7 +212,7 @@ function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       data-inset={inset}
       className={cn(
-        "data-highlighted:bg-surface-accent-subtle data-highlighted:text-text-on-accent focus-visible:[box-shadow:none] data-highlighted:**:text-text-on-accent gap-spacing-8 rounded-radius-5 py-spacing-4 pr-[32px] pl-spacing-8 text-type-ui-m data-inset:pl-[32px] [&_svg:not([class*='size-'])]:size-spacing-16 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "data-highlighted:bg-surface-accent-subtle data-highlighted:text-text-on-accent focus-visible:[box-shadow:none] data-highlighted:**:text-text-on-accent gap-spacing-8 rounded-radius-5 py-spacing-4 pr-spacing-32 pl-spacing-8 text-type-ui-m data-inset:pl-[32px] [&_svg:not([class*='size-'])]:size-spacing-16 relative flex cursor-default items-center outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className,
       )}
       {...props}
