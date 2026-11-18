@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button'
 
+import styles from './AiButton.module.css'
 import type { MaterialSymbol } from '@/components/icons/material-symbols'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
 import { cn } from '@/lib/utils'
@@ -7,7 +8,8 @@ import { cn } from '@/lib/utils'
 /**
  * Penpot Base/Button AI: a pill with a brand-yellow gradient border, used to start AI actions
  * (查核回覆草稿, 搜尋資料庫). Penpot can't bind gradients to tokens, so the border is rebuilt
- * here from brand tokens (a11y guide 07). Hover fills it yellow. `loading` sets aria-busy.
+ * here from brand tokens (a11y guide 07). Hover fills it yellow. `loading` runs the gradient
+ * around the border (still with reduced motion) and sets aria-busy; the icon stays still.
  */
 export function AiButton({
   icon,
@@ -32,17 +34,13 @@ export function AiButton({
           'border-2 border-transparent [background:linear-gradient(var(--color-surface-base),var(--color-surface-base))_padding-box,linear-gradient(90deg,var(--brand-500-main),var(--brand-300))_border-box] hover:text-text-on-accent hover:[background:linear-gradient(var(--color-surface-accent),var(--color-surface-accent))_padding-box,linear-gradient(90deg,var(--brand-500-main),var(--brand-300))_border-box]',
         variant === 'secondary' &&
           'gap-spacing-4 bg-surface-raised hover:bg-surface-selected',
+        loading && variant === 'default' && styles.loading,
         'disabled:pointer-events-none disabled:opacity-50',
         className,
       )}
       {...props}
     >
-      {icon && (
-        <MaterialIcon
-          name={icon}
-          className={cn(loading && 'motion-safe:animate-spin')}
-        />
-      )}
+      {icon && <MaterialIcon name={icon} />}
       {children}
     </ButtonPrimitive>
   )

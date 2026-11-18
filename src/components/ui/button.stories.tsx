@@ -60,3 +60,52 @@ export const OnDark: Story = {
     </div>
   ),
 }
+
+/**
+ * Penpot State: Default / Hover / Active / Disabled for each Style, side by side. Hover and
+ * Active are pinned with the same token classes the variants use on :hover / :active, so they
+ * can be compared with Penpot without hovering. The other stories respond to the real mouse.
+ */
+const STATE_CLASSES = {
+  primary: ['bg-surface-accent-hover', 'bg-surface-accent-pressed'],
+  outline: ['bg-surface-raised', 'border-border-strong bg-surface-selected'],
+  secondary: ['bg-surface-secondary-hover', 'bg-surface-secondary-pressed'],
+  line: ['brightness-110', 'brightness-90'],
+} as const
+
+export const States: Story = {
+  render: (args) => (
+    <div className="grid w-fit grid-cols-4 items-center gap-spacing-16 text-type-caption text-text-tertiary">
+      <span>Default</span>
+      <span>Hover</span>
+      <span>Active</span>
+      <span>Disabled</span>
+      {(Object.keys(STATE_CLASSES) as Array<keyof typeof STATE_CLASSES>).map(
+        (variant) => {
+          const [hover, active] = STATE_CLASSES[variant]
+          return [
+            <Button key={`${variant}-default`} {...args} variant={variant} />,
+            <Button
+              key={`${variant}-hover`}
+              {...args}
+              variant={variant}
+              className={hover}
+            />,
+            <Button
+              key={`${variant}-active`}
+              {...args}
+              variant={variant}
+              className={active}
+            />,
+            <Button
+              key={`${variant}-disabled`}
+              {...args}
+              variant={variant}
+              disabled
+            />,
+          ]
+        },
+      )}
+    </div>
+  ),
+}
