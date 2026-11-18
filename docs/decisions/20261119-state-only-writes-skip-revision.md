@@ -127,9 +127,12 @@ How it works:
   still needed for this case.
 - Neutral, because otherwise a running turn not seeing the PATCHed values doesn't matter:
   `lastOpenedAt` is not read by any agent.
-- Bad, because local development with `DATABASE_URL` unset is not covered. ADK then uses its own
-  `SqliteSessionService`, which keeps its stale check, so the bug still reproduces locally. A
-  `DATABASE_URL` of `sqlite+aiosqlite:///…` (as the backend image sets) gets the fix.
+- Neutral, because local development depends on `DATABASE_URL`. With it unset or `sqlite://`,
+  ADK uses its own `SqliteSessionService`, which keeps its stale check. `adk/cofacts_ai/.env.example`
+  therefore defaults to `sqlite+aiosqlite:///./cofacts_sessions.db`, a file in `adk/` (SQLite
+  doesn't create a missing `.adk/` directory), which gets `CofactsSessionService` like the
+  backend image's default. An existing `.env` keeps whatever it has. The file name differs from
+  ADK's `.adk/session.db` because the two services' tables differ.
 - Neutral, because `update_time` can now be older than the newest event. ADK uses it only as
   the marker and for list ordering. Its marker-less fallback, which compares the newest event
   id, applies only to sessions not loaded by `DatabaseSessionService`, which we don't have.

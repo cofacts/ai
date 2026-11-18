@@ -3,6 +3,7 @@
 
 # ADK local state / cache
 .adk
+cofacts_sessions.db
 
 # Python cache
 __pycache__
