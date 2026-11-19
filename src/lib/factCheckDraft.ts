@@ -230,3 +230,83 @@ export function draftButtonsByMessage(
   if (!isStreaming) endTurn()
   return result
 }
+
+/**
+ * The passed draft proposed right before `draftId`, or null. Used to tell whether a draft is
+ * the AI's answer to the user's edits of the previous one.
+ */
+export function previousPassedDraftId(
+  toolInvocations: Record<string, ToolInvocation>,
+  draftId: string,
+): string | null {
+  let previous: string | null = null
+  for (const inv of Object.values(toolInvocations)) {
+    if (inv.id === draftId) return previous
+    if (inv.name === 'draft_factcheck_response' && inv.resp?.success)
+      previous = inv.id
+  }
+  return null
+}
+
+export type DiffSegment = {
+  kind: 'same' | 'added' | 'removed'
+  text: string
+}
+
+/**
+ * Compares the AI's version with the user's, block by block, so a locked draft can show the
+ * AI's version with the user's changes marked. Reply text is split into paragraphs (blank
+ * lines); references, which have one source per line, into lines. A changed block shows as the
+ * AI's block removed and the user's added. Longest-common-subsequence over blocks — drafts are a
+ * handful of paragraphs, so the quadratic table is tiny.
+ */
+export function blockDiff(
+  original: string,
+  edited: string,
+  by: 'paragraph' | 'line',
+): Array<DiffSegment> {
+  const split = (s: string) =>
+    (by === 'paragraph' ? s.split(/\n\s*\n/) : s.split('\n'))
+      .map((b) => b.trim())
+      .filter(Boolean)
+  const a = split(original)
+  const b = split(edited)
+  const lcs: Array<Array<number>> = Array.from({ length: a.length + 1 }, () =>
+    new Array<number>(b.length + 1).fill(0),
+  )
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      lcs[i]![j] =
+        a[i] === b[j]
+          ? lcs[i + 1]![j + 1]! + 1
+          : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!)
+
+  const out: Array<DiffSegment> = []
+  let i = 0
+  let j = 0
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      out.push({ kind: 'same', text: a[i]! })
+      i++
+      j++
+    } else if (
+      j < b.length &&
+      (i >= a.length || lcs[i]![j + 1]! >= lcs[i + 1]![j]!)
+    ) {
+      out.push({ kind: 'added', text: b[j]! })
+      j++
+    } else {
+      out.push({ kind: 'removed', text: a[i]! })
+      i++
+    }
+  }
+  // Show a replaced block as removed-then-added, the order people read a correction in.
+  for (let k = 0; k + 1 < out.length; k++) {
+    if (out[k]!.kind === 'added' && out[k + 1]!.kind === 'removed') {
+      const t = out[k]!
+      out[k] = out[k + 1]!
+      out[k + 1] = t
+    }
+  }
+  return out
+}

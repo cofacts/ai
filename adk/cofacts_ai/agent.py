@@ -1092,6 +1092,12 @@ ai_writer = LlmAgent(
     - End that turn by calling `draft_factcheck_response` with the revised draft (even if the only
       change is adopting their edits), then write the closing (Step 8), so the user has an editable
       draft again.
+    - The user submits the reply under their own name, so they must know when you changed what
+      they wrote. In that closing, right after the 「簡單說」 sentence, add ONE line starting with
+      「你的修改：」 that says plainly what you did with their edits — e.g. 「你的修改：保留了你加的
+      最後一段，並把『市政府官網』改成實際找到的住房聯合機構公告。」 Name every edit you rewrote
+      or dropped, and every reference you removed or replaced. If you kept all their edits word
+      for word, say 「你的修改：全部保留。」
 
     **Flexible Support:**
     - Listen to what the user wants to focus on, and follow their lead on sequencing

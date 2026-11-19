@@ -6,7 +6,10 @@ import type { ToolInvocation } from '@/lib/adk'
 import { useChat } from '@/hooks/useChat'
 import { RightDrawer } from '@/components/RightDrawer'
 import { useAuth } from '@/lib/auth'
-import { draftTargetArticleIds } from '@/lib/factCheckDraft'
+import {
+  draftTargetArticleIds,
+  previousPassedDraftId,
+} from '@/lib/factCheckDraft'
 import {
   MY_ARTICLE_REPLIES_QUERY,
   getMyArticleReplies,
@@ -68,6 +71,7 @@ function ToolDrawer() {
   }, [sessionId, lastReplyDraftId, navigate])
 
   const invocation = toolInvocations[toolCallId] ?? null
+  const previousDraftId = previousPassedDraftId(toolInvocations, toolCallId)
   const lockReason = draftLockReason(invocation, {
     lastReplyDraftId,
     isStreaming,
@@ -99,6 +103,9 @@ function ToolDrawer() {
         sessionId,
         lockReason,
         sentEdit: sentDraftEdits[toolCallId] ?? null,
+        revisedFromUserEdit: previousDraftId
+          ? !!sentDraftEdits[previousDraftId]
+          : false,
         targetArticleIds,
         articles,
         myReplies,

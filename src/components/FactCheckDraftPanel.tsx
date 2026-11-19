@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import type { AllTools } from '@/lib/adk'
 import type {
+  DiffSegment,
   DraftFields,
   LookedUpArticle,
   ReplyCategory,
@@ -9,6 +10,7 @@ import type {
 import type { MaterialSymbol } from '@/components/icons/material-symbols'
 import {
   REPLY_CATEGORY_LABELS,
+  blockDiff,
   draftFieldsEqual,
   draftFieldsFromArgs,
   draftSubmitProblem,
@@ -47,6 +49,8 @@ export interface DraftPanelContext {
   onOpenLatestDraft?: () => void
   /** The logged-in user's name, shown on the submit button. */
   userName: string | null
+  /** This draft is the AI's revision of the user's edits to the previous one. */
+  revisedFromUserEdit?: boolean
 }
 
 const CATEGORIES: Array<{
@@ -90,8 +94,63 @@ const CATEGORIES: Array<{
 
 const LOCK_MESSAGES: Record<Exclude<DraftLockReason, null>, string> = {
   streaming: 'AI 正在回覆，回覆完成後才能編輯這份草稿。',
-  superseded: '這是較早的草稿。只有最新的草稿可以編輯和送出。',
+  superseded: '這是較早的草稿，只有最新的草稿可以編輯和送出。',
   rejected: 'AI 的這次提案沒有通過來源檢查，不能送出。請看最新的草稿。',
+}
+
+/** The streaming message when the AI is working from edits the user sent with this draft. */
+const SENT_EDIT_STREAMING_MESSAGE =
+  'AI 正在依你的修改更新草稿，完成前不能編輯。'
+
+/**
+ * A locked draft keeps the field's outline but not its white input fill, so it reads as
+ * something you can't type in. Shared by the plain and the marked versions.
+ */
+const READ_ONLY_TEXT =
+  'w-full p-spacing-12 text-type-body-s whitespace-pre-wrap border border-border-subtle rounded-radius-10'
+
+/**
+ * A locked draft's text with the user's sent edits marked against the AI's version: what they
+ * added or rewrote gets a quiet grey highlight and a blue underline, inline so it reads as part of
+ * its paragraph; the AI's text they removed is struck through. The legend is in the lock notice.
+ */
+function MarkedText({
+  id,
+  segments,
+  mono = false,
+}: {
+  id: string
+  segments: Array<DiffSegment>
+  mono?: boolean
+}) {
+  return (
+    <div
+      id={id}
+      className={cn(
+        READ_ONLY_TEXT,
+        'space-y-spacing-12',
+        mono ? 'font-mono break-all text-text-secondary' : 'text-text-primary',
+      )}
+    >
+      {segments.map((seg, i) =>
+        seg.kind === 'same' ? (
+          <p key={i}>{seg.text}</p>
+        ) : seg.kind === 'added' ? (
+          <p key={i}>
+            <ins className="bg-surface-selected text-text-primary underline decoration-text-link decoration-2 underline-offset-4 rounded-radius-5 px-spacing-2 [box-decoration-break:clone]">
+              <span className="sr-only">你修改的內容：</span>
+              {seg.text}
+            </ins>
+          </p>
+        ) : (
+          <del key={i} className="block text-text-tertiary line-through">
+            <span className="sr-only">你刪除的內容：</span>
+            {seg.text}
+          </del>
+        ),
+      )}
+    </div>
+  )
 }
 
 function CopyButton({ value }: { value: string }) {
@@ -243,6 +302,7 @@ export function FactCheckDraftPanel({
     onSubmitted,
     onOpenLatestDraft,
     userName,
+    revisedFromUserEdit = false,
   } = context
   const original = draftFieldsFromArgs(args)
   // What the draft holds before any unsent edits: the version last sent to the AI, if any.
@@ -257,6 +317,22 @@ export function FactCheckDraftPanel({
     !!submitted || lockReason === null || lockReason === 'streaming'
   const fields: DraftFields = showsEdit && edit ? edit : base
   const isEdited = !draftFieldsEqual(fields, original)
+  // A locked draft shows the user's sent version with their changes marked against the AI's.
+  const marked =
+    !editable && !submitted && isEdited
+      ? {
+          classification:
+            fields.classification !== original.classification
+              ? fields.classification
+              : null,
+          text: blockDiff(original.text, fields.text, 'paragraph'),
+          references: blockDiff(original.references, fields.references, 'line'),
+        }
+      : null
+  const textMarked = !!marked?.text.some((seg) => seg.kind !== 'same')
+  const referencesMarked = !!marked?.references.some(
+    (seg) => seg.kind !== 'same',
+  )
 
   const update = (patch: Partial<DraftFields>) => {
     const next = { ...fields, ...patch }
@@ -359,12 +435,32 @@ export function FactCheckDraftPanel({
               )}
             </div>
           </div>
+        ) : editable && revisedFromUserEdit && !edit ? (
+          <div
+            role="status"
+            className="flex items-start gap-spacing-8 rounded-radius-10 border border-border-subtle bg-surface-base p-spacing-12 text-type-body-s text-text-secondary"
+          >
+            <MaterialIcon name="edit_document" size={24} className="shrink-0" />
+            <p>這是 AI 依你的修改產生的新草稿。</p>
+          </div>
         ) : (
           lockReason && (
             <div className="flex items-start gap-spacing-8 rounded-radius-10 border border-border-subtle bg-surface-base p-spacing-12 text-type-body-s text-text-secondary">
               <MaterialIcon name="lock" size={24} className="shrink-0" />
               <div className="space-y-spacing-8">
-                <p>{LOCK_MESSAGES[lockReason]}</p>
+                <p>
+                  {lockReason === 'streaming' && sentEdit
+                    ? SENT_EDIT_STREAMING_MESSAGE
+                    : LOCK_MESSAGES[lockReason]}
+                </p>
+                {marked && lockReason !== 'rejected' && (
+                  <p>
+                    {marked.classification &&
+                      `你把分類改為「${REPLY_CATEGORY_LABELS[marked.classification]}」。`}
+                    {(textMarked || referencesMarked) &&
+                      '藍色底線是你修改過的內容，刪除線是你刪掉的內容。'}
+                  </p>
+                )}
                 {lockReason !== 'streaming' && onOpenLatestDraft && (
                   <Button
                     variant="outline"
@@ -410,10 +506,12 @@ export function FactCheckDraftPanel({
               onChange={(e) => update({ text: e.target.value })}
               className="w-full min-h-[11rem] bg-surface-base"
             />
+          ) : marked && textMarked ? (
+            <MarkedText id={textId} segments={marked.text} />
           ) : (
             <div
               id={textId}
-              className="w-full min-h-[11rem] p-spacing-12 text-type-body-s text-text-primary bg-surface-base border border-border-subtle rounded-radius-10 whitespace-pre-wrap"
+              className={cn(READ_ONLY_TEXT, 'text-text-primary')}
             >
               {fields.text || (
                 <span className="text-text-disabled">（尚未產生）</span>
@@ -436,6 +534,9 @@ export function FactCheckDraftPanel({
             >
               佐證資料
             </label>
+            {referencesMarked && (
+              <span className="text-type-caption text-text-link">已修改</span>
+            )}
             <CopyButton value={fields.references} />
           </div>
           {editable ? (
@@ -445,10 +546,15 @@ export function FactCheckDraftPanel({
               onChange={(e) => update({ references: e.target.value })}
               className="w-full min-h-[8rem] font-mono bg-surface-base text-text-secondary"
             />
+          ) : marked && referencesMarked ? (
+            <MarkedText id={referencesId} segments={marked.references} mono />
           ) : (
             <div
               id={referencesId}
-              className="w-full min-h-[8rem] p-spacing-12 text-type-body-s font-mono text-text-secondary bg-surface-base border border-border-subtle rounded-radius-10 whitespace-pre-wrap break-all"
+              className={cn(
+                READ_ONLY_TEXT,
+                'font-mono text-text-secondary break-all',
+              )}
             >
               {fields.references || (
                 <span className="text-text-disabled">（尚未產生）</span>

@@ -42,6 +42,14 @@ const sentEdit = {
   references: args.references,
 } satisfies DraftFields
 
+/** A typical edit: one paragraph added, one source line rewritten. */
+const sentEditWithAddition = {
+  classification: 'OPINIONATED',
+  text: args.text + '\n\n💡 如果想知道里仁的說明，可以到里仁官網查詢。',
+  references:
+    'https://www.cna.com.tw/news/aopl/202506200337.aspx 中央社：加拿大媒體調查報導（2025/6/20）\nhttps://www.leezen.com.tw/news/detail/366 里仁官方聲明',
+} satisfies DraftFields
+
 const meta = {
   title: 'components/FactCheckDraftPanel',
   component: FactCheckDraftPanel,
@@ -110,19 +118,62 @@ export const EditedAndSent: Story = {
   },
 }
 
-/** A newer draft replaced this one; it shows the version the user sent, read-only. */
-export const Superseded: Story = {
+/**
+ * The user sent their edits with a chat message and the AI is answering: read-only, showing the
+ * version they sent with their changes marked against the AI's, so the edits don't look lost.
+ */
+export const SentWhileAiIsAnswering: Story = {
   args: {
-    toolCallId: 'adk-draft-old',
-    context: { ...context, lockReason: 'superseded', sentEdit },
+    toolCallId: 'adk-draft-sending',
+    context: {
+      ...context,
+      lockReason: 'streaming',
+      sentEdit: sentEditWithAddition,
+    },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await expect(canvas.queryByRole('textbox')).toBeNull()
-    await expect(canvas.getByText(sentEdit.text)).toBeVisible()
+    await expect(canvas.getByText(/AI 正在依你的修改更新草稿/)).toBeVisible()
+    await expect(canvas.getByText(/藍色底線是你修改過的內容/)).toBeVisible()
+    await expect(canvas.getByText(/到里仁官網查詢/)).toBeVisible()
+  },
+}
+
+/** A newer draft replaced this one; it shows the version the user sent, marked, read-only. */
+export const Superseded: Story = {
+  args: {
+    toolCallId: 'adk-draft-old',
+    context: {
+      ...context,
+      lockReason: 'superseded',
+      sentEdit: sentEditWithAddition,
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.queryByRole('textbox')).toBeNull()
+    await expect(canvas.getByText(/到里仁官網查詢/)).toBeVisible()
+    await expect(
+      canvas.getByRole('button', { name: '開啟最新草稿' }),
+    ).toBeVisible()
     await expect(
       canvas.queryByRole('button', { name: /送出查核回應/ }),
     ).toBeNull()
+  },
+}
+
+/** The AI's new draft, revised from the user's edits to the previous one. */
+export const RevisedFromUserEdit: Story = {
+  args: {
+    toolCallId: 'adk-draft-revised',
+    context: { ...context, revisedFromUserEdit: true },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(
+      canvas.getByText('這是 AI 依你的修改產生的新草稿。'),
+    ).toBeVisible()
   },
 }
 

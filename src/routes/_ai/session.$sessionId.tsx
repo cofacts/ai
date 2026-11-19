@@ -74,6 +74,23 @@ function SessionPage() {
     })
   }, [lastReplyDraftId, toolCallId, sessionId, navigate])
 
+  // When a newer draft arrives while the previous latest is open in the drawer (typically the one
+  // the user just sent edits from), switch to it, so the user lands on the draft they can edit.
+  const prevLatestDraftId = useRef(lastReplyDraftId)
+  useEffect(() => {
+    const prev = prevLatestDraftId.current
+    prevLatestDraftId.current = lastReplyDraftId
+    if (!lastReplyDraftId || prev === lastReplyDraftId) return
+    if (!toolCallId || toolCallId !== prev) return
+    openedCallIds.current.add(lastReplyDraftId)
+    navigate({
+      to: '/session/$sessionId/tool/$toolCallId',
+      params: { sessionId, toolCallId: lastReplyDraftId },
+      viewTransition: true,
+      replace: true,
+    })
+  }, [lastReplyDraftId, toolCallId, sessionId, navigate])
+
   useEffect(() => {
     if (isStreaming) {
       // Don't trigger ADK state update when streaming;
@@ -114,6 +131,7 @@ function SessionPage() {
           onToolBadgeClick={handleToolBadgeClick}
           toolInvocations={toolInvocations}
           onOpenDraft={handleOpenDraft}
+          latestDraftId={lastReplyDraftId}
         />
       </div>
       <Outlet />

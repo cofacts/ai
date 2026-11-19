@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { INITIAL_CHAT_STATE, applyEventToState } from '../chatCache'
 import {
+  blockDiff,
   draftButtonsByMessage,
   draftSubmitProblem,
   draftTargetArticleIds,
@@ -226,5 +227,29 @@ describe('draftButtonsByMessage', () => {
   test('a turn whose drafts all failed gets no button', () => {
     const messages = [user('u1'), agent('a1', ['bad'])]
     expect(draftButtonsByMessage(messages, invocations, false).size).toBe(0)
+  })
+})
+
+describe('blockDiff', () => {
+  test('marks an added paragraph', () => {
+    expect(blockDiff('A\n\nB', 'A\n\nB\n\nC', 'paragraph')).toEqual([
+      { kind: 'same', text: 'A' },
+      { kind: 'same', text: 'B' },
+      { kind: 'added', text: 'C' },
+    ])
+  })
+  test('shows a rewritten line as removed then added', () => {
+    expect(blockDiff('x\ny\nz', 'x\nY\nz', 'line')).toEqual([
+      { kind: 'same', text: 'x' },
+      { kind: 'removed', text: 'y' },
+      { kind: 'added', text: 'Y' },
+      { kind: 'same', text: 'z' },
+    ])
+  })
+  test('marks a removed paragraph', () => {
+    expect(blockDiff('A\n\nB', 'B', 'paragraph')).toEqual([
+      { kind: 'removed', text: 'A' },
+      { kind: 'same', text: 'B' },
+    ])
   })
 })

@@ -17,6 +17,8 @@ interface AgentMessageProps {
    */
   draftId?: string
   onOpenDraft?: (draftId: string) => void
+  /** Older drafts get a quieter button and say so, so the user can tell which one to edit. */
+  isLatestDraft?: boolean
 }
 
 export function AgentMessage({
@@ -26,6 +28,7 @@ export function AgentMessage({
   onToolBadgeClick,
   draftId,
   onOpenDraft,
+  isLatestDraft = true,
 }: AgentMessageProps) {
   return (
     <div className="flex flex-col items-start w-full">
@@ -121,10 +124,11 @@ export function AgentMessage({
         {draftId && onOpenDraft && (
           <AiButton
             icon="edit_document"
+            variant={isLatestDraft ? 'default' : 'secondary'}
             className="mt-spacing-4"
             onClick={() => onOpenDraft(draftId)}
           >
-            查核回應草稿
+            {isLatestDraft ? '查核回應草稿（最新）' : '較早的草稿'}
           </AiButton>
         )}
       </div>

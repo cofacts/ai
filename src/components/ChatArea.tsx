@@ -18,6 +18,8 @@ interface ChatAreaProps {
   /** Used to find each turn's passed draft, for the 「查核回應草稿」 button. */
   toolInvocations?: Record<string, ToolInvocation>
   onOpenDraft?: (draftId: string) => void
+  /** The only draft that can still be edited; its button says 「最新」. */
+  latestDraftId?: string | null
 }
 
 export function ChatArea({
@@ -30,6 +32,7 @@ export function ChatArea({
   onToolBadgeClick,
   toolInvocations,
   onOpenDraft,
+  latestDraftId,
 }: ChatAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const draftButtons = useMemo(
@@ -66,6 +69,7 @@ export function ChatArea({
                   focusedToolCallId={focusedToolCallId}
                   onToolBadgeClick={onToolBadgeClick}
                   draftId={draftButtons.get(msg.id)}
+                  isLatestDraft={draftButtons.get(msg.id) === latestDraftId}
                   onOpenDraft={onOpenDraft}
                 />
               )}
