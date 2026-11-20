@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
@@ -8,6 +9,7 @@ import viteReact from '@vitejs/plugin-react'
 import viteTsConfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
+import type { Plugin } from 'vite'
 
 // Vitest runs without the Start plugins. Start's compiler replaces every
 // `createServerFn(...).handler(fn)` with an RPC stub and drops `fn`, so a route's
@@ -15,8 +17,40 @@ import { nitro } from 'nitro/vite'
 // (src/test/createServerFnMock.ts) and call validator + handler directly.
 const isVitest = !!process.env.VITEST
 
+/**
+ * `import data from './file?base64'` gives the file's bytes as a base64 string, so a
+ * binary the server reads (the og.png fonts, resvg's wasm) ships inside the server
+ * bundle: no Nitro asset config and nothing to read from disk at runtime. Vite's own
+ * `?inline` doesn't take .wasm.
+ */
+function base64Import(): Plugin {
+  const SUFFIX = '?base64'
+  return {
+    name: 'cofacts:base64-import',
+    enforce: 'pre',
+    async resolveId(source, importer) {
+      if (!source.endsWith(SUFFIX)) return null
+      const resolved = await this.resolve(
+        source.slice(0, -SUFFIX.length),
+        importer,
+        {
+          skipSelf: true,
+        },
+      )
+      return resolved && `${resolved.id}${SUFFIX}`
+    },
+    load(id) {
+      if (!id.endsWith(SUFFIX)) return null
+      const file = id.slice(0, -SUFFIX.length)
+      this.addWatchFile(file)
+      return `export default ${JSON.stringify(fs.readFileSync(file).toString('base64'))}`
+    },
+  }
+}
+
 const config = defineConfig({
   plugins: [
+    base64Import(),
     !isVitest && devtools(),
     !isVitest && nitro(),
     // this is the plugin that enables path aliases

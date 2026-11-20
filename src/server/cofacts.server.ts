@@ -43,8 +43,15 @@ const INVALID_TOKEN = /Invalid or expired Bearer token/
 export async function cofactsExec<TResult, TVariables>(
   document: TypedDocumentNode<TResult, TVariables>,
   variables?: TVariables,
+  options?: {
+    /**
+     * Ask as a logged-out visitor, ignoring the session cookie: for responses that
+     * are cached publicly, such as /article/:id/og.png.
+     */
+    anonymous?: boolean
+  },
 ): Promise<TResult> {
-  const token = getCookie(SESSION_COOKIE_NAME)
+  const token = options?.anonymous ? undefined : getCookie(SESSION_COOKIE_NAME)
   const body = JSON.stringify({ query: print(document), variables })
   const post = (withToken: boolean) =>
     fetch(`${getApiBase()}/graphql`, {

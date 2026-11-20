@@ -24,6 +24,10 @@ export type ArticleTypeEnum = 'AUDIO' | 'IMAGE' | 'TEXT' | 'VIDEO'
 
 export type AvatarTypeEnum = 'Facebook' | 'Github' | 'Gravatar' | 'OpenPeeps'
 
+export type ReplyRequestStatusEnum =
+  /** Created by a blocked user violating terms of use. */
+  'BLOCKED' | 'NORMAL'
+
 /** Reflects how the replier categories the replied article. */
 export type ReplyTypeEnum =
   /** The replier thinks that the article is actually not a complete article on the internet or passed around in messengers. */
@@ -61,11 +65,29 @@ export type GetArticleQuery = {
   GetArticle: {
     id: string
     text: string | null
+    status: ReplyRequestStatusEnum
+    replyRequestCount: number | null
     articleReplies: Array<{
       replyId: string
       replyType: ReplyTypeEnum | null
       reply: { text: string | null } | null
     }>
+  } | null
+}
+
+export type GetOgArticleQueryVariables = Exact<{
+  id: string
+}>
+
+export type GetOgArticleQuery = {
+  GetArticle: {
+    id: string
+    text: string | null
+    articleType: ArticleTypeEnum
+    status: ReplyRequestStatusEnum
+    replyRequestCount: number | null
+    thumbnailUrl: string | null
+    articleReplies: Array<{ replyType: ReplyTypeEnum | null }>
   } | null
 }
 
@@ -294,6 +316,11 @@ export const GetArticleDocument = {
               selections: [
                 { kind: 'Field', name: { kind: 'Name', value: 'id' } },
                 { kind: 'Field', name: { kind: 'Name', value: 'text' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'replyRequestCount' },
+                },
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'articleReplies' },
@@ -342,6 +369,96 @@ export const GetArticleDocument = {
     },
   ],
 } as unknown as DocumentNode<GetArticleQuery, GetArticleQueryVariables>
+export const GetOgArticleDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'GetOgArticle' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
+          type: {
+            kind: 'NonNullType',
+            type: {
+              kind: 'NamedType',
+              name: { kind: 'Name', value: 'String' },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'GetArticle' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'id' },
+                value: {
+                  kind: 'Variable',
+                  name: { kind: 'Name', value: 'id' },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'text' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'articleType' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'replyRequestCount' },
+                },
+                {
+                  kind: 'Field',
+                  alias: { kind: 'Name', value: 'thumbnailUrl' },
+                  name: { kind: 'Name', value: 'attachmentUrl' },
+                  arguments: [
+                    {
+                      kind: 'Argument',
+                      name: { kind: 'Name', value: 'variant' },
+                      value: { kind: 'EnumValue', value: 'THUMBNAIL' },
+                    },
+                  ],
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'articleReplies' },
+                  arguments: [
+                    {
+                      kind: 'Argument',
+                      name: { kind: 'Name', value: 'statuses' },
+                      value: {
+                        kind: 'ListValue',
+                        values: [{ kind: 'EnumValue', value: 'NORMAL' }],
+                      },
+                    },
+                  ],
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'replyType' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<GetOgArticleQuery, GetOgArticleQueryVariables>
 export const ReportOutcomeArticleDocument = {
   kind: 'Document',
   definitions: [
