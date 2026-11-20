@@ -105,6 +105,12 @@ function ArticlePage() {
       <ArticleQuickNav items={quickNavItems} className="lg:col-start-2" />
 
       <div className="flex flex-col gap-spacing-48 lg:col-start-1 lg:row-start-1">
+        <ArticleSection id={ARTICLE_SECTION_IDS.original} title="原始訊息">
+          <p className="text-type-body-m whitespace-pre-wrap text-text-primary">
+            {article.text || '這則訊息沒有文字內容。'}
+          </p>
+        </ArticleSection>
+
         <ArticleSection
           id={ARTICLE_SECTION_IDS.replies}
           title={`查核回應 (${replies.length})`}
@@ -149,12 +155,6 @@ function ArticlePage() {
           title="相似可疑訊息與組合"
         >
           <p className="text-type-body-m text-text-secondary">準備中。</p>
-        </ArticleSection>
-
-        <ArticleSection id={ARTICLE_SECTION_IDS.original} title="原始訊息">
-          <p className="text-type-body-m whitespace-pre-wrap text-text-primary">
-            {article.text || '這則訊息沒有文字內容。'}
-          </p>
         </ArticleSection>
       </div>
     </main>

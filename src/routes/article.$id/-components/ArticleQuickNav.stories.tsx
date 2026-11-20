@@ -14,18 +14,24 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** Penpot Device = Desktop: a column of anchor links. */
+/**
+ * Penpot Device = Desktop: a column of anchor links under 「快速索引」.
+ * 相似可疑訊息與組合 is left out: on desktop it sits in the right column.
+ */
 export const Desktop: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    await expect(
+      canvas.getByRole('heading', { name: '快速索引' }),
+    ).toBeVisible()
     const nav = canvas.getByRole('navigation', { name: '本頁索引' })
     const links = within(nav).getAllByRole('link')
     await expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '#replies',
-      '#similar',
       '#original',
+      '#replies',
     ])
-    await expect(links[0]).toHaveAccessibleName('查核回應 (3)')
+    await expect(links[0]).toHaveAccessibleName('原始訊息')
+    await expect(links[1]).toHaveAccessibleName('查核回應 (3)')
   },
 }
 
@@ -42,20 +48,33 @@ export const NoReply: Story = {
   },
 }
 
-/** 「查核闢謠」 is outside the link row, so it isn't one of the 本頁索引 entries. */
+/** 「我要查核闢謠」 is outside the link row, so it isn't one of the 本頁索引 entries. */
 export const WithCheckButton: Story = {
   args: { checkHref: '/article/example/reply/new' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     const nav = canvas.getByRole('navigation', { name: '本頁索引' })
-    const button = canvas.getByRole('link', { name: '查核闢謠' })
+    const button = canvas.getByRole('link', { name: '我要查核闢謠' })
     await expect(nav).not.toContainElement(button)
     await expect(button).toHaveAttribute('href', '/article/example/reply/new')
   },
 }
 
-/** Penpot Device = Mobile: the row scrolls sideways; 查核闢謠 floats at the bottom. */
+/**
+ * Penpot Device = Mobile: the row scrolls sideways, with no heading and with
+ * 相似可疑訊息與組合; 我要查核闢謠 floats at the bottom.
+ */
 export const Mobile: Story = {
   ...WithCheckButton,
   globals: { viewport: { value: 'mobile1', isRotated: false } },
+  play: async (context) => {
+    await WithCheckButton.play?.(context)
+    const canvas = within(context.canvasElement)
+    await expect(
+      canvas.queryByRole('heading', { name: '快速索引' }),
+    ).not.toBeInTheDocument()
+    await expect(
+      canvas.getByRole('link', { name: '相似可疑訊息與組合' }),
+    ).toBeVisible()
+  },
 }
