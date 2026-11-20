@@ -149,7 +149,7 @@ export const WithLink: Story = {
     await expect(
       canvas.getByRole('link', { name: /憂心防疫前線人員口罩/ }),
     ).toHaveAttribute('href', args.hyperlinks![0]!.url)
-    await userEvent.click(canvas.getByRole('button', { name: '檢舉' }))
+    await userEvent.click(canvas.getByRole('button', { name: '檢舉這則回應' }))
     await expect(args.onReport).toHaveBeenCalled()
   },
 }

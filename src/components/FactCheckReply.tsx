@@ -193,7 +193,7 @@ export function FactCheckReply({
                 */}
                 <Button
                   variant="outline"
-                  aria-label="檢舉"
+                  aria-label="檢舉這則回應"
                   className="hidden size-[36px] p-spacing-8 md:inline-flex"
                   onClick={onReport}
                 >
