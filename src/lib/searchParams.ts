@@ -125,7 +125,9 @@ const keyword = z
         .trim(),
     )
       .slice(0, MAX_KEYWORD_LENGTH)
-      .join(''),
+      .join('')
+      // The cut can land on a space; trim again so parsing the result changes nothing.
+      .trimEnd(),
   )
   .catch('')
 

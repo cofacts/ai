@@ -149,6 +149,14 @@ describe('keyword', () => {
     expect(q).not.toMatch(/�/)
   })
 
+  it('a cut that lands on a space leaves no trailing space', () => {
+    const q = parse({
+      q: 'a'.repeat(MAX_KEYWORD_LENGTH - 1) + ' ' + 'b'.repeat(10),
+    }).q
+    expect(q).toBe('a'.repeat(MAX_KEYWORD_LENGTH - 1))
+    expect(parse({ q }).q).toBe(q)
+  })
+
   it.each([
     '<script>alert(1)</script>',
     '"; DROP TABLE articles;--',
