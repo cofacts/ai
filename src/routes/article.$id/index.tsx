@@ -4,10 +4,17 @@ import { queryOptions, useSuspenseQuery } from '@tanstack/react-query'
 
 import { ArticleQuickNav } from './-components/ArticleQuickNav'
 import { ArticleSection } from './-components/ArticleSection'
-import { ARTICLE_SECTION_IDS, getQuickNavItems, replyAnchorId } from './-lib'
+import {
+  ARTICLE_SECTION_IDS,
+  getArticleHead,
+  getQuickNavItems,
+  replyAnchorId,
+  summarizeText,
+} from './-lib'
 import type { ReplyType } from '@/components/FactCheckReplyTitle'
 
 import { FactCheckReplyTitle } from '@/components/FactCheckReplyTitle'
+import { getPageOrigin } from '@/lib/pageOrigin'
 import { cofactsExec } from '@/server/cofacts.server'
 import { graphql } from '@/server/gql'
 
@@ -64,27 +71,13 @@ export const Route = createFileRoute('/article/$id/')({
       articleQuery(params.id),
     )
     if (!article) throw notFound()
-    const text = article.text?.trim() ?? ''
     return {
-      title: text.slice(0, TITLE_LENGTH),
-      description: text.slice(0, DESCRIPTION_LENGTH),
+      title: summarizeText(article.text, TITLE_LENGTH),
+      description: summarizeText(article.text, DESCRIPTION_LENGTH),
+      url: `${getPageOrigin()}/article/${encodeURIComponent(params.id)}`,
     }
   },
-  head: ({ loaderData }) => {
-    const title = `${loaderData?.title || '可疑訊息'} | Cofacts 真的假的`
-    return {
-      meta: [
-        { title },
-        { property: 'og:title', content: title },
-        ...(loaderData?.description
-          ? [
-              { name: 'description', content: loaderData.description },
-              { property: 'og:description', content: loaderData.description },
-            ]
-          : []),
-      ],
-    }
-  },
+  head: ({ loaderData }) => (loaderData ? getArticleHead(loaderData) : {}),
   component: ArticlePage,
 })
 
