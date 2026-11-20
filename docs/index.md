@@ -165,7 +165,10 @@ message while holding edits, the edited draft is attached to the message as a
 `<user_edited_draft based_on="…">` text part; the writer's instruction tells it to revise from the
 user's version and propose again. The drawer shows each draft as the user last sent it, and a draft
 whose turn ended without a newer one stays editable. Unsent edits live in the TanStack Query cache,
-mirrored to localStorage. The rules are in `src/lib/factCheckDraft.ts`.
+mirrored to localStorage. The rules are in `src/lib/factCheckDraft.ts`. A locked draft that carries the user's
+sent edits marks them against the AI's version (`blockDiff`: added text underlined, removed text
+struck through). The chat labels each turn's button 「查核回應草稿（最新）」 or 「查核回應草稿（較早）」, and
+the drawer moves to a newer draft when one arrives while the previous latest is open.
 
 The writer names the article(s) a reply answers in `draft_factcheck_response`'s `article_ids`;
 submitting creates the reply on the first and links it to the rest (`CreateArticleReply`). When the

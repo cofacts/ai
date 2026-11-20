@@ -17,7 +17,10 @@ interface AgentMessageProps {
    */
   draftId?: string
   onOpenDraft?: (draftId: string) => void
-  /** Older drafts get a quieter button and say so, so the user can tell which one to edit. */
+  /**
+   * Older drafts get a quieter button and say so, so the user can tell which one to edit. Both
+   * labels start with 「查核回應草稿」, the name the writer's closing tells the user to click.
+   */
   isLatestDraft?: boolean
 }
 
@@ -128,7 +131,7 @@ export function AgentMessage({
             className="mt-spacing-4"
             onClick={() => onOpenDraft(draftId)}
           >
-            {isLatestDraft ? '查核回應草稿（最新）' : '較早的草稿'}
+            {isLatestDraft ? '查核回應草稿（最新）' : '查核回應草稿（較早）'}
           </AiButton>
         )}
       </div>

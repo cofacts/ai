@@ -246,6 +246,16 @@ describe('blockDiff', () => {
       { kind: 'same', text: 'z' },
     ])
   })
+  test('lists removals before additions when several blocks change in a row', () => {
+    // A rewritten paragraph, a deleted one and an added one, as in a real edit.
+    expect(blockDiff('A\n\nB\n\nC', 'A\n\nB2\n\nD', 'paragraph')).toEqual([
+      { kind: 'same', text: 'A' },
+      { kind: 'removed', text: 'B' },
+      { kind: 'removed', text: 'C' },
+      { kind: 'added', text: 'B2' },
+      { kind: 'added', text: 'D' },
+    ])
+  })
   test('marks a removed paragraph', () => {
     expect(blockDiff('A\n\nB', 'B', 'paragraph')).toEqual([
       { kind: 'removed', text: 'A' },

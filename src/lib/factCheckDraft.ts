@@ -300,13 +300,24 @@ export function blockDiff(
       i++
     }
   }
-  // Show a replaced block as removed-then-added, the order people read a correction in.
-  for (let k = 0; k + 1 < out.length; k++) {
-    if (out[k]!.kind === 'added' && out[k + 1]!.kind === 'removed') {
-      const t = out[k]!
-      out[k] = out[k + 1]!
-      out[k + 1] = t
-    }
+  // Within each run of changes, list what was removed before what was added, the order people
+  // read a correction in. One swap pass is not enough: two edits in a row come out of the walk
+  // as added, added, removed, removed.
+  const ordered: Array<DiffSegment> = []
+  let run: Array<DiffSegment> = []
+  const flush = () => {
+    ordered.push(
+      ...run.filter((seg) => seg.kind === 'removed'),
+      ...run.filter((seg) => seg.kind === 'added'),
+    )
+    run = []
   }
-  return out
+  for (const seg of out) {
+    if (seg.kind === 'same') {
+      flush()
+      ordered.push(seg)
+    } else run.push(seg)
+  }
+  flush()
+  return ordered
 }
