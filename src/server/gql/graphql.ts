@@ -129,6 +129,12 @@ export type GetArticleQuery = {
     replyRequestCount: number | null
     attachmentUrl: string | null
     originalAttachmentUrl: string | null
+    hyperlinks: Array<{
+      url: string | null
+      title: string | null
+      summary: string | null
+      topImageUrl: string | null
+    } | null> | null
     articleCategories: Array<{
       categoryId: string | null
       positiveFeedbackCount: number | null
@@ -843,6 +849,25 @@ export const GetArticleDocument = {
                       value: { kind: 'EnumValue', value: 'ORIGINAL' },
                     },
                   ],
+                },
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'hyperlinks' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'url' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'summary' },
+                      },
+                      {
+                        kind: 'Field',
+                        name: { kind: 'Name', value: 'topImageUrl' },
+                      },
+                    ],
+                  },
                 },
                 {
                   kind: 'Field',

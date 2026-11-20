@@ -7,6 +7,16 @@ import type { Meta, StoryObj } from '@storybook/tanstack-react'
 const IMAGE =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAwMB/0tP3VEAAAAASUVORK5CYII='
 
+const HYPERLINKS = [
+  {
+    url: 'https://example.com/news?id=1',
+    title: '衛福部：喝溫開水無法預防新冠肺炎',
+    summary:
+      '網傳「喝溫開水可以預防新冠肺炎」的訊息並非衛福部公告，請民眾勿轉傳。',
+    topImageUrl: null,
+  },
+]
+
 const meta = {
   title: 'article/ArticleOriginal',
   component: ArticleOriginal,
@@ -44,6 +54,41 @@ export const Text: Story = {
       'ugc nofollow noopener noreferrer',
     )
     await expect(link).toHaveAttribute('target', '_blank')
+  },
+}
+
+/**
+ * rumors-api resolved the message's URL: a Content/LinkCard under the text.
+ * The card is user content too, so its link is `ugc nofollow`.
+ */
+export const TextWithHyperlink: Story = {
+  args: {
+    hyperlinks: HYPERLINKS,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const card = canvas.getByRole('link', {
+      name: /衛福部：喝溫開水無法預防新冠肺炎/,
+    })
+    await expect(card).toHaveAttribute(
+      'rel',
+      'noopener noreferrer ugc nofollow',
+    )
+    await expect(card).toHaveAttribute('target', '_blank')
+  },
+}
+
+/** A media message shows no preview cards, as on rumors-site. */
+export const ImageWithHyperlink: Story = {
+  args: {
+    articleType: 'IMAGE',
+    attachmentUrl: IMAGE,
+    hyperlinks: HYPERLINKS,
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).queryByText('衛福部：喝溫開水無法預防新冠肺炎'),
+    ).not.toBeInTheDocument()
   },
 }
 

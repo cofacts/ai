@@ -57,6 +57,12 @@ const getArticle = createServerFn({ method: 'GET' })
             attachmentUrl(variant: PREVIEW)
             # Only for logged-in website users; null otherwise.
             originalAttachmentUrl: attachmentUrl(variant: ORIGINAL)
+            hyperlinks {
+              url
+              title
+              summary
+              topImageUrl
+            }
             articleCategories(statuses: [NORMAL]) {
               categoryId
               category {
@@ -153,6 +159,10 @@ function ArticlePage() {
             // GetArticle stays cached for a while after logout, so the original
             // file's URL counts only while someone is logged in.
             originalAttachmentUrl={user ? article.originalAttachmentUrl : null}
+            // The schema lets both a hyperlink and its url be null; a card needs a url.
+            hyperlinks={article.hyperlinks?.flatMap((link) =>
+              link?.url ? [{ ...link, url: link.url }] : [],
+            )}
             replyRequestCount={article.replyRequestCount}
             createdAt={article.createdAt}
             onLogin={() => login(location.pathname)}
