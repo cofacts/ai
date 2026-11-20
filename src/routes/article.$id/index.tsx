@@ -6,7 +6,6 @@ import { ArticleQuickNav } from './-components/ArticleQuickNav'
 import { ArticleSection } from './-components/ArticleSection'
 import {
   ARTICLE_SECTION_IDS,
-  OG_IMAGE,
   getArticleHead,
   getQuickNavItems,
   replyAnchorId,
@@ -76,7 +75,6 @@ export const Route = createFileRoute('/article/$id/')({
       title: summarizeText(article.text, TITLE_LENGTH),
       description: summarizeText(article.text, DESCRIPTION_LENGTH),
       url: `${getPageOrigin()}/article/${encodeURIComponent(params.id)}`,
-      imageUrl: `${getPageOrigin()}${OG_IMAGE.path}`,
     }
   },
   head: ({ loaderData }) => (loaderData ? getArticleHead(loaderData) : {}),

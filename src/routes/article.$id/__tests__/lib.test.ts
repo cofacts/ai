@@ -46,7 +46,6 @@ describe('replyAnchorId', () => {
 
 describe('getArticleHead', () => {
   const url = 'https://example.test/article/abc'
-  const imageUrl = 'https://example.test/og-image.png'
   const content = (head: ReturnType<typeof getArticleHead>, key: string) =>
     head.meta.find(
       (tag) =>
@@ -59,7 +58,6 @@ describe('getArticleHead', () => {
       title: '喝溫開水可以預防新冠肺炎',
       description: '喝溫開水可以預防新冠肺炎，請轉發給家人！',
       url,
-      imageUrl,
     })
     expect(head.meta[0]).toEqual({
       title: '喝溫開水可以預防新冠肺炎 | Cofacts 真的假的',
@@ -75,22 +73,12 @@ describe('getArticleHead', () => {
       content: 'Cofacts 真的假的',
     })
     expect(content(head, 'og:url')).toMatchObject({ content: url })
-    expect(content(head, 'og:image')).toMatchObject({ content: imageUrl })
-    expect(content(head, 'og:image:width')).toMatchObject({ content: '702' })
-    expect(content(head, 'og:image:height')).toMatchObject({ content: '484' })
-    expect(content(head, 'twitter:card')).toMatchObject({
-      content: 'summary_large_image',
-    })
+    expect(content(head, 'twitter:card')).toMatchObject({ content: 'summary' })
     expect(head.links).toEqual([{ rel: 'canonical', href: url }])
   })
 
   it('falls back to 可疑訊息 and leaves out the description without text', () => {
-    const head = getArticleHead({
-      title: '',
-      description: '',
-      url,
-      imageUrl,
-    })
+    const head = getArticleHead({ title: '', description: '', url })
     expect(content(head, 'og:title')).toMatchObject({ content: '可疑訊息' })
     expect(content(head, 'description')).toBeUndefined()
     expect(content(head, 'og:description')).toBeUndefined()

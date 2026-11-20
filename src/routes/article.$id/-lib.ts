@@ -51,34 +51,19 @@ const SITE_NAME = 'Cofacts 真的假的'
 const FALLBACK_TITLE = '可疑訊息'
 
 /**
- * Cofacts' share image (rumors-site's landing-page ogimage.png, in public/).
- * Every article uses it until /article/:id/og.png is generated per article
- * (cofacts/ai#210).
- */
-export const OG_IMAGE = {
-  path: '/og-image.png',
-  width: 702,
-  height: 484,
-  alt: '懷疑自己收到謠言嗎？點我加 LINE 查謠言，或搜尋 Line ID: @cofacts',
-}
-
-/**
  * The <head> of /article/:id: title, description, canonical URL and Open Graph
- * / Twitter tags for share previews.
+ * / Twitter tags for share previews. og:image comes later (cofacts/ai#210).
  */
 export function getArticleHead({
   title,
   description,
   url,
-  imageUrl,
 }: {
   /** The start of the message; empty for a media message without text. */
   title: string
   description: string
   /** Absolute URL of the page, without a hash or query. */
   url: string
-  /** Absolute URL of OG_IMAGE. */
-  imageUrl: string
 }) {
   const ogTitle = title || FALLBACK_TITLE
   return {
@@ -93,12 +78,7 @@ export function getArticleHead({
       ...(description
         ? [{ property: 'og:description', content: description }]
         : []),
-      { property: 'og:image', content: imageUrl },
-      { property: 'og:image:type', content: 'image/png' },
-      { property: 'og:image:width', content: String(OG_IMAGE.width) },
-      { property: 'og:image:height', content: String(OG_IMAGE.height) },
-      { property: 'og:image:alt', content: OG_IMAGE.alt },
-      { name: 'twitter:card', content: 'summary_large_image' },
+      { name: 'twitter:card', content: 'summary' },
     ],
     links: [{ rel: 'canonical', href: url }],
   }
