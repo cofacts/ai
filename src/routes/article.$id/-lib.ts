@@ -1,3 +1,5 @@
+import { replyTypeText } from '@/components/FactCheckReplyTitle'
+
 // Shared by the article page and its -components: the section anchors of
 // /article/:id (Phase 3 design doc §2.4), so links into the page keep working.
 
@@ -48,6 +50,10 @@ export function getQuickNavItems({
 }
 
 const SITE_NAME = 'Cofacts 真的假的'
+
+/** The size of /article/:id/og.png. */
+export const OG_IMAGE_WIDTH = 1200
+export const OG_IMAGE_HEIGHT = 630
 const FALLBACK_TITLE = '可疑訊息'
 
 /**
@@ -58,14 +64,23 @@ export function getArticleHead({
   title,
   description,
   url,
+  imageUrl,
+  verdict,
 }: {
   /** The start of the message; empty for a media message without text. */
   title: string
   description: string
   /** Absolute URL of the page, without a hash or query. */
   url: string
+  /** Absolute URL of /article/:id/og.png, with its ?v=. */
+  imageUrl: string
+  /** What the card says about the fact-check (ogVerdict). */
+  verdict: OgReplyType | null
 }) {
   const ogTitle = title || FALLBACK_TITLE
+  const imageAlt = `${ogTitle}（${
+    verdict ? `Cofacts 查核：${replyTypeText[verdict]}` : 'Cofacts 查核中'
+  }）`
   return {
     meta: [
       { title: `${ogTitle} | ${SITE_NAME}` },
@@ -78,7 +93,12 @@ export function getArticleHead({
       ...(description
         ? [{ property: 'og:description', content: description }]
         : []),
-      { name: 'twitter:card', content: 'summary' },
+      { property: 'og:image', content: imageUrl },
+      { property: 'og:image:type', content: 'image/png' },
+      { property: 'og:image:width', content: String(OG_IMAGE_WIDTH) },
+      { property: 'og:image:height', content: String(OG_IMAGE_HEIGHT) },
+      { property: 'og:image:alt', content: imageAlt },
+      { name: 'twitter:card', content: 'summary_large_image' },
     ],
     links: [{ rel: 'canonical', href: url }],
   }
@@ -93,4 +113,75 @@ export function summarizeText(text: string | null | undefined, length: number) {
   return Array.from((text ?? '').replace(/\s+/g, ' ').trim())
     .slice(0, length)
     .join('')
+}
+
+export type OgReplyType = 'RUMOR' | 'NOT_RUMOR' | 'OPINIONATED' | 'NOT_ARTICLE'
+
+/** The data /article/:id/og.png is drawn from; the version and the card depend on nothing else. */
+export type OgCardData = {
+  status: string | null | undefined
+  replyTypes: ReadonlyArray<string | null | undefined>
+  replyRequestCount: number | null | undefined
+}
+
+/**
+ * Bump when the card's layout changes, so every og.png URL changes and share
+ * previews fetch the new look instead of their cached copy.
+ */
+const OG_CARD_LAYOUT = 1
+
+// Ties go to the type listed first.
+const VERDICT_ORDER: ReadonlyArray<OgReplyType> = [
+  'RUMOR',
+  'NOT_RUMOR',
+  'OPINIONATED',
+  'NOT_ARTICLE',
+]
+
+/**
+ * The fact-check result the card shows: the most common reply type, ties going to
+ * RUMOR first; null while there is no reply.
+ *
+ * REMINDER: a placeholder rule until the designer decides what the card shows
+ * (cofacts/ai#210).
+ */
+export function ogVerdict(
+  replyTypes: OgCardData['replyTypes'],
+): OgReplyType | null {
+  let best: OgReplyType | null = null
+  let bestCount = 0
+  for (const type of VERDICT_ORDER) {
+    const count = replyTypes.filter((t) => t === type).length
+    if (count > bestCount) {
+      best = type
+      bestCount = count
+    }
+  }
+  return best
+}
+
+/**
+ * A short, URL-safe version of the og.png card: it changes whenever what the card
+ * shows changes (or OG_CARD_LAYOUT is bumped). og:image carries it as ?v=, so a
+ * share preview fetches a new image when, say, the first reply comes in; the
+ * route sends it as the ETag.
+ */
+export function ogImageVersion({
+  status,
+  replyTypes,
+  replyRequestCount,
+}: OgCardData) {
+  const key = [
+    OG_CARD_LAYOUT,
+    status ?? '',
+    ogVerdict(replyTypes) ?? '',
+    replyRequestCount ?? 0,
+  ].join('|')
+  // FNV-1a, 32-bit: only needs to change with the key, not to be secret.
+  let hash = 0x811c9dc5
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
 }

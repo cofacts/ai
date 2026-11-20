@@ -8,6 +8,8 @@ import {
   ARTICLE_SECTION_IDS,
   getArticleHead,
   getQuickNavItems,
+  ogImageVersion,
+  ogVerdict,
   replyAnchorId,
   summarizeText,
 } from './-lib'
@@ -37,6 +39,8 @@ const getArticle = createServerFn({ method: 'GET' })
           GetArticle(id: $id) {
             id
             text
+            status
+            replyRequestCount
             articleReplies(statuses: [NORMAL]) {
               replyId
               replyType
@@ -71,10 +75,19 @@ export const Route = createFileRoute('/article/$id/')({
       articleQuery(params.id),
     )
     if (!article) throw notFound()
+    const replyTypes = article.articleReplies.map((reply) => reply.replyType)
+    const url = `${getPageOrigin()}/article/${encodeURIComponent(params.id)}`
+    const version = ogImageVersion({
+      status: article.status,
+      replyTypes,
+      replyRequestCount: article.replyRequestCount,
+    })
     return {
       title: summarizeText(article.text, TITLE_LENGTH),
       description: summarizeText(article.text, DESCRIPTION_LENGTH),
-      url: `${getPageOrigin()}/article/${encodeURIComponent(params.id)}`,
+      url,
+      imageUrl: `${url}/og.png?v=${version}`,
+      verdict: ogVerdict(replyTypes),
     }
   },
   head: ({ loaderData }) => (loaderData ? getArticleHead(loaderData) : {}),

@@ -65,6 +65,17 @@ describe('cofactsExec', () => {
     expect(result.GetUser).toEqual(VALID_USER)
   })
 
+  test('sends no Bearer token when anonymous, even with a session', async () => {
+    mockedGetCookie.mockReturnValue('jwt-abc')
+    const fetchFn = mockFetchOnce({
+      jsonValue: { data: { GetUser: VALID_USER } },
+    })
+
+    await cofactsExec(TestQuery, undefined, { anonymous: true })
+    const init = fetchFn.mock.calls[0]?.[1] as RequestInit
+    expect(init.headers).not.toHaveProperty('Authorization')
+  })
+
   test('throws on non-2xx', async () => {
     mockFetchOnce({ ok: false, status: 500, jsonValue: {} })
     await expect(cofactsExec(TestQuery)).rejects.toThrow(/500/)
