@@ -12,10 +12,10 @@
 // Schema, which the router accepts directly). Each page takes only the conditions that make
 // sense on it; anything else in the URL is dropped.
 //
-// Two things about the router's own parsing that the schemas below deal with:
-// - it JSON-parses each value, so `?q=123` arrives as the number 123 and `?q=true` as `true`;
-// - a list value (`replyType`) arrives as text (`rumor,not-rumor`) or, when the router wrote it,
-//   as a JSON array. Both are accepted.
+// The router reads the query string with lib/urlSearch.ts, so values arrive as the text in the
+// address bar: a string, or an array of strings when a key is repeated. A list (`replyType`) is
+// written comma-joined (`rumor,not-rumor`); an array is accepted too. Numbers and booleans are
+// still turned back into text, in case something hands a schema an already-parsed object.
 
 import { z } from 'zod'
 
@@ -75,7 +75,7 @@ const TOPIC_ID = /^[A-Za-z0-9_-]{1,64}$/
 
 // --- field parsers ------------------------------------------------------------------------
 
-// The router turns `?q=123` into a number and `?x=true` into a boolean.
+// The text a number or boolean would have had in the URL.
 const scalarToString = (raw: unknown) =>
   typeof raw === 'number' || typeof raw === 'boolean' ? String(raw) : raw
 
@@ -223,6 +223,12 @@ export const profileSearchSchema = z.object({
   tab: z.enum(PROFILE_TABS).catch('replies'),
 })
 export type ProfileSearch = z.output<typeof profileSearchSchema>
+
+// What each page shows with nothing in the URL; pass to `omitDefaults`.
+export const articleListDefaults = articleListSearchSchema.parse({})
+export const replyListDefaults = replyListSearchSchema.parse({})
+export const searchPageDefaults = searchPageSearchSchema.parse({})
+export const profileDefaults = profileSearchSchema.parse({})
 
 // --- using the result ---------------------------------------------------------------------
 

@@ -1,24 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import {
-  defaultParseSearch,
-  defaultStringifySearch,
-} from '@tanstack/react-router'
 
 import {
   MAX_KEYWORD_LENGTH,
   MAX_TOPICS,
+  articleListDefaults,
   articleListSearchSchema,
   omitDefaults,
+  profileDefaults,
   profileSearchSchema,
+  replyListDefaults,
   replyListSearchSchema,
   resolveTimeRange,
+  searchPageDefaults,
   searchPageSearchSchema,
 } from '../searchParams'
+import { parseSearch, stringifySearch } from '../urlSearch'
 
 const parse = (s: unknown) => articleListSearchSchema.parse(s)
-// What a route sees for a given address bar: the router's own parser, then our schema.
+// What a route sees for a given address bar: the router's parser, then our schema.
 const fromUrl = <T>(schema: { parse: (v: unknown) => T }, url: string) =>
-  schema.parse(defaultParseSearch(url))
+  schema.parse(parseSearch(url))
 
 const ARTICLE_DEFAULTS = {
   q: '',
@@ -51,6 +52,13 @@ describe('defaults', () => {
       sort: 'newest',
     })
   })
+
+  it('the exported defaults are what an empty search gives', () => {
+    expect(articleListDefaults).toEqual(ARTICLE_DEFAULTS)
+    expect(replyListDefaults).toEqual(replyListSearchSchema.parse({}))
+    expect(searchPageDefaults).toEqual(searchPageSearchSchema.parse({}))
+    expect(profileDefaults).toEqual({ tab: 'replies' })
+  })
 })
 
 describe('valid values', () => {
@@ -71,7 +79,7 @@ describe('valid values', () => {
     })
   })
 
-  it('accepts a list as the JSON array the router writes', () => {
+  it('accepts a list given as an array', () => {
     expect(parse({ replyType: ['opinionated', 'rumor'] }).replyType).toEqual([
       'rumor',
       'opinionated',
@@ -109,9 +117,20 @@ describe('invalid values fall back instead of throwing', () => {
   })
 
   it('drops unknown params', () => {
+    expect(fromUrl(articleListSearchSchema, '?utm_source=x&page=3')).toEqual(
+      ARTICLE_DEFAULTS,
+    )
+  })
+
+  it('a __proto__ param is only an unknown key', () => {
+    // JSON.parse makes __proto__ an own key, as a hostile parsed search would have it.
+    const hostile: unknown = JSON.parse(
+      '{"__proto__":{"polluted":1},"status":"replied"}',
+    )
+    expect(parse(hostile)).toEqual({ ...ARTICLE_DEFAULTS, status: 'replied' })
     expect(
-      parse({ utm_source: 'x', __proto__: { polluted: 1 }, page: 3 }),
-    ).toEqual(ARTICLE_DEFAULTS)
+      fromUrl(articleListSearchSchema, '?__proto__=x&status=replied'),
+    ).toEqual({ ...ARTICLE_DEFAULTS, status: 'replied' })
     expect(({} as Record<string, unknown>).polluted).toBeUndefined()
   })
 
@@ -133,10 +152,24 @@ describe('invalid values fall back instead of throwing', () => {
 })
 
 describe('keyword', () => {
-  it('survives the router turning it into a number or boolean', () => {
-    expect(fromUrl(articleListSearchSchema, '?q=123').q).toBe('123')
-    expect(fromUrl(articleListSearchSchema, '?q=true').q).toBe('true')
-    expect(fromUrl(articleListSearchSchema, '?q=null').q).toBe('')
+  it.each([
+    '123',
+    'true',
+    'null',
+    '12345678901234567890',
+    '1e3',
+    '1.50',
+    '"hi"',
+    '[1,2]',
+    '0912345678',
+  ])('number-like or JSON-like text stays as typed: %s', (text) => {
+    const url = `?${new URLSearchParams({ q: text }).toString()}`
+    expect(fromUrl(articleListSearchSchema, url).q).toBe(text)
+  })
+
+  it('still turns a number or boolean back into text', () => {
+    expect(parse({ q: 123 }).q).toBe('123')
+    expect(parse({ q: true }).q).toBe('true')
   })
 
   it('trims, collapses whitespace and strips control characters', () => {
@@ -191,9 +224,16 @@ describe('topics', () => {
     expect(parse({ topic: many }).topic).toHaveLength(MAX_TOPICS)
   })
 
-  it('numeric ids survive the router turning them into numbers', () => {
-    expect(fromUrl(articleListSearchSchema, '?topic=123').topic).toEqual([
-      '123',
+  it('long numeric ids keep every digit', () => {
+    expect(
+      fromUrl(articleListSearchSchema, '?topic=12345678901234567890').topic,
+    ).toEqual(['12345678901234567890'])
+  })
+
+  it('a repeated key is read as a list', () => {
+    expect(fromUrl(articleListSearchSchema, '?topic=b&topic=a').topic).toEqual([
+      'a',
+      'b',
     ])
   })
 })
@@ -290,14 +330,20 @@ describe('shareable URLs', () => {
     '?q=疫苗&replyType=rumor,not-rumor&range=custom&from=2026-10-01&to=2026-10-31',
     '?status=bogus&topic=123,abc&sort=most-reported',
     '?q=%E0%A4%A&range=custom',
+    '?q=12345678901234567890&topic=12345678901234567890',
+    '?q=a%2Cb%20%22c%22',
   ]
+
+  const linkFor = (url: string) =>
+    stringifySearch(
+      omitDefaults(fromUrl(articleListSearchSchema, url), articleListDefaults),
+    )
 
   it.each(urls)('parse → stringify → parse is stable: %s', (url) => {
     const first = fromUrl(articleListSearchSchema, url)
-    const link = defaultStringifySearch(
-      omitDefaults(first, ARTICLE_DEFAULTS) as Record<string, unknown>,
-    )
-    expect(fromUrl(articleListSearchSchema, link)).toEqual(first)
+    expect(fromUrl(articleListSearchSchema, linkFor(url))).toEqual(first)
+    // Writing the same search again gives the same link.
+    expect(linkFor(linkFor(url))).toBe(linkFor(url))
   })
 
   it('a link carries only what differs from the defaults', () => {
@@ -305,15 +351,22 @@ describe('shareable URLs', () => {
       articleListSearchSchema,
       '?q=疫苗&sort=latest-reported',
     )
-    expect(omitDefaults(first, ARTICLE_DEFAULTS)).toEqual({ q: '疫苗' })
+    expect(omitDefaults(first, articleListDefaults)).toEqual({ q: '疫苗' })
   })
 
-  it('the router can write a list as JSON and read it back', () => {
-    const link = defaultStringifySearch({ replyType: ['rumor', 'not-rumor'] })
-    expect(fromUrl(articleListSearchSchema, link).replyType).toEqual([
-      'rumor',
-      'not-rumor',
-    ])
+  it('a link has plain text and comma lists, no JSON', () => {
+    expect(
+      stringifySearch({ q: '123', replyType: ['rumor', 'not-rumor'] }),
+    ).toBe('?q=123&replyType=rumor%2Cnot-rumor')
+    expect(
+      fromUrl(articleListSearchSchema, '?replyType=rumor%2Cnot-rumor')
+        .replyType,
+    ).toEqual(['rumor', 'not-rumor'])
+  })
+
+  it('an empty search or an empty list writes nothing', () => {
+    expect(stringifySearch({})).toBe('')
+    expect(stringifySearch({ replyType: [], q: undefined })).toBe('')
   })
 })
 
