@@ -133,7 +133,7 @@ function ArticlePage() {
   const article = data.GetArticle!
   const replies = article.articleReplies
   const quickNavItems = getQuickNavItems({ replyCount: replies.length })
-  const { login } = useAuth()
+  const { user, login } = useAuth()
   const location = useLocation()
 
   return (
@@ -150,7 +150,9 @@ function ArticlePage() {
             text={article.text}
             articleType={article.articleType}
             attachmentUrl={article.attachmentUrl}
-            originalAttachmentUrl={article.originalAttachmentUrl}
+            // GetArticle stays cached for a while after logout, so the original
+            // file's URL counts only while someone is logged in.
+            originalAttachmentUrl={user ? article.originalAttachmentUrl : null}
             replyRequestCount={article.replyRequestCount}
             createdAt={article.createdAt}
             onLogin={() => login(location.pathname)}
@@ -297,8 +299,10 @@ function ArticleCategoriesPanel({
         title: node.title ?? '',
         description: node.description,
         marked: row !== undefined,
-        canUnmark: row?.canUpdateStatus ?? false,
-        ownVote: row?.ownVote,
+        // Like the original file's URL: a cached GetArticle may still hold the
+        // previous user's vote and marks after logout.
+        canUnmark: !!user && (row?.canUpdateStatus ?? false),
+        ownVote: user ? row?.ownVote : null,
         positiveFeedbackCount: row?.positiveFeedbackCount,
         negativeFeedbackCount: row?.negativeFeedbackCount,
       }
