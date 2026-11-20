@@ -22,8 +22,11 @@ services:
       - ./adk/cofacts_ai/.env
     environment:
       - PORT=8000
+      - REDIS_URL=redis://redis:6379
       - LANGFUSE_BASE_URL=https://langfuse.cofacts.tw
       - LANGFUSE_TRACING_ENVIRONMENT=local
+    depends_on:
+      - redis
     healthcheck:
       test:
         [
@@ -36,3 +39,8 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+
+  # Background runs (adk/cofacts_ai/run_bus.py). Production uses the redis
+  # container rumors-line-bot already runs on the same docker network.
+  redis:
+    image: redis:alpine

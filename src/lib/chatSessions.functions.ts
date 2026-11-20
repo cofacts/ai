@@ -1,7 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
 import { ADK_APP_NAME, adkClient } from './adkClient'
 import { handleAdkError, handleAdkResponseError } from './adk-errors'
+import { isRunsDisabled } from './adkRuns'
 import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
+
+const ADK_BASE_URL = process.env.ADK_URL || 'http://localhost:8000'
 
 const SESSION_TITLE_KEY = 'title'
 
@@ -124,7 +127,26 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
   .inputValidator((input: UpdateSessionInput) => input)
   .handler(async ({ data: { sessionId, title } }) => {
     const userId = await resolveAdkUserIdOrThrow()
-    const { data, error } = await adkClient.PATCH(
+    const stateDelta = { [SESSION_TITLE_KEY]: title }
+
+    // Same StaleSessionError hazard as markSessionOpened. ADK's /state
+    // writes only when no run holds the session, and holds the session while
+    // it writes so that no run can start in between.
+    const res = await fetch(adkSessionUrl(userId, sessionId, '/state'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stateDelta }),
+    })
+    if (res.ok) {
+      const { deferred } = (await res.json()) as { deferred: boolean }
+      if (deferred) throw new Error(SESSION_BUSY_MESSAGE)
+      return { ok: true }
+    }
+    if (!(await isRunsDisabled(res))) handleAdkResponseError(res)
+
+    // Background runs off: runs are tied to an open stream, and the sidebar
+    // hides renaming while one streams.
+    const { error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
         params: {
@@ -134,13 +156,11 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
             session_id: sessionId,
           },
         },
-        body: {
-          stateDelta: { [SESSION_TITLE_KEY]: title },
-        },
+        body: { stateDelta },
       },
     )
     if (error) handleAdkError(error)
-    return data
+    return { ok: true }
   })
 
 /**
@@ -184,6 +204,26 @@ export const markSessionOpened = createServerFn({ method: 'POST' })
   .inputValidator((sessionId: string) => sessionId)
   .handler(async ({ data: sessionId }) => {
     const userId = await resolveAdkUserIdOrThrow()
+
+    // Writing session state while a run is going makes the run's next write
+    // fail with StaleSessionError, killing it. ADK's /opened skips the write
+    // when a run holds the session ({deferred: true}); the session page
+    // calls again once the run ends.
+    const opened = await fetch(adkSessionUrl(userId, sessionId, '/opened'), {
+      method: 'POST',
+    })
+    if (opened.ok) {
+      const { deferred } = (await opened.json()) as { deferred: boolean }
+      return { ok: true, deferred }
+    }
+    if (opened.status === 503 && !(await isRunsDisabled(opened))) {
+      // ADK is restarting; its runs are being sealed. Try again later.
+      return { ok: true, deferred: true }
+    }
+    if (opened.status !== 503) handleAdkResponseError(opened)
+
+    // ADK without Redis (background runs off): runs are tied to the open
+    // stream, and the page never calls this while streaming.
     const { error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
@@ -201,5 +241,16 @@ export const markSessionOpened = createServerFn({ method: 'POST' })
       },
     )
     if (error) handleAdkError(error)
-    return { ok: true }
+    return { ok: true, deferred: false }
   })
+
+function adkSessionUrl(userId: string, sessionId: string, suffix: string) {
+  return (
+    `${ADK_BASE_URL}/apps/${ADK_APP_NAME}` +
+    `/users/${encodeURIComponent(userId)}` +
+    `/sessions/${encodeURIComponent(sessionId)}${suffix}`
+  )
+}
+
+/** Thrown by updateSessionTitle while a run holds the session. */
+export const SESSION_BUSY_MESSAGE = '對話還在執行中，請等回覆完成後再改名。'
