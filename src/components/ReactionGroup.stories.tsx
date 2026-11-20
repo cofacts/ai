@@ -98,7 +98,7 @@ export const Report: Story = {
   args: { type: 'report' },
   play: async ({ canvasElement, args }) => {
     await userEvent.click(
-      within(canvasElement).getByRole('button', { name: '檢舉' }),
+      within(canvasElement).getByRole('button', { name: '檢舉這則回應' }),
     )
     await expect(args.onReport).toHaveBeenCalled()
   },
