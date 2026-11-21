@@ -98,6 +98,9 @@ importers:
       vite-tsconfig-paths:
         specifier: ^5.1.4
         version: 5.1.4(supports-color@10.2.2)(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.11)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.4))
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@graphql-codegen/cli':
         specifier: ^7.0.0
