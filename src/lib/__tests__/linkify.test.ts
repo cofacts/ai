@@ -14,12 +14,25 @@ describe('splitLinks', () => {
     ])
   })
 
-  it('stops a URL at full-width punctuation and CJK text', () => {
+  it('stops a URL at full-width punctuation', () => {
     expect(links('詳見https://example.com/a，謝謝')).toEqual([
       'https://example.com/a',
     ])
-    expect(links('https://example.com/a謝謝')).toEqual([
+    expect(links('見https://example.com/a。後')).toEqual([
       'https://example.com/a',
+    ])
+  })
+
+  it('keeps CJK characters in the URL path', () => {
+    expect(links('https://zh.wikipedia.org/wiki/蔡英文')).toEqual([
+      'https://zh.wikipedia.org/wiki/蔡英文',
+    ])
+    expect(
+      links(
+        '詳見https://tw.news.yahoo.com/網路借貸變詐騙共犯-帳戶變人頭戶挨告-123513493.html，謝謝',
+      ),
+    ).toEqual([
+      'https://tw.news.yahoo.com/網路借貸變詐騙共犯-帳戶變人頭戶挨告-123513493.html',
     ])
   })
 

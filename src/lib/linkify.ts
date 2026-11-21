@@ -1,9 +1,10 @@
 export type TextPart = { type: 'text' | 'link'; value: string }
 
-// A URL ends at whitespace, CJK punctuation, full-width forms or a CJK character: zh-TW text is
-// often written right after a link with no space (「見https://x.org，謝謝」).
+// A URL ends at whitespace, CJK punctuation or full-width forms: zh-TW text is often written
+// right after a link with no space (「見https://x.org，謝謝」). CJK characters themselves stay in
+// the URL, since many references link to paths like https://zh.wikipedia.org/wiki/蔡英文.
 const URL_PATTERN = new RegExp(
-  'https?://[^\\s\\u3000-\\u303f\\u3400-\\u4dbf\\u4e00-\\u9fff\\uff00-\\uffef]+',
+  'https?://[^\\s\\u3000-\\u303f\\uff00-\\uffef]+',
   'g',
 )
 
