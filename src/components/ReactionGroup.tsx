@@ -102,7 +102,7 @@ export function ReactionGroup({
       ) : (
         <button
           type="button"
-          aria-label="檢舉"
+          aria-label="檢舉這則回應"
           className={cn(segment, 'group/action px-spacing-12')}
           onClick={onReport}
         >
