@@ -7,11 +7,7 @@ import {
   GoogleIcon,
 } from '@/components/icons/ProviderIcons'
 import { login } from '@/server/auth.functions'
-
-const LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
-const EDITOR_FACEBOOK_GROUP =
-  'https://www.facebook.com/groups/cofacts/permalink/1959641497601003/'
-const TERMS_URL = 'https://cofacts.tw/terms'
+import { EDITOR_FACEBOOK_GROUP, LICENSE_URL, TERMS_URL } from '@/lib/legal'
 
 /**
  * Provider brand colors are the providers' own logos, so they are hard-coded like the LINE

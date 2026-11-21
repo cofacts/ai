@@ -150,6 +150,35 @@ is only the overview.
 Design record: the kb doc
 [Phase 3 網站遷移與前端架構](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Phase%203%20網站遷移與前端架構.md).
 
+## The draft and submitting it
+
+The writer proposes replies with `draft_factcheck_response`; the latest successful proposal opens
+in the right drawer (`src/components/FactCheckDraftPanel.tsx`). The user edits it there and
+submits it from the drawer's footer (`src/components/SubmitReplyFooter.tsx`): once 「我已經檢查過回應內文與出處」
+is checked, the button 「用 OOO 的身份送出查核回應」 sends it with no confirmation dialog. A server function
+(`src/server/replies.functions.ts`) calls rumors-api's `CreateReply` with the user's own session token, so the reply is theirs, on the
+article the chat looked up with `get_single_cofacts_article`. The drawer is the only place a reply
+is submitted from; the agent never submits.
+
+Only the latest draft is editable, and not while the AI is answering. If the user sends a chat
+message while holding edits, the edited draft is attached to the message as a
+`<user_edited_draft based_on="…">` text part; the writer's instruction tells it to revise from the
+user's version and propose again. The drawer shows each draft as the user last sent it, and a draft
+whose turn ended without a newer one stays editable. Unsent edits live in the TanStack Query cache,
+mirrored to localStorage. The rules are in `src/lib/factCheckDraft.ts`. A locked draft that carries the user's
+sent edits marks them against the AI's version (`blockDiff`: added text underlined, removed text
+struck through). The chat labels each turn's button 「查核回應草稿（最新）」 or 「查核回應草稿（較早）」, and
+the drawer moves to a newer draft when one arrives while the previous latest is open.
+
+The writer names the article(s) a reply answers in `draft_factcheck_response`'s `article_ids`;
+submitting creates the reply on the first and links it to the rest (`CreateArticleReply`). When the
+chat looked at more than one article, the drawer shows which one the reply is for. If the user has
+already replied to a target article (`articleReplies(selfOnly: true)`), the footer links to that reply
+and the button becomes a plain 「以 OOO 的身份再次送出新回應」. After each passed proposal, the writer ends with a one-sentence
+conclusion and the three steps of 「接下來需要你做的事」. The last agent message of every turn that
+proposed a passed draft carries a 「查核回應草稿」 button that opens that draft (decided in the
+frontend, `draftButtonsByMessage`), so the user never scrolls back to the tool call.
+
 ## Data & sessions
 
 ADK sessions are persisted with `DatabaseSessionService` — SQLite locally, PostgreSQL via the

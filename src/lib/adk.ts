@@ -139,6 +139,7 @@ export type AllTools = {
       classification?: string
       text?: string
       references?: string
+      article_ids?: Array<string>
       claim_sources?: Array<{
         claim?: string
         source_url?: string
@@ -154,7 +155,8 @@ export type AllTools = {
       error?: string
       article?: {
         id: string
-        text: string
+        // null for some image and video articles
+        text: string | null
         createdAt: string
         articleType: string
         attachmentUrl: string | null

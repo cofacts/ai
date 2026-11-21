@@ -1,10 +1,11 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { UserMessage } from './UserMessage'
 import { AgentMessage } from './AgentMessage'
 import { FeedbackButtons } from './FeedbackButtons'
 import { ChatInput } from './ChatInput'
 import styles from './ChatArea.module.css'
-import type { ChatMessage } from '@/lib/adk'
+import type { ChatMessage, ToolInvocation } from '@/lib/adk'
+import { draftButtonsByMessage } from '@/lib/factCheckDraft'
 
 interface ChatAreaProps {
   messages: Array<ChatMessage>
@@ -14,6 +15,11 @@ interface ChatAreaProps {
   sessionId?: string
   focusedToolCallId?: string | null
   onToolBadgeClick?: (id: string) => void
+  /** Used to find each turn's passed draft, for the 「查核回應草稿」 button. */
+  toolInvocations?: Record<string, ToolInvocation>
+  onOpenDraft?: (draftId: string) => void
+  /** The only draft that can still be edited; its button says 「最新」. */
+  latestDraftId?: string | null
 }
 
 export function ChatArea({
@@ -24,8 +30,15 @@ export function ChatArea({
   sessionId,
   focusedToolCallId,
   onToolBadgeClick,
+  toolInvocations,
+  onOpenDraft,
+  latestDraftId,
 }: ChatAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const draftButtons = useMemo(
+    () => draftButtonsByMessage(messages, toolInvocations ?? {}, isStreaming),
+    [messages, toolInvocations, isStreaming],
+  )
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -55,6 +68,9 @@ export function ChatArea({
                   showAvatar={msg.author !== prevMsg?.author}
                   focusedToolCallId={focusedToolCallId}
                   onToolBadgeClick={onToolBadgeClick}
+                  draftId={draftButtons.get(msg.id)}
+                  isLatestDraft={draftButtons.get(msg.id) === latestDraftId}
+                  onOpenDraft={onOpenDraft}
                 />
               )}
               {

@@ -437,6 +437,7 @@ def draft_factcheck_response(
     classification: str,
     text: str,
     references: str,
+    article_ids: List[str],
     claim_sources: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
@@ -468,6 +469,12 @@ def draft_factcheck_response(
         references: Source references for the reply. Format: one source per line,
             each line is a URL followed by a one-line summary of what that source says.
             Only include URLs returned by investigator or verifier — never invent URLs.
+        article_ids: The Cofacts article ID(s) this reply answers — the `id` from
+            `get_single_cofacts_article`, not a URL (for https://cofacts.tw/article/abc123,
+            pass "abc123"). Usually one: the message the user asked you to check. List more
+            only when the user asked you to answer several Cofacts messages with this same
+            reply. Never list a related or similar article you looked at only for reference.
+            Pass [] only when the user pasted a message that is not on Cofacts.
         claim_sources: Per-claim source coverage — REQUIRED unless classification is
             "NOT_ARTICLE". One entry per distinct factual claim/number in `text`, each:
             {
@@ -495,6 +502,28 @@ def draft_factcheck_response(
                 f'Invalid classification "{classification}". '
                 f"Must be one of: {', '.join(sorted(VALID_CLASSIFICATIONS))}. "
                 "Please call draft_factcheck_response again with a valid classification."
+            ),
+        }
+
+    MAX_ARTICLES = 10  # src/lib/factCheckDraft.ts MAX_REPLY_ARTICLES; change both
+    if isinstance(article_ids, list) and len(article_ids) > MAX_ARTICLES:
+        return {
+            "success": False,
+            "text": (
+                f"article_ids lists {len(article_ids)} articles; one reply can go to at most "
+                f"{MAX_ARTICLES}. Keep only the messages the user asked you to answer, then call "
+                "draft_factcheck_response again."
+            ),
+        }
+    if not isinstance(article_ids, list) or not all(
+        isinstance(a, str) and re.fullmatch(r"[A-Za-z0-9_-]+", a) for a in article_ids
+    ):
+        return {
+            "success": False,
+            "text": (
+                f"Invalid article_ids {json.dumps(article_ids, ensure_ascii=False)}. Pass a list "
+                "of Cofacts article IDs (the `id` from get_single_cofacts_article, e.g. "
+                '["abc123"]), not URLs, then call draft_factcheck_response again.'
             ),
         }
 
@@ -588,9 +617,9 @@ def draft_factcheck_response(
             "Proposal accepted. To have a proofreader review it, cite this result's `cite_as` id in "
             "the proofreader's request. If proofreader review or your own judgment still calls for "
             "changes, revise and call this tool again — only your LAST successful call is shown to "
-            "the user once you finish responding. If this is your final proposal, guide the user to "
-            "open the tool call result above to read the draft, then ask if they have any feedback "
-            "or edits before submitting to Cofacts."
+            "the user once you finish responding, in the panel where they can edit it and submit it to "
+            "Cofacts. If this is your final proposal, end your turn with the closing "
+            "「接下來需要你做的事」 (Step 8 of your instructions)."
         ),
     }
 

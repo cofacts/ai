@@ -47,6 +47,7 @@ export const MATERIAL_SYMBOLS = [
   'keyboard_arrow_up',
   'language',
   'link',
+  'lock',
   'mail',
   'menu',
   'more_horiz',
@@ -65,6 +66,7 @@ export const MATERIAL_SYMBOLS = [
   'thumb_down',
   'thumb_up',
   'trending_up',
+  'undo',
   'upload_file',
   'warning',
 ] as const satisfies ReadonlyArray<AnyMaterialSymbol>
