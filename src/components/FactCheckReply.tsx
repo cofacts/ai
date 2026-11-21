@@ -17,8 +17,11 @@ import { cn } from '@/lib/utils'
 
 export type FactCheckReplyProps = {
   /**
-   * Penpot Type. `with-link` adds the 資料佐證 section (reference text and link previews), a
-   * brand-yellow border, and 分享 / 檢舉 buttons on desktop; its avatar has no level.
+   * Penpot Type, chosen by the page, not by the data. List pages (/replies, the report flow)
+   * use `default`; the article and reply pages use `with-link`, which adds the brand-yellow
+   * border, the 資料佐證 section, and 分享 / 檢舉 on desktop, and drops the avatar's level.
+   * 資料佐證 shows only when there is a `reference` or `hyperlinks`, so a NOT_ARTICLE reply
+   * on the article page has no empty section.
    */
   variant?: 'default' | 'with-link'
   replyType: ReplyType
