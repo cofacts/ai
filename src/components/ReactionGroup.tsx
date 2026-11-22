@@ -36,7 +36,8 @@ export type ReactionGroupProps = {
 /**
  * Every segment: 36px high (a min-height, so larger text grows it), control border, base
  * background; hover raises it. Full width with equal segments on mobile (ReplyCard-Mobile), its
- * own width from `md` up.
+ * own width from `md` up. The side padding applies from `md` up only: `flex-1` adds a segment's
+ * padding to its share of the row, so different paddings would make the segments unequal.
  *
  * The segments share their borders: each one has the full border and overlaps the previous one
  * by 1px, so the line between them stays 1px. Later segments paint over earlier ones, so the
@@ -94,7 +95,7 @@ export function ReactionGroup({
       {type === 'reason' ? (
         <button
           type="button"
-          className={cn(segment, 'px-spacing-12')}
+          className={cn(segment, 'md:px-spacing-12')}
           onClick={onShowReasons}
         >
           看理由
@@ -103,7 +104,7 @@ export function ReactionGroup({
         <button
           type="button"
           aria-label="檢舉這則回應"
-          className={cn(segment, 'group/action px-spacing-12')}
+          className={cn(segment, 'group/action md:px-spacing-12')}
           onClick={onReport}
         >
           {/* While pressed, the flag turns solid. */}
@@ -141,7 +142,7 @@ function VoteToggle({
       disabled={disabled}
       className={cn(
         segment,
-        'group/reaction gap-spacing-4 pr-spacing-12 pl-spacing-8',
+        'group/reaction gap-spacing-4 md:pr-spacing-12 md:pl-spacing-8',
       )}
     >
       <MaterialIcon
