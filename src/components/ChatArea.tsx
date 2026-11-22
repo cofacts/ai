@@ -18,7 +18,7 @@ interface ChatAreaProps {
   /** Used to find each turn's passed draft, for the 「查核回應草稿」 button. */
   toolInvocations?: Record<string, ToolInvocation>
   onOpenDraft?: (draftId: string) => void
-  /** The only draft that can still be edited; its button says 「最新」. */
+  /** The latest passed draft (`lastReplyDraftId`); its button says 「最新」. */
   latestDraftId?: string | null
 }
 
@@ -39,6 +39,13 @@ export function ChatArea({
     () => draftButtonsByMessage(messages, toolInvocations ?? {}, isStreaming),
     [messages, toolInvocations, isStreaming],
   )
+  // While a turn streams, its draft has no button yet; keep 「最新」 on the newest button shown.
+  const latestButtonDraftId = useMemo(() => {
+    const ids = [...draftButtons.values()]
+    return latestDraftId && ids.includes(latestDraftId)
+      ? latestDraftId
+      : (ids.at(-1) ?? null)
+  }, [draftButtons, latestDraftId])
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -69,7 +76,9 @@ export function ChatArea({
                   focusedToolCallId={focusedToolCallId}
                   onToolBadgeClick={onToolBadgeClick}
                   draftId={draftButtons.get(msg.id)}
-                  isLatestDraft={draftButtons.get(msg.id) === latestDraftId}
+                  isLatestDraft={
+                    draftButtons.get(msg.id) === latestButtonDraftId
+                  }
                   onOpenDraft={onOpenDraft}
                 />
               )}

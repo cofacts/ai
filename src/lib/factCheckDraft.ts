@@ -232,20 +232,36 @@ export function draftButtonsByMessage(
 }
 
 /**
- * The passed draft proposed right before `draftId`, or null. Used to tell whether a draft is
- * the AI's answer to the user's edits of the previous one.
+ * What the user's edits did in each chat turn (the agent messages after a user message):
+ * - `revisedDraftIds`: passed drafts proposed in a turn whose user message carried the user's
+ *   edits, i.e. the AI's revisions of them (every one, if the writer proposed several);
+ * - `currentEditedDraftId`: the draft whose edits the latest user message carries, or null.
  */
-export function previousPassedDraftId(
+export function draftEditTurns(
+  messages: Array<ChatMessage>,
   toolInvocations: Record<string, ToolInvocation>,
-  draftId: string,
-): string | null {
-  let previous: string | null = null
-  for (const inv of Object.values(toolInvocations)) {
-    if (inv.id === draftId) return previous
-    if (inv.name === 'draft_factcheck_response' && inv.resp?.success)
-      previous = inv.id
+): { revisedDraftIds: Set<string>; currentEditedDraftId: string | null } {
+  const revisedDraftIds = new Set<string>()
+  let currentEditedDraftId: string | null = null
+  for (const message of messages) {
+    if (message.author === 'user') {
+      currentEditedDraftId = null
+      for (const part of message.parts ?? []) {
+        const edited = part.text ? parseEditedDraftPart(part.text) : null
+        if (edited) currentEditedDraftId = edited.basedOn
+      }
+      continue
+    }
+    if (!currentEditedDraftId) continue
+    for (const part of message.parts ?? []) {
+      const inv = part.functionCall?.id
+        ? toolInvocations[part.functionCall.id]
+        : undefined
+      if (inv?.name === 'draft_factcheck_response' && inv.resp?.success)
+        revisedDraftIds.add(inv.id)
+    }
   }
-  return null
+  return { revisedDraftIds, currentEditedDraftId }
 }
 
 export type DiffSegment = {

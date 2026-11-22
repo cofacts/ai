@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import type { AllTools } from '@/lib/adk'
 import type {
@@ -49,8 +49,10 @@ export interface DraftPanelContext {
   onOpenLatestDraft?: () => void
   /** The logged-in user's name, shown on the submit button. */
   userName: string | null
-  /** This draft is the AI's revision of the user's edits to the previous one. */
+  /** This draft was proposed in a turn that carried the user's edits: the AI's revision of them. */
   revisedFromUserEdit?: boolean
+  /** The AI is answering a message that carried the user's edits to this draft. */
+  revisingUserEdit?: boolean
 }
 
 const CATEGORIES: Array<{
@@ -128,8 +130,10 @@ function MarkedText({
       id={id}
       className={cn(
         READ_ONLY_TEXT,
-        'space-y-spacing-12',
-        mono ? 'font-mono break-all text-text-secondary' : 'text-text-primary',
+        // Paragraphs get a gap; reference lines stay packed like the plain view.
+        mono
+          ? 'font-mono break-all text-text-secondary'
+          : 'space-y-spacing-12 text-text-primary',
       )}
     >
       {segments.map((seg, i) =>
@@ -303,6 +307,7 @@ export function FactCheckDraftPanel({
     onOpenLatestDraft,
     userName,
     revisedFromUserEdit = false,
+    revisingUserEdit = false,
   } = context
   const original = draftFieldsFromArgs(args)
   // What the draft holds before any unsent edits: the version last sent to the AI, if any.
@@ -317,18 +322,37 @@ export function FactCheckDraftPanel({
     !!submitted || lockReason === null || lockReason === 'streaming'
   const fields: DraftFields = showsEdit && edit ? edit : base
   const isEdited = !draftFieldsEqual(fields, original)
+  const textEdited = fields.text !== original.text
+  const referencesEdited = fields.references !== original.references
   // A locked draft shows the user's sent version with their changes marked against the AI's.
-  const marked =
-    !editable && !submitted && isEdited
-      ? {
-          classification:
-            fields.classification !== original.classification
-              ? fields.classification
-              : null,
-          text: blockDiff(original.text, fields.text, 'paragraph'),
-          references: blockDiff(original.references, fields.references, 'line'),
-        }
-      : null
+  // Memoized: the locked panel re-renders on every streamed token.
+  const showMarks = !editable && !submitted && isEdited
+  const marked = useMemo(
+    () =>
+      showMarks
+        ? {
+            classification:
+              fields.classification !== original.classification
+                ? fields.classification
+                : null,
+            text: blockDiff(original.text, fields.text, 'paragraph'),
+            references: blockDiff(
+              original.references,
+              fields.references,
+              'line',
+            ),
+          }
+        : null,
+    [
+      showMarks,
+      fields.classification,
+      fields.text,
+      fields.references,
+      original.classification,
+      original.text,
+      original.references,
+    ],
+  )
   const textMarked = !!marked?.text.some((seg) => seg.kind !== 'same')
   const referencesMarked = !!marked?.references.some(
     (seg) => seg.kind !== 'same',
@@ -449,7 +473,7 @@ export function FactCheckDraftPanel({
               <MaterialIcon name="lock" size={24} className="shrink-0" />
               <div className="space-y-spacing-8">
                 <p>
-                  {lockReason === 'streaming' && sentEdit
+                  {lockReason === 'streaming' && revisingUserEdit
                     ? SENT_EDIT_STREAMING_MESSAGE
                     : LOCK_MESSAGES[lockReason]}
                 </p>
@@ -494,7 +518,7 @@ export function FactCheckDraftPanel({
             >
               回應內容
             </label>
-            {isEdited && (
+            {textEdited && (
               <span className="text-type-caption text-text-link">已修改</span>
             )}
             <CopyButton value={fields.text} />
@@ -534,7 +558,7 @@ export function FactCheckDraftPanel({
             >
               佐證資料
             </label>
-            {referencesMarked && (
+            {referencesEdited && (
               <span className="text-type-caption text-text-link">已修改</span>
             )}
             <CopyButton value={fields.references} />

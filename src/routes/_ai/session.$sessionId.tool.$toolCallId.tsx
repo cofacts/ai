@@ -1,15 +1,12 @@
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { DraftLockReason } from '@/components/FactCheckDraftPanel'
 import type { ToolInvocation } from '@/lib/adk'
 import { useChat } from '@/hooks/useChat'
 import { RightDrawer } from '@/components/RightDrawer'
 import { useAuth } from '@/lib/auth'
-import {
-  draftTargetArticleIds,
-  previousPassedDraftId,
-} from '@/lib/factCheckDraft'
+import { draftEditTurns, draftTargetArticleIds } from '@/lib/factCheckDraft'
 import {
   MY_ARTICLE_REPLIES_QUERY,
   getMyArticleReplies,
@@ -45,6 +42,7 @@ function ToolDrawer() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const {
+    messages,
     toolInvocations,
     lastReplyDraftId,
     sentDraftEdits,
@@ -71,7 +69,10 @@ function ToolDrawer() {
   }, [sessionId, lastReplyDraftId, navigate])
 
   const invocation = toolInvocations[toolCallId] ?? null
-  const previousDraftId = previousPassedDraftId(toolInvocations, toolCallId)
+  const editTurns = useMemo(
+    () => draftEditTurns(messages, toolInvocations),
+    [messages, toolInvocations],
+  )
   const lockReason = draftLockReason(invocation, {
     lastReplyDraftId,
     isStreaming,
@@ -103,9 +104,9 @@ function ToolDrawer() {
         sessionId,
         lockReason,
         sentEdit: sentDraftEdits[toolCallId] ?? null,
-        revisedFromUserEdit: previousDraftId
-          ? !!sentDraftEdits[previousDraftId]
-          : false,
+        revisedFromUserEdit: editTurns.revisedDraftIds.has(toolCallId),
+        revisingUserEdit:
+          isStreaming && editTurns.currentEditedDraftId === toolCallId,
         targetArticleIds,
         articles,
         myReplies,

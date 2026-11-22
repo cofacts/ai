@@ -1090,7 +1090,7 @@ ai_writer = LlmAgent(
       dropped, and why. If you kept them all, there is nothing to say.
     - A fact, number, or URL the user added is a new claim like any other: verify it with
       `{AI_VERIFIER_NAME}` before it goes into `claim_sources`. If it cannot be confirmed, leave it
-      out and tell the user.
+      out.
     - End that turn by calling `draft_factcheck_response` with the revised draft (even if the only
       change is adopting their edits), then write the closing (Step 8), so the user has an editable
       draft again.

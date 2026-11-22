@@ -59,29 +59,22 @@ function SessionPage() {
     [toolCallId, sessionId, navigate, handleOpenDraft],
   )
 
-  // Auto-open: lastReplyDraftId is pre-computed by the cache reducer
-  useEffect(() => {
-    if (toolCallId !== undefined) return
-    if (!lastReplyDraftId) return
-    if (openedCallIds.current.has(lastReplyDraftId)) return
-
-    openedCallIds.current.add(lastReplyDraftId)
-    navigate({
-      to: '/session/$sessionId/tool/$toolCallId',
-      params: { sessionId, toolCallId: lastReplyDraftId },
-      viewTransition: true,
-      replace: true,
-    })
-  }, [lastReplyDraftId, toolCallId, sessionId, navigate])
-
-  // When a newer draft arrives while the previous latest is open in the drawer (typically the one
-  // the user just sent edits from), switch to it, so the user lands on the draft they can edit.
+  // When a new latest draft appears, open it: if no drawer is open and it hasn't been opened
+  // before, or if the drawer shows the previous latest (typically the one the user just sent
+  // edits from), so the user lands on the draft they can edit.
   const prevLatestDraftId = useRef(lastReplyDraftId)
   useEffect(() => {
     const prev = prevLatestDraftId.current
     prevLatestDraftId.current = lastReplyDraftId
-    if (!lastReplyDraftId || prev === lastReplyDraftId) return
-    if (!toolCallId || toolCallId !== prev) return
+    if (!lastReplyDraftId) return
+    const openNew =
+      toolCallId === undefined && !openedCallIds.current.has(lastReplyDraftId)
+    const followLatest =
+      prev !== lastReplyDraftId &&
+      toolCallId !== undefined &&
+      toolCallId === prev
+    if (!openNew && !followLatest) return
+
     openedCallIds.current.add(lastReplyDraftId)
     navigate({
       to: '/session/$sessionId/tool/$toolCallId',

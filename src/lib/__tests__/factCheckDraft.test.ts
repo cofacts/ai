@@ -3,6 +3,7 @@ import { INITIAL_CHAT_STATE, applyEventToState } from '../chatCache'
 import {
   blockDiff,
   draftButtonsByMessage,
+  draftEditTurns,
   draftSubmitProblem,
   draftTargetArticleIds,
   draftTargetProblem,
@@ -261,5 +262,54 @@ describe('blockDiff', () => {
       { kind: 'removed', text: 'A' },
       { kind: 'same', text: 'B' },
     ])
+  })
+})
+
+describe('draftEditTurns', () => {
+  const user = (id: string, text: string): ChatMessage =>
+    ({ id, role: 'user', author: 'user', parts: [{ text }] }) as ChatMessage
+  const agentCalls = (id: string, ...callIds: Array<string>): ChatMessage =>
+    ({
+      id,
+      role: 'model',
+      author: 'ai_writer',
+      parts: callIds.map((c) => ({ functionCall: { id: c } })),
+    }) as unknown as ChatMessage
+  const passed = (id: string) => ({
+    id,
+    name: 'draft_factcheck_response',
+    args: {},
+    resp: { success: true, text: '' },
+  })
+  const invocations = {
+    D1: passed('D1'),
+    D2: passed('D2'),
+    D3: passed('D3'),
+  } as unknown as Record<string, ToolInvocation>
+
+  test('every draft proposed after the user sent edits counts as a revision', () => {
+    const messages = [
+      user('u1', '請查核'),
+      agentCalls('a1', 'D1'),
+      user('u2', formatEditedDraftPart('D1', fields)),
+      agentCalls('a2', 'D2'),
+      agentCalls('a3', 'D3'),
+    ]
+    const turns = draftEditTurns(messages, invocations)
+    expect([...turns.revisedDraftIds]).toEqual(['D2', 'D3'])
+    expect(turns.currentEditedDraftId).toBe('D1')
+  })
+
+  test('a later message without edits is not revising anything', () => {
+    const messages = [
+      user('u1', '請查核'),
+      agentCalls('a1', 'D1'),
+      user('u2', formatEditedDraftPart('D1', fields)),
+      agentCalls('a2'),
+      user('u3', '謝謝'),
+    ]
+    const turns = draftEditTurns(messages, invocations)
+    expect(turns.revisedDraftIds.size).toBe(0)
+    expect(turns.currentEditedDraftId).toBeNull()
   })
 })

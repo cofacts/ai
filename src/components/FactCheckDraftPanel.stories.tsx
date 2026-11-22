@@ -129,6 +129,7 @@ export const SentWhileAiIsAnswering: Story = {
       ...context,
       lockReason: 'streaming',
       sentEdit: sentEditWithAddition,
+      revisingUserEdit: true,
     },
   },
   play: async ({ canvasElement }) => {
