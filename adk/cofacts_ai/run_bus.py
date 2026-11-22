@@ -7,16 +7,19 @@ away the run is cancelled (google/adk-python#4029). This module splits
 - ``start()`` takes a per-session lock in Redis and drains
   ``runner.run_async()`` in an ``asyncio`` task that no request owns (the
   "drain task"). The process holding that task is the run's *owner*.
-- Every event the run yields, partial or not, is appended to a Redis Stream.
-  Any number of viewers, in any process, read that stream with
-  ``stream()``: first everything this run has written so far, then
-  ``XREAD BLOCK`` for the rest. A viewer that disconnects only stops
-  watching.
+- Every event the run yields, partial or not, is appended to the session's
+  Redis Stream. Each open session page keeps one feed, ``open_events()``:
+  the stored events, then the latest run from its first entry, then every
+  run live as it is written, from any process. The feed never ends by
+  itself; the next run wakes it through the same stream key. A viewer that
+  disconnects only stops watching.
+- ``StreamHub`` serves all of a process's feeds with one blocking XREAD over
+  every watched key, so Redis connections grow with processes, not tabs.
 - ``cancel()`` stops a run explicitly. Owners also stop their runs on
   SIGTERM and when a run goes past ``RUN_TIMEOUT_SECONDS``.
 
 Redis holds only the run in progress. Once it ends, everything is in the
-ADK session (Postgres), and viewers fall back to the session history.
+ADK session (Postgres), which feeds read when they open or catch up.
 
 Redis keys (all prefixed and all expiring, since the production Redis is
 shared with rumors-line-bot and has no ``maxmemory``):
@@ -79,6 +82,8 @@ WRITE_BATCH_SECONDS = 0.05
 # A viewer waits this long on XREAD before sending a heartbeat and checking
 # that the run is still alive. Below Cloudflare's 125s idle cut-off.
 STREAM_BLOCK_MS = 20_000
+# How long the hub's XREAD waits before taking in newly watched keys.
+HUB_BLOCK_MS = 1_000
 # How long start() waits for the run's first event (the stored user message)
 # to learn its invocation id.
 FIRST_EVENT_TIMEOUT_SECONDS = 30.0
@@ -102,6 +107,21 @@ HEARTBEAT = b": heartbeat\n\n"
 def end_frame(outcome: str) -> bytes:
     """Tells viewers the run is over: completed, cancelled or interrupted."""
     return f"event: end\ndata: {outcome}\n\n".encode()
+
+
+def history_frame(data: str) -> bytes:
+    """A stored event, sent when a feed opens or catches up."""
+    return f"event: history\ndata: {data}\n\n".encode()
+
+
+def synced_frame(running: bool) -> bytes:
+    """The feed has caught up; live frames follow."""
+    return f"event: synced\ndata: {json.dumps({'running': running})}\n\n".encode()
+
+
+def _stream_id(entry_id: str) -> tuple[int, int]:
+    ms, _, seq = entry_id.partition("-")
+    return int(ms), int(seq or 0)
 
 
 def run_timeout_seconds() -> float:
@@ -330,6 +350,146 @@ class StartResult:
     invocation_id: str | None
 
 
+class _Feed:
+    """One /events connection's view of the runs it has seen."""
+
+    def __init__(
+        self, bus: "RunBus", user_id: str, session_id: str, sent: set[str]
+    ) -> None:
+        self.bus = bus
+        self.user_id = user_id
+        self.session_id = session_id
+        self.sent = sent  # ids of complete events already sent
+        self.run_id: str | None = None  # the run in progress, as far as seen
+        self.invocation_id: str | None = None
+
+    async def take(self, e: _Entry) -> AsyncIterator[bytes]:
+        if e.type == "done":
+            if e.run_id == self.run_id or self.run_id is None:
+                async for chunk in self.finish(e.data or "completed"):
+                    yield chunk
+            return
+        if e.run_id != self.run_id:
+            self.run_id, self.invocation_id = e.run_id, None
+        if not e.partial:
+            try:
+                meta = json.loads(e.data)
+            except ValueError:
+                meta = {}
+            self.invocation_id = self.invocation_id or meta.get("invocationId")
+            if meta.get("id"):
+                self.sent.add(meta["id"])
+        yield sse_frame(e.data)
+
+    async def finish(self, outcome: str) -> AsyncIterator[bytes]:
+        """Ends the run: sends stored events the stream missed, then the end.
+
+        A batch write to Redis can fail, and MAXLEN can trim a long run; the
+        session store has every complete event.
+        """
+        if self.invocation_id:
+            try:
+                session = await self.bus.session_service.get_session(
+                    app_name=self.bus.app_name,
+                    user_id=self.user_id,
+                    session_id=self.session_id,
+                )
+            except Exception:
+                logger.exception("Catching up run %s failed", self.run_id)
+                session = None
+            missed = [
+                history_frame(data)
+                for ev in (session.events if session else [])
+                if ev.invocation_id == self.invocation_id and ev.id not in self.sent
+                for data in serialize_event(ev)
+            ]
+            for ev in session.events if session else []:
+                self.sent.add(ev.id)
+            if missed:
+                yield b"".join(missed)
+        self.run_id, self.invocation_id = None, None
+        yield end_frame(outcome)
+
+
+@dataclass(eq=False)
+class _Watcher:
+    key: str
+    last: str
+    queue: asyncio.Queue[_Entry] = field(default_factory=asyncio.Queue)
+
+
+class StreamHub:
+    """Reads every watched session stream with one Redis connection.
+
+    Each open /events feed waits for its session's next entry. Giving each
+    feed its own blocking XREAD would hold a Redis connection per open tab;
+    instead one loop per process blocks on all watched keys at once (XREAD
+    takes many) and hands entries to the feeds. A newly watched key joins
+    the next XREAD, within HUB_BLOCK_MS; the feed has already read up to its
+    own starting point, so nothing is missed.
+    """
+
+    def __init__(self, redis: Redis) -> None:
+        self.redis = redis
+        self._watchers: dict[str, set[_Watcher]] = {}
+        self._cursors: dict[str, str] = {}
+        self._task: asyncio.Task[None] | None = None
+
+    def subscribe(self, key: str, last: str) -> _Watcher:
+        w = _Watcher(key, last)
+        self._watchers.setdefault(key, set()).add(w)
+        cur = self._cursors.get(key)
+        if cur is None or _stream_id(last) < _stream_id(cur):
+            self._cursors[key] = last
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._loop())
+        return w
+
+    def unsubscribe(self, w: _Watcher) -> None:
+        ws = self._watchers.get(w.key)
+        if ws is None:
+            return
+        ws.discard(w)
+        if not ws:
+            del self._watchers[w.key]
+            self._cursors.pop(w.key, None)
+
+    def watching(self) -> int:
+        return sum(len(ws) for ws in self._watchers.values())
+
+    async def _loop(self) -> None:
+        while self._cursors:
+            try:
+                res = cast(
+                    list[tuple[Any, list[tuple[Any, dict[Any, Any]]]]],
+                    await self.redis.xread(dict(self._cursors), block=HUB_BLOCK_MS),
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Reading session streams failed")
+                await asyncio.sleep(1)
+                continue
+            for key, items in res or []:
+                k = _decode(key)
+                for entry_id, fields in items:
+                    e = _entry(entry_id, fields)
+                    if k in self._cursors:
+                        self._cursors[k] = e.id
+                    for w in list(self._watchers.get(k, ())):
+                        if _stream_id(e.id) > _stream_id(w.last):
+                            w.last = e.id
+                            w.queue.put_nowait(e)
+
+    async def close(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
+
 class RunBusUnavailable(Exception):
     """Raised when this process refuses new runs (shutting down)."""
 
@@ -354,6 +514,7 @@ class RunBus:
         self._runs: dict[tuple[str, str], _Run] = {}
         self._closing = False
         self._root_agent = "writer"
+        self.hub = StreamHub(redis)
 
     # ---- lock -----------------------------------------------------------
 
@@ -618,50 +779,97 @@ class RunBus:
             return {"running": False, "invocationId": None}
         return {"running": True, "invocationId": lock.get("invocationId")}
 
-    async def stream(self, user_id: str, session_id: str) -> AsyncIterator[bytes]:
-        """SSE bytes for the run in progress, from its first event on.
+    async def open_events(
+        self, user_id: str, session_id: str, since: str | None = None
+    ) -> AsyncIterator[bytes]:
+        """The session's live SSE feed. Raises LookupError for no such session.
 
-        Ends (the connection closes) when the run ends, or right away when
-        there is no run.
+        Never ends by itself (the client or a proxy closes it). In order:
+
+        1. ``event: history`` frames: the stored events after the event id
+           ``since`` (all of them without it, or if it isn't found).
+        2. The latest run in the Redis stream, from its first event (plain
+           ``data:`` frames, partials included), and ``event: end`` if it has
+           already ended.
+        3. ``event: synced`` with ``{"running": bool}``.
+        4. Live: each run's frames as they are written, each followed by its
+           ``event: end``; the next run, from whichever window, wakes the
+           same feed. Heartbeats every STREAM_BLOCK_MS.
+
+        Complete events can arrive twice (stored, and replayed from Redis);
+        they carry ADK's event ``id`` for the client to drop repeats.
         """
-        lock = await self.read_run_lock(user_id, session_id)
-        if lock is None:
-            return
-        run_id = str(lock.get("runId"))
-        key = stream_key(user_id, session_id)
+        session = await self.session_service.get_session(
+            app_name=self.app_name, user_id=user_id, session_id=session_id
+        )
+        if session is None:
+            raise LookupError(session_id)
+        return self._events(user_id, session_id, session.events, since)
 
+    async def _events(
+        self,
+        user_id: str,
+        session_id: str,
+        stored: list[Event],
+        since: str | None,
+    ) -> AsyncIterator[bytes]:
+        start = 0
+        if since:
+            idx = next((i for i, e in enumerate(stored) if e.id == since), None)
+            if idx is not None:
+                start = idx + 1
+        sent: set[str] = {e.id for e in stored}
+        history = [
+            history_frame(data)
+            for e in stored[start:]
+            if not e.partial
+            for data in serialize_event(e)
+        ]
+        if history:
+            yield b"".join(history)
+
+        key = stream_key(user_id, session_id)
+        feed = _Feed(self, user_id, session_id, sent)
         raw = cast(list[tuple[Any, dict[Any, Any]]], await self.redis.xrange(key))
         entries = [_entry(i, f) for i, f in raw]
-        mine = [e for e in entries if e.run_id == run_id]
-        done = next((e for e in mine if e.type == "done"), None)
-        if done is not None:
-            yield end_frame(done.data)  # just ended; the history has it all
-            return
-        backlog = [sse_frame(e.data) for e in compact_backlog(mine)]
-        if backlog:
-            yield b"".join(backlog)
         last = entries[-1].id if entries else "0-0"
+        if entries:
+            latest = entries[-1].run_id
+            frames: list[bytes] = []
+            for e in compact_backlog([e for e in entries if e.run_id == latest]):
+                frames.extend([chunk async for chunk in feed.take(e)])
+            if frames:
+                yield b"".join(frames)
+        lock = await self.read_run_lock(user_id, session_id)
+        lock_run = str(lock["runId"]) if lock is not None else None
+        if feed.run_id is not None and feed.run_id != lock_run:
+            # The stream's latest run never wrote its end: its owner is gone.
+            async for chunk in feed.finish("interrupted"):
+                yield chunk
+        # A run that has the lock but hasn't written its first batch yet is
+        # running too; its entries arrive through the hub.
+        feed.run_id = feed.run_id or lock_run
+        yield synced_frame(feed.run_id is not None)
 
-        while True:
-            res = cast(
-                list[tuple[Any, list[tuple[Any, dict[Any, Any]]]]],
-                await self.redis.xread({key: last}, block=STREAM_BLOCK_MS),
-            )
-            if not res:
-                if not await self._lock_held(user_id, session_id, run_id):
-                    return  # owner died, or we fell too far behind to see done
-                yield HEARTBEAT
-                continue
-            for _key, items in res:
-                for entry_id, fields in items:
-                    e = _entry(entry_id, fields)
-                    last = e.id
-                    if e.run_id != run_id:
-                        continue
-                    if e.type == "done":
-                        yield end_frame(e.data)
-                        return
-                    yield sse_frame(e.data)
+        watcher = self.hub.subscribe(key, last)
+        try:
+            while True:
+                try:
+                    e = await asyncio.wait_for(
+                        watcher.queue.get(), STREAM_BLOCK_MS / 1000
+                    )
+                except asyncio.TimeoutError:
+                    if feed.run_id is not None and not await self._lock_held(
+                        user_id, session_id, feed.run_id
+                    ):
+                        async for chunk in feed.finish("interrupted"):
+                            yield chunk
+                    yield HEARTBEAT
+                    continue
+                async for chunk in feed.take(e):
+                    yield chunk
+        finally:
+            self.hub.unsubscribe(watcher)
 
     async def cancel(self, user_id: str, session_id: str) -> bool:
         """Stops the session's run. Returns False when there is none."""

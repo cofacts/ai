@@ -48,6 +48,7 @@ async def _lifespan(_app: FastAPI):
     finally:
         if run_bus is not None:
             await run_bus.shutdown()
+            await run_bus.hub.close()
             await run_bus.redis.aclose()
 
 
@@ -178,16 +179,23 @@ async def run_status(app_name: str, user_id: str, session_id: str):
     return RunStatus(**await _bus(app_name).status(user_id, session_id))
 
 
-@app.get(_SESSION_PATH + "/runs/stream")
-async def run_stream(app_name: str, user_id: str, session_id: str):
-    """SSE of the run in progress: everything so far, then live events.
+@app.get(_SESSION_PATH + "/events")
+async def session_events(
+    app_name: str, user_id: str, session_id: str, since: str | None = None
+):
+    """The session's live feed: stored events after `since`, then every run.
 
-    The server closes the connection when the run ends; with no run going,
-    right away.
+    Stays open: each run's events stream as they are written and end with
+    `event: end`, and the next run (from any window) arrives on the same
+    connection. See RunBus.open_events for the frames.
     """
     bus = _bus(app_name)
+    try:
+        body = await bus.open_events(user_id, session_id, since)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Session not found")
     return StreamingResponse(
-        bus.stream(user_id, session_id),
+        body,
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )
@@ -251,13 +259,14 @@ async def write_session_state(
 class _Server(uvicorn.Server):
     """Interrupts background runs as soon as SIGTERM arrives.
 
+    uvicorn runs the lifespan shutdown only after open connections close or
+    `timeout_graceful_shutdown` passes, and /events feeds never close by
+    themselves. So runs are stopped here, at once, while the feeds are still
+    open to deliver each run's end; uvicorn then cuts the feeds.
+
     Used by `python main.py` (the Docker image). `pnpm dev:agent` runs plain
     uvicorn with --timeout-graceful-shutdown instead: on a reload it cuts
-    the open streams after a few seconds, then the lifespan stops the runs.
-
-    uvicorn waits for open connections to close before running the
-    lifespan shutdown, and viewers' streams stay open until their run ends.
-    So runs are stopped here instead, which in turn ends those streams.
+    the open feeds after a few seconds, then the lifespan stops the runs.
     """
 
     def handle_exit(self, sig, frame):

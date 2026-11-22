@@ -81,12 +81,19 @@ async def make(tmp_path, model):
     return bus, sessions
 
 
-async def collect(agen):
+async def collect(bus):
+    """Data frames of the run in progress on a fresh /events feed, to its end."""
+    agen = await bus.open_events(USER, "s1")
     out = []
-    async for chunk in agen:
-        for part in chunk.decode().split("\n\n"):
-            if part.startswith("data: "):
-                out.append(json.loads(part[6:]))
+    try:
+        async for chunk in agen:
+            for part in chunk.decode().split("\n\n"):
+                if part.startswith("data: "):
+                    out.append(json.loads(part[6:]))
+                elif part.startswith("event: end"):
+                    return out
+    finally:
+        await agen.aclose()
     return out
 
 
@@ -99,7 +106,7 @@ async def test_real_runner_completes_and_streams(tmp_path):
     res = await bus.start(user_id=USER, session_id="s1", new_message=msg("問"))
     assert res.started and res.invocation_id
 
-    events = await asyncio.wait_for(collect(bus.stream(USER, "s1")), 10)
+    events = await asyncio.wait_for(collect(bus), 10)
     assert events[0]["content"]["parts"][0]["text"] == "問"
     assert [e.get("partial", False) for e in events[1:]] == [True, True, True, False]
     assert events[-1]["content"]["parts"][0]["text"] == "一二三"
@@ -109,7 +116,7 @@ async def test_real_runner_completes_and_streams(tmp_path):
 async def test_real_runner_cancel_persists_typed_text(tmp_path):
     bus, sessions = await make(tmp_path, SlowModel(delay=0.2))
     res = await bus.start(user_id=USER, session_id="s1", new_message=msg("問"))
-    viewer = asyncio.create_task(collect(bus.stream(USER, "s1")))
+    viewer = asyncio.create_task(collect(bus))
     await asyncio.sleep(0.5)  # two chunks out
 
     await bus.cancel(USER, "s1")
@@ -129,7 +136,7 @@ async def test_real_runner_cancel_persists_typed_text(tmp_path):
     # The session is still usable: the next run starts cleanly.
     res2 = await bus.start(user_id=USER, session_id="s1", new_message=msg("再問"))
     assert res2.started
-    events2 = await asyncio.wait_for(collect(bus.stream(USER, "s1")), 10)
+    events2 = await asyncio.wait_for(collect(bus), 10)
     assert events2[-1]["content"]["parts"][0]["text"] == "一二三"
 
 
@@ -139,6 +146,6 @@ async def test_opened_while_running_does_not_break_the_run(tmp_path):
     await asyncio.sleep(0.15)
     assert await bus.mark_opened(USER, "s1") is True  # deferred
 
-    events = await asyncio.wait_for(collect(bus.stream(USER, "s1")), 10)
+    events = await asyncio.wait_for(collect(bus), 10)
     assert events[-1]["content"]["parts"][0]["text"] == "一二三"
     assert "customMetadata" not in events[-1]

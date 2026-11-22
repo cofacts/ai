@@ -3,22 +3,20 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   BUSY_NOTICE,
   INITIAL_CHAT_STATE,
-  abortControllers,
   chatCacheKey,
+  connectSessionEvents,
   isRunEndEvent,
   isTurnInterrupted,
   rebuildChatState,
   sendChatMessage,
   stopRun,
-  syncChatSession,
-  watchRun,
 } from '../chatCache'
 import type { ChatSessionState } from '../chatCache'
 import type { AdkEvent } from '../adk'
 
-// Background runs: the client merges the session history with the stream of
-// the run in progress (which always replays from the run's first event), and
-// decides from the last event whether a closed stream means the run ended.
+// Background runs: one live feed per session (`/api/runs/:id/events`) brings
+// the stored events, then every run as it happens. The client merges them:
+// complete events by id, the run in progress from its replay.
 
 const getSession = vi.fn()
 vi.mock('../chatSessions.functions', () => ({
@@ -26,13 +24,17 @@ vi.mock('../chatSessions.functions', () => ({
   listSessions: vi.fn(),
 }))
 
+let clock = 0
 function ev(
   invocationId: string,
   role: 'user' | 'model',
   text: string,
   extra: Partial<AdkEvent> = {},
 ): AdkEvent {
+  clock++
   return {
+    id: `${invocationId}-${clock}`,
+    timestamp: clock,
     invocationId,
     author: role === 'user' ? 'user' : 'writer',
     content: { role, parts: [{ text }] },
@@ -50,12 +52,36 @@ const toolCall = (inv: string) =>
     },
   }) as unknown as AdkEvent
 
-/** An SSE body; `end` adds the server's end frame (the run is over). */
-function sse(events: Array<AdkEvent>, end?: string) {
-  const body =
-    events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') +
-    (end ? `event: end\ndata: ${end}\n\n` : '')
-  return new Response(body, {
+// Frames of the /events feed.
+const hist = (e: AdkEvent) => `event: history\ndata: ${JSON.stringify(e)}\n\n`
+const msg = (e: AdkEvent) => `data: ${JSON.stringify(e)}\n\n`
+const end = (outcome = 'completed') => `event: end\ndata: ${outcome}\n\n`
+const synced = (running: boolean) =>
+  `event: synced\ndata: ${JSON.stringify({ running })}\n\n`
+
+/** A feed response that stays open; frames are pushed in as the test goes. */
+function openFeed() {
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c
+    },
+  })
+  const encoder = new TextEncoder()
+  return {
+    response: new Response(body, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    }),
+    push: (...frames: Array<string>) =>
+      controller.enqueue(encoder.encode(frames.join(''))),
+    close: () => controller.close(),
+  }
+}
+
+/** The old /api/run-sse body (background runs off). */
+function sse(events: Array<AdkEvent>) {
+  return new Response(events.map(msg).join(''), {
     status: 200,
     headers: { 'Content-Type': 'text/event-stream' },
   })
@@ -88,10 +114,10 @@ describe('end of a run', () => {
     expect(isTurnInterrupted([q, ev('a', 'model', 'answer')])).toBe(false)
     expect(isTurnInterrupted([q])).toBe(true) // owner died
     expect(isTurnInterrupted([q, toolCall('a')])).toBe(true)
-    const end = (how: string) =>
+    const stopped = (how: string) =>
       ev('a', 'model', 'half', { customMetadata: { cofacts_run_end: how } })
-    expect(isTurnInterrupted([q, end('interrupted')])).toBe(true)
-    expect(isTurnInterrupted([q, end('cancelled')])).toBe(false)
+    expect(isTurnInterrupted([q, stopped('interrupted')])).toBe(true)
+    expect(isTurnInterrupted([q, stopped('cancelled')])).toBe(false)
     // Stopped through the old /run_sse.
     const aborted = {
       invocationId: 'a',
@@ -135,282 +161,253 @@ describe('rebuildChatState', () => {
   })
 })
 
-describe('watching and starting runs', () => {
+describe('the session feed', () => {
   let qc: QueryClient
   const fetchMock = vi.fn()
+  const closers: Array<() => void> = []
+  const state = () => qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
+  const connect = () => closers.push(connectSessionEvents(qc, 's'))
+  /** Routes fetches by URL; a feed URL takes the next queued feed. */
+  function route(
+    feedQueue: Array<Response>,
+    handlers: Record<string, () => Promise<Response> | Response> = {},
+  ) {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/runs/s/events')) {
+        const next = feedQueue.shift()
+        if (next) return next
+        return new Promise(() => {}) // no more feeds: hang until aborted
+      }
+      const handler = handlers[url]
+      if (handler) return handler()
+      throw new Error(`unexpected fetch ${url}`)
+    })
+  }
 
   beforeEach(() => {
     qc = new QueryClient()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockReset()
     getSession.mockReset()
-    abortControllers.clear()
   })
   afterEach(() => {
+    closers.splice(0).forEach((close) => close())
     vi.unstubAllGlobals()
   })
 
-  test('joining mid-run: replay replaces the history copy, answer ends it', async () => {
-    qc.setQueryData(
-      chatCacheKey('s'),
-      rebuildChatState(INITIAL_CHAT_STATE, [ev('cur', 'user', 'q')], null),
+  test('joining mid-run: replay replaces the stored copy, end finishes it', async () => {
+    const q = ev('cur', 'user', 'q')
+    const answer = ev('cur', 'model', '一二')
+    const feed = openFeed()
+    route([feed.response])
+    connect()
+    feed.push(
+      hist(q),
+      msg(q),
+      msg(ev('cur', 'model', '一', { partial: true })),
+      msg(ev('cur', 'model', '二', { partial: true })),
+      synced(true),
     )
-    fetchMock.mockResolvedValueOnce(
-      sse(
-        [
-          ev('cur', 'user', 'q'),
-          ev('cur', 'model', '一', { partial: true }),
-          ev('cur', 'model', '二', { partial: true }),
-          ev('cur', 'model', '一二'),
-        ],
-        'completed',
-      ),
-    )
-    // After the end frame the stored session is the record.
-    getSession.mockResolvedValueOnce({
-      events: [ev('cur', 'user', 'q'), ev('cur', 'model', '一二')],
-      state: {},
-    })
-    await watchRun(qc, 's')
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(true))
+    expect(texts(state())).toEqual(['q', '一二'])
+    expect(state()?.messages.at(-1)?.isStreaming).toBe(true)
 
-    const s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
-    expect(texts(s)).toEqual(['q', '一二'])
-    expect(s?.isStreaming).toBe(false)
-    expect(s?.live).toBeNull()
-    expect(s?.historyEvents.map((e) => e.invocationId)).toEqual(['cur', 'cur'])
-    expect(fetchMock).toHaveBeenCalledTimes(1) // no status check needed
-    expect(getSession).toHaveBeenCalledTimes(1)
-    expect(abortControllers.has('s')).toBe(false)
+    feed.push(msg(answer), end())
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(false))
+    expect(texts(state())).toEqual(['q', '一二'])
+    expect(state()?.live).toBeNull()
+    expect(state()?.historyEvents.map((e) => e.id)).toEqual([q.id, answer.id])
   })
 
-  test('a dropped connection with the run still going reattaches', async () => {
-    fetchMock
-      .mockResolvedValueOnce(
-        sse([
-          ev('cur', 'user', 'q'),
-          ev('cur', 'model', '一', { partial: true }),
-        ]),
-      )
-      .mockResolvedValueOnce(json({ running: true, invocationId: 'cur' }))
-      .mockResolvedValueOnce(
-        sse(
-          [
-            ev('cur', 'user', 'q'),
-            ev('cur', 'model', '一', { partial: true }),
-            ev('cur', 'model', '二', { partial: true }),
-            ev('cur', 'model', '一二'),
-          ],
-          'completed',
-        ),
-      )
-    getSession.mockResolvedValueOnce({
-      events: [ev('cur', 'user', 'q'), ev('cur', 'model', '一二')],
-      state: {},
-    })
-    await watchRun(qc, 's')
-    const s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
-    expect(texts(s)).toEqual(['q', '一二']) // replayed, not duplicated
-    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
-      '/api/runs/s/stream',
-      '/api/runs/s/status',
-      '/api/runs/s/stream',
+  test('an idle feed shows a run started in another window', async () => {
+    const feed = openFeed()
+    route([feed.response])
+    connect()
+    feed.push(
+      hist(ev('a', 'user', 'q1')),
+      hist(ev('a', 'model', 'a1')),
+      synced(false),
+    )
+    await vi.waitFor(() => expect(texts(state())).toEqual(['q1', 'a1']))
+    expect(state()?.isStreaming).toBe(false)
+
+    // Another window sends: its message comes first on this feed.
+    feed.push(msg(ev('b', 'user', 'q2')))
+    await vi.waitFor(() => expect(texts(state())).toEqual(['q1', 'a1', 'q2']))
+    expect(state()?.isStreaming).toBe(true)
+    feed.push(msg(ev('b', 'model', 'a2')), end())
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(false))
+    expect(texts(state())).toEqual(['q1', 'a1', 'q2', 'a2'])
+  })
+
+  test('reconnects with since and replays the run without duplicates', async () => {
+    const q = ev('cur', 'user', 'q')
+    const first = openFeed()
+    const second = openFeed()
+    route([first.response, second.response])
+    connect()
+    first.push(
+      hist(q),
+      msg(q),
+      msg(ev('cur', 'model', '一', { partial: true })),
+      synced(true),
+    )
+    await vi.waitFor(() => expect(texts(state())).toEqual(['q', '一']))
+    first.close() // e.g. Cloud Run's request timeout
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      `/api/runs/s/events?since=${encodeURIComponent(q.id)}`,
+    )
+    second.push(
+      synced(true),
+      msg(q),
+      msg(ev('cur', 'model', '一', { partial: true })),
+      msg(ev('cur', 'model', '二', { partial: true })),
+    )
+    await vi.waitFor(() => expect(texts(state())).toEqual(['q', '一二']))
+    second.push(msg(ev('cur', 'model', '一二')), end())
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(false))
+    expect(texts(state())).toEqual(['q', '一二'])
+  })
+
+  test('a run that ended while disconnected is not left streaming', async () => {
+    const q = ev('cur', 'user', 'q')
+    const answer = ev('cur', 'model', 'done')
+    const first = openFeed()
+    const second = openFeed()
+    route([first.response, second.response])
+    connect()
+    first.push(
+      hist(q),
+      msg(q),
+      msg(ev('cur', 'model', 'do', { partial: true })),
+      synced(true),
+    )
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(true))
+    first.close()
+    second.push(hist(answer), synced(false))
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(false))
+    expect(texts(state())).toEqual(['q', 'done'])
+  })
+
+  test('events caught up after the end land in time order', async () => {
+    const q = ev('cur', 'user', 'q')
+    const call = toolCall('cur')
+    Object.assign(call, { id: 'call', timestamp: clock + 0.5 })
+    const answer = ev('cur', 'model', 'answer')
+    const feed = openFeed()
+    route([feed.response])
+    connect()
+    // The tool call's batch never reached Redis; the end catches it up.
+    feed.push(synced(false), msg(q), msg(answer), hist(call), end())
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(false))
+    expect(state()?.historyEvents.map((e) => e.id)).toEqual([
+      q.id,
+      'call',
+      answer.id,
     ])
   })
 
-  test('closed mid-run with no run left: reload the history', async () => {
-    fetchMock
-      .mockResolvedValueOnce(sse([ev('cur', 'user', 'q'), toolCall('cur')]))
-      .mockResolvedValueOnce(json({ running: false, invocationId: null }))
-    getSession.mockResolvedValueOnce({
-      events: [ev('cur', 'user', 'q')],
-      state: {},
+  test('send: 202, and the feed replaces the optimistic message', async () => {
+    const feed = openFeed()
+    route([feed.response], {
+      '/api/runs/s/start': () => json({ invocationId: 'cur' }, 202),
     })
-
-    await watchRun(qc, 's')
-    const s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
-    expect(texts(s)).toEqual(['q'])
-    expect(s?.interrupted).toBe(true)
-    expect(s?.isStreaming).toBe(false)
-  })
-
-  test('send: 202 then watch; the optimistic message is replaced', async () => {
-    getSession.mockResolvedValue({
-      events: [ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')],
-      state: {},
-    })
-    fetchMock.mockImplementation((url: string) => {
-      if (url === '/api/runs/s/start')
-        return Promise.resolve(json({ invocationId: 'cur' }, 202))
-      if (url === '/api/runs/s/stream')
-        return Promise.resolve(
-          sse(
-            [ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')],
-            'completed',
-          ),
-        )
-      return Promise.reject(new Error(url))
-    })
+    connect()
+    feed.push(synced(false))
     expect(await sendChatMessage(qc, 's', 'hello')).toBe(true)
-    await vi.waitFor(() =>
-      expect(
-        qc.getQueryData<ChatSessionState>(chatCacheKey('s'))?.isStreaming,
-      ).toBe(false),
+    expect(texts(state())).toEqual(['hello'])
+    feed.push(
+      msg(ev('cur', 'user', 'hello')),
+      msg(ev('cur', 'model', 'answer')),
+      end(),
     )
-    expect(texts(qc.getQueryData(chatCacheKey('s')))).toEqual([
-      'hello',
-      'answer',
-    ])
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(false))
+    expect(texts(state())).toEqual(['hello', 'answer'])
   })
 
-  test('send: 409 hands the draft back and watches the other run', async () => {
-    qc.setQueryData(chatCacheKey('s'), INITIAL_CHAT_STATE)
-    fetchMock.mockImplementation((url: string) => {
-      if (url === '/api/runs/s/start')
-        return Promise.resolve(json({ invocationId: 'other' }, 409))
-      if (url === '/api/runs/s/stream')
-        return Promise.resolve(
-          sse(
-            [ev('other', 'user', 'theirs'), ev('other', 'model', 'done')],
-            'completed',
-          ),
-        )
-      return Promise.reject(new Error(url))
+  test('send: 409 hands the draft back; the feed shows the other run', async () => {
+    const feed = openFeed()
+    route([feed.response], {
+      '/api/runs/s/start': () => json({ invocationId: 'other' }, 409),
     })
-    getSession.mockResolvedValue({
-      events: [ev('other', 'user', 'theirs'), ev('other', 'model', 'done')],
-      state: {},
-    })
+    connect()
+    feed.push(synced(true), msg(ev('other', 'user', 'theirs')))
+    await vi.waitFor(() => expect(texts(state())).toEqual(['theirs']))
     expect(await sendChatMessage(qc, 's', 'mine')).toBe(false)
-    await vi.waitFor(() =>
-      expect(texts(qc.getQueryData(chatCacheKey('s')))).toEqual([
-        'theirs',
-        'done',
-      ]),
-    )
-    expect(qc.getQueryData<ChatSessionState>(chatCacheKey('s'))?.notice).toBe(
-      BUSY_NOTICE,
-    )
+    expect(texts(state())).toEqual(['theirs'])
+    expect(state()?.notice).toBe(BUSY_NOTICE)
   })
-  test('a sync while a send is in flight leaves the optimistic turn alone', async () => {
-    // New session from the landing page: the session page mounts and syncs
-    // before the start request has taken the lock.
+
+  test('the feed saying "not running" leaves a send in flight alone', async () => {
     let releaseStart!: () => void
     const startGate = new Promise<void>((r) => (releaseStart = r))
-    getSession.mockResolvedValue({
-      events: [ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')],
-      state: {},
-    })
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url === '/api/runs/s/start') {
+    const feed = openFeed()
+    route([feed.response], {
+      '/api/runs/s/start': async () => {
         await startGate
         return json({ invocationId: 'cur' }, 202)
-      }
-      if (url === '/api/runs/s/status')
-        return json({ running: false, invocationId: null })
-      if (url === '/api/runs/s/stream')
-        return sse(
-          [ev('cur', 'user', 'hello'), ev('cur', 'model', 'answer')],
-          'completed',
-        )
-      throw new Error(url)
+      },
     })
     const sent = sendChatMessage(qc, 's', 'hello')
-    await syncChatSession(qc, 's')
-
-    let s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
-    expect(texts(s)).toEqual(['hello'])
-    expect(s?.isStreaming).toBe(true)
-    expect(getSession).not.toHaveBeenCalled()
-
+    connect() // the session page mounts after the landing page's send
+    feed.push(synced(false))
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    await new Promise((r) => setTimeout(r, 10))
+    expect(texts(state())).toEqual(['hello'])
+    expect(state()?.isStreaming).toBe(true)
     releaseStart()
-    await sent
-    await vi.waitFor(() =>
-      expect(
-        qc.getQueryData<ChatSessionState>(chatCacheKey('s'))?.isStreaming,
-      ).toBe(false),
-    )
-    s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
-    expect(texts(s)).toEqual(['hello', 'answer'])
-  })
-
-  test('503 while ADK shuts down is an error, not a fallback to /run_sse', async () => {
-    qc.setQueryData(chatCacheKey('s'), INITIAL_CHAT_STATE)
-    fetchMock.mockResolvedValueOnce(
-      json({ detail: { reason: 'shutting_down' } }, 503),
-    )
-    await sendChatMessage(qc, 's', 'hello')
-    const s = qc.getQueryData<ChatSessionState>(chatCacheKey('s'))
-    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(['/api/runs/s/start'])
-    expect(s?.isStreaming).toBe(false)
-    expect(s?.error).toMatch(/503/)
-  })
-
-  test('503 with background runs off falls back to /api/run-sse', async () => {
-    qc.setQueryData(chatCacheKey('s'), INITIAL_CHAT_STATE)
-    fetchMock
-      .mockResolvedValueOnce(json({ detail: { reason: 'disabled' } }, 503))
-      .mockResolvedValueOnce(sse([ev('x', 'model', 'answer')]))
-    await sendChatMessage(qc, 's', 'hello')
-    await vi.waitFor(() =>
-      expect(
-        qc.getQueryData<ChatSessionState>(chatCacheKey('s'))?.isStreaming,
-      ).toBe(false),
-    )
-    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
-      '/api/runs/s/start',
-      '/api/run-sse',
-    ])
-  })
-  test('a drop right after a text message is not taken as the end', async () => {
-    // The writer often says something, then calls a tool. A connection
-    // dropping between the two must not end the turn on screen.
-    fetchMock
-      .mockResolvedValueOnce(
-        sse([ev('cur', 'user', 'q'), ev('cur', 'model', '我先查一下')]),
-      )
-      .mockResolvedValueOnce(json({ running: true, invocationId: 'cur' }))
-      .mockResolvedValueOnce(
-        sse(
-          [
-            ev('cur', 'user', 'q'),
-            ev('cur', 'model', '我先查一下'),
-            toolCall('cur'),
-          ],
-          'completed',
-        ),
-      )
-    getSession.mockResolvedValueOnce({ events: [], state: {} })
-    await watchRun(qc, 's')
-    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
-      '/api/runs/s/stream',
-      '/api/runs/s/status',
-      '/api/runs/s/stream',
-    ])
+    expect(await sent).toBe(true)
   })
 
   test('stop pressed while the start request is in flight cancels the run', async () => {
     let releaseStart!: () => void
     const startGate = new Promise<void>((r) => (releaseStart = r))
-    getSession.mockResolvedValue({ events: [], state: {} })
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url === '/api/runs/s/start') {
+    route([], {
+      '/api/runs/s/start': async () => {
         await startGate
         return json({ invocationId: 'cur' }, 202)
-      }
-      if (url === '/api/runs/s/cancel') return json({}, 202)
-      if (url === '/api/runs/s/stream')
-        return sse([ev('cur', 'user', 'hello')], 'cancelled')
-      throw new Error(url)
+      },
+      '/api/runs/s/cancel': () => json({}, 202),
     })
     const sent = sendChatMessage(qc, 's', 'hello')
-    await stopRun(qc, 's') // no lock yet: remembered, not sent
+    await stopRun('s') // no lock yet: remembered, not sent
     expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(['/api/runs/s/start'])
     releaseStart()
     await sent
-    await vi.waitFor(() =>
-      expect(fetchMock.mock.calls.map((c) => c[0])).toContain(
-        '/api/runs/s/cancel',
-      ),
+    expect(fetchMock.mock.calls.map((c) => c[0])).toContain(
+      '/api/runs/s/cancel',
     )
+  })
+
+  test('503 while ADK shuts down is an error, not a fallback to /run_sse', async () => {
+    route([], {
+      '/api/runs/s/start': () =>
+        json({ detail: { reason: 'shutting_down' } }, 503),
+    })
+    await sendChatMessage(qc, 's', 'hello')
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual(['/api/runs/s/start'])
+    expect(state()?.isStreaming).toBe(false)
+    expect(state()?.error).toMatch(/503/)
+  })
+
+  test('background runs off: history loads once, sends use /api/run-sse', async () => {
+    getSession.mockResolvedValue({
+      events: [ev('a', 'user', 'old')],
+      state: {},
+    })
+    route([json({ detail: { reason: 'disabled' } }, 503)], {
+      '/api/runs/s/start': () => json({ detail: { reason: 'disabled' } }, 503),
+      '/api/run-sse': () => sse([ev('x', 'model', 'answer')]),
+    })
+    connect()
+    await vi.waitFor(() => expect(texts(state())).toEqual(['old']))
+    await sendChatMessage(qc, 's', 'hello')
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(false))
+    expect(texts(state())).toEqual(['old', 'hello', 'answer'])
+    expect(
+      fetchMock.mock.calls.filter((c) => c[0].startsWith('/api/runs/s/events')),
+    ).toHaveLength(1)
   })
 })

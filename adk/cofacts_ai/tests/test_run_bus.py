@@ -142,16 +142,31 @@ def user_msg(text="hi"):
     return types.Content(role="user", parts=[types.Part(text=text)])
 
 
-async def collect(agen):
-    """Parses SSE bytes into ([event dict], heartbeat count)."""
-    events, beats = [], 0
-    async for chunk in agen:
-        for part in chunk.decode().split("\n\n"):
-            if part.startswith("data: "):
-                events.append(json.loads(part[6:]))
-            elif part.startswith(": heartbeat"):
-                beats += 1
-    return events, beats
+async def watch(bus, sid="s1", *, raw=False):
+    """Reads a fresh /events feed until the run in progress ends.
+
+    Returns (data frames of the run, heartbeat count); ([], 0) right after
+    `synced` when no run is going. History frames are skipped. With raw,
+    returns the chunks as received.
+    """
+    agen = await bus.open_events(USER, sid)
+    events, beats, chunks = [], 0, []
+    try:
+        async for chunk in agen:
+            chunks.append(chunk)
+            for part in chunk.decode().split("\n\n"):
+                if part.startswith("data: "):
+                    events.append(json.loads(part[6:]))
+                elif part.startswith(": heartbeat"):
+                    beats += 1
+                elif part.startswith("event: synced"):
+                    if '"running": false' in part and not events:
+                        return chunks if raw else (events, beats)
+                elif part.startswith("event: end"):
+                    return chunks if raw else (events, beats)
+    finally:
+        await agen.aclose()
+    return chunks if raw else (events, beats)
 
 
 async def wait_idle(bus, timeout=5.0):
@@ -181,7 +196,7 @@ async def test_run_completes_without_any_viewer(redis, sessions):
 async def test_viewer_from_start_sees_every_event_then_close(redis, sessions):
     bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
     await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
-    events, _ = await asyncio.wait_for(collect(bus.stream(USER, "s1")), 5)
+    events, _ = await asyncio.wait_for(watch(bus), 5)
 
     assert [e.get("partial", False) for e in events] == [False, True, True, True, False]
     assert events[0]["content"]["role"] == "user"
@@ -201,7 +216,7 @@ async def test_late_viewer_gets_backlog_then_live(redis, sessions):
     await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
     await asyncio.sleep(0.15)  # joins during the pause
 
-    events, _ = await asyncio.wait_for(collect(bus.stream(USER, "s1")), 5)
+    events, _ = await asyncio.wait_for(watch(bus), 5)
     texts = [e["content"]["parts"][0]["text"] for e in events]
     assert texts == ["hi", "a", "b", "c", "abc"]
 
@@ -210,7 +225,7 @@ async def test_viewer_disconnect_does_not_stop_the_run(redis, sessions):
     bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer(delay=0.05)))
     await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
 
-    agen = bus.stream(USER, "s1")
+    agen = await bus.open_events(USER, "s1")
     await agen.__anext__()
     await agen.aclose()  # browser tab closed
 
@@ -239,7 +254,7 @@ async def test_cancel_on_owner_stores_typed_text_and_closes_streams(redis, sessi
     ]
     bus = make_bus(redis, sessions, FakeRunner(sessions, script))
     await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
-    viewer = asyncio.create_task(collect(bus.stream(USER, "s1")))
+    viewer = asyncio.create_task(watch(bus))
     await asyncio.sleep(0.1)
 
     assert await bus.cancel(USER, "s1")
@@ -278,7 +293,7 @@ async def test_cancel_without_run(redis, sessions):
 
 async def test_stream_without_run_closes_immediately(redis, sessions):
     bus = make_bus(redis, sessions, None)
-    assert await asyncio.wait_for(collect(bus.stream(USER, "s1")), 1) == ([], 0)
+    assert await asyncio.wait_for(watch(bus), 1) == ([], 0)
 
 
 async def test_stream_ignores_a_previous_runs_leftovers(redis, sessions):
@@ -288,7 +303,7 @@ async def test_stream_ignores_a_previous_runs_leftovers(redis, sessions):
 
     bus2 = make_bus(redis, sessions, FakeRunner(sessions, script_answer(), inv="e-2"))
     await bus2.start(user_id=USER, session_id="s1", new_message=user_msg("again"))
-    events, _ = await asyncio.wait_for(collect(bus2.stream(USER, "s1")), 5)
+    events, _ = await asyncio.wait_for(watch(bus2), 5)
     assert {e["invocationId"] for e in events} == {"e-2"}
 
 
@@ -296,7 +311,7 @@ async def test_viewer_closes_when_owner_dies(redis, sessions):
     script = [(0.01, lambda inv: text_event(inv, "x", partial=True)), (60, None)]
     bus = make_bus(redis, sessions, FakeRunner(sessions, script))
     await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
-    viewer = asyncio.create_task(collect(bus.stream(USER, "s1")))
+    viewer = asyncio.create_task(watch(bus))
     await asyncio.sleep(0.05)
 
     # Simulate the owner process vanishing: its lock expires.
@@ -312,7 +327,7 @@ async def test_heartbeat_while_run_is_quiet(redis, sessions):
     script = [(0.5, lambda inv: text_event(inv, "done", partial=False))]
     bus = make_bus(redis, sessions, FakeRunner(sessions, script))
     await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
-    events, beats = await asyncio.wait_for(collect(bus.stream(USER, "s1")), 5)
+    events, beats = await asyncio.wait_for(watch(bus), 5)
     assert beats >= 1
     assert events[-1]["content"]["parts"][0]["text"] == "done"
 
@@ -425,7 +440,7 @@ def test_serialize_event_splits_artifact_delta_like_run_sse():
 async def test_stream_ends_with_the_outcome(redis, sessions):
     bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
     await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
-    chunks = [c async for c in bus.stream(USER, "s1")]
+    chunks = await asyncio.wait_for(watch(bus, raw=True), 5)
     assert chunks[-1] == b"event: end\ndata: completed\n\n"
 
 
@@ -494,3 +509,167 @@ async def test_lock_released_even_if_done_marker_fails(redis, sessions):
     await wait_idle(bus)
     redis.xadd = real_xadd
     assert await redis.get(rb.lock_key(USER, "s1")) is None
+
+
+def parse(chunks):
+    """(kind, payload) per frame: history / data / end / synced / heartbeat."""
+    out = []
+    for chunk in chunks:
+        for part in chunk.decode().split("\n\n"):
+            if not part:
+                continue
+            if part.startswith(": heartbeat"):
+                out.append(("heartbeat", None))
+                continue
+            kind, data = "data", ""
+            for line in part.split("\n"):
+                if line.startswith("event: "):
+                    kind = line[7:]
+                elif line.startswith("data: "):
+                    data = line[6:]
+            out.append(
+                (
+                    kind,
+                    json.loads(data) if kind in ("data", "history", "synced") else data,
+                )
+            )
+    return out
+
+
+async def read_until(agen, pred, timeout=5):
+    """Reads frames from an open feed until pred(frames) is true."""
+    frames = []
+
+    async def _read():
+        async for chunk in agen:
+            frames.extend(parse([chunk]))
+            if pred(frames):
+                return
+
+    await asyncio.wait_for(_read(), timeout)
+    return frames
+
+
+def ends(frames):
+    return [p for k, p in frames if k == "end"]
+
+
+async def test_one_feed_carries_run_after_run(redis, sessions):
+    """An idle feed wakes for the next run, from any window, and stays open."""
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer(), inv="e-1"))
+    agen = await bus.open_events(USER, "s1")
+    frames = await read_until(agen, lambda f: any(k == "synced" for k, _ in f))
+    assert frames[-1] == ("synced", {"running": False})
+
+    await bus.start(user_id=USER, session_id="s1", new_message=user_msg("one"))
+    frames = await read_until(agen, lambda f: len(ends(f)) == 1)
+    assert ends(frames) == ["completed"]
+    assert {p["invocationId"] for k, p in frames if k == "data"} == {"e-1"}
+
+    # Another process starts the next run on the same session.
+    other = make_bus(
+        redis, sessions, FakeRunner(sessions, script_answer(), inv="e-2"), owner="b"
+    )
+    await other.start(user_id=USER, session_id="s1", new_message=user_msg("two"))
+    frames = await read_until(agen, lambda f: len(ends(f)) == 1)
+    data = [p for k, p in frames if k == "data"]
+    assert data[0]["content"]["parts"][0]["text"] == "two"
+    assert {p["invocationId"] for p in data} == {"e-2"}
+    await agen.aclose()
+    await wait_idle(other)
+
+
+async def test_feed_sends_history_after_since(redis, sessions):
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
+    await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    await wait_idle(bus)
+    session = await sessions.get_session(app_name=APP, user_id=USER, session_id="s1")
+    first = session.events[0].id
+
+    agen = await bus.open_events(USER, "s1", since=first)
+    frames = await read_until(agen, lambda f: any(k == "synced" for k, _ in f))
+    await agen.aclose()
+    history = [p["id"] for k, p in frames if k == "history"]
+    assert history == [e.id for e in session.events[1:]]
+
+    agen = await bus.open_events(USER, "s1")
+    frames = await read_until(agen, lambda f: any(k == "synced" for k, _ in f))
+    await agen.aclose()
+    assert [p["id"] for k, p in frames if k == "history"] == [
+        e.id for e in session.events
+    ]
+
+
+async def test_end_catches_up_what_the_stream_missed(redis, sessions, monkeypatch):
+    """A failed batch write loses entries; the end sends them from the store."""
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer(delay=0.05)))
+    agen = await bus.open_events(USER, "s1")
+    await read_until(agen, lambda f: any(k == "synced" for k, _ in f))
+
+    real_xadd = redis.xadd
+
+    async def lose_final_answer(key, fields, **kw):
+        data = fields.get("data", "")
+        if fields.get("partial") == "0" and "p0p1p2" in data:
+            return None  # this entry never reaches Redis
+        return await real_xadd(key, fields, **kw)
+
+    monkeypatch.setattr(redis, "xadd", lose_final_answer)
+    # pipeline xadd bypasses redis.xadd; drop it at the pipeline level too
+    real_pipeline = redis.pipeline
+
+    def pipeline(*a, **kw):
+        pipe = real_pipeline(*a, **kw)
+        real = pipe.xadd
+
+        def xadd(key, fields, **kw2):
+            if fields.get("partial") == "0" and "p0p1p2" in fields.get("data", ""):
+                return pipe
+            return real(key, fields, **kw2)
+
+        pipe.xadd = xadd
+        return pipe
+
+    monkeypatch.setattr(redis, "pipeline", pipeline)
+    await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    frames = await read_until(agen, lambda f: len(ends(f)) == 1)
+    await agen.aclose()
+    assert not any(
+        k == "data"
+        and not p.get("partial")
+        and p["content"]["parts"][0]["text"] == "p0p1p2"
+        for k, p in frames
+    )
+    i_end = next(i for i, (k, _) in enumerate(frames) if k == "end")
+    caught_up = [p for k, p in frames[:i_end] if k == "history"]
+    assert [p["content"]["parts"][0]["text"] for p in caught_up] == ["p0p1p2"]
+
+
+async def test_idle_feeds_share_one_hub_loop(redis, sessions):
+    for sid in ("s2", "s3"):
+        await sessions.create_session(app_name=APP, user_id=USER, session_id=sid)
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
+    feeds = []
+    for sid in ("s1", "s2", "s3", "s1"):
+        agen = await bus.open_events(USER, sid)
+        await read_until(agen, lambda f: any(k == "synced" for k, _ in f))
+        # The feed subscribes to the hub once it starts waiting.
+        feeds.append((agen, asyncio.create_task(agen.__anext__())))
+    await asyncio.sleep(0.05)
+    assert bus.hub.watching() == 4
+    assert len(bus.hub._cursors) == 3  # one XREAD over three keys
+    for agen, pending in feeds:
+        pending.cancel()
+        try:
+            await pending
+        except (asyncio.CancelledError, StopAsyncIteration):
+            pass
+        await agen.aclose()
+    assert bus.hub.watching() == 0
+    await bus.hub.close()
+
+
+async def test_unknown_session_feed_raises(redis, sessions):
+    bus = make_bus(redis, sessions, None)
+    with pytest.raises(LookupError):
+        await bus.open_events(USER, "nope")

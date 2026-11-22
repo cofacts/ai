@@ -63,10 +63,20 @@ async def test_start_status_stream_opened(client):
     r = await c.post(BASE + "/opened")
     assert r.json() == {"deferred": True}
 
-    r = await c.get(BASE + "/runs/stream")
-    assert r.headers["content-type"].startswith("text/event-stream")
-    assert r.text.count("\ndata: {") + r.text.startswith("data: {") == 5
-    assert r.text.endswith("event: end\ndata: completed\n\n")
+    # httpx's ASGI transport buffers whole bodies, and this one never ends:
+    # call the route and read its body until the run's end.
+    resp = await main.session_events("cofacts_ai", "u1", "s1")
+    assert resp.media_type == "text/event-stream"
+    text = ""
+    async for chunk in resp.body_iterator:
+        text += chunk.decode() if isinstance(chunk, bytes) else chunk
+        if "event: end" in text:
+            break
+    await resp.body_iterator.aclose()
+    frames = [f for f in text.split("\n\n") if f]
+    # The user message is stored already (history), then the run's 5 frames.
+    assert sum(f.startswith("data: {") for f in frames) == 5
+    assert frames[-1] == "event: end\ndata: completed"
 
     while bus.running_count():
         await asyncio.sleep(0.01)
@@ -82,6 +92,9 @@ async def test_unknown_session_is_404(client):
     assert r.status_code == 404
     assert (
         await c.post("/apps/cofacts_ai/users/u1/sessions/nope/opened")
+    ).status_code == 404
+    assert (
+        await c.get("/apps/cofacts_ai/users/u1/sessions/nope/events")
     ).status_code == 404
 
 

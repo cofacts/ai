@@ -1,6 +1,6 @@
 ---
 status: 'accepted'
-date: 2026-11-14
+date: 2026-11-22
 decision-makers: Johnson Liang
 ---
 
@@ -18,7 +18,8 @@ it off (google/adk-python#4029). The user comes back to half a process and no an
 invocation shows the model "Invocation was aborted" as tool results, and it doesn't finish the
 work.
 
-A second window on the same session had no way to see a run going on elsewhere either.
+A second window on the same session had no way to see a run going on elsewhere either, nor
+a message sent from another window, short of reloading.
 
 Scope: ADK backend (`adk/main.py`, new `adk/cofacts_ai/run_bus.py`), BFF (new
 `/api/runs/:sessionId/:action`, `markSessionOpened`, `updateSessionTitle`), frontend chat
@@ -32,6 +33,7 @@ Design write-up with sequence diagrams for each scenario:
 - A run must survive its viewer: closing the tab only stops watching.
 - Any number of windows, on any device, can watch the same run live, and a window opened
   mid-run sees what was already typed.
+- A window shows what another window sends without a reload, as Claude on the web does.
 - dev.cofacts.ai and PR previews run on Cloud Run with up to 3 instances; a viewer's request
   can land on a different instance than the run.
 - No new infrastructure to operate. Production's GCE docker compose already runs a `redis`
@@ -40,9 +42,19 @@ Design write-up with sequence diagrams for each scenario:
 
 ## Considered Options
 
+Where the run's events live:
+
 - Run registry in the ADK process's memory (an asyncio fan-out per run)
 - Run registry in Redis Streams, shared with rumors-line-bot's Redis
 - Keep `/run_sse` and use ADK's resume to continue an interrupted invocation
+
+How an idle window learns that a new run started (added 2026-11-22, when the feed became
+persistent):
+
+- Wait on the same Redis Stream, one blocking read per ADK process for all watched sessions
+- A separate notification channel: Google Pub/Sub, Postgres `LISTEN/NOTIFY`, or Cloudflare
+  Queues
+- The BFF polls ADK, and connects to the run's stream when it sees a new one
 
 ## Decision Outcome
 
@@ -59,12 +71,22 @@ How it works:
   answers 202 with the invocation id once the user's message is stored. A second start on a
   busy session gets 409 and the client attaches to the run going on.
 - Every event, partial or not, is appended to a per-session Redis Stream in 50ms batches.
-  `GET .../runs/stream` replays the run from its first event (`XRANGE`, minus partials a later
-  complete event covers), then waits on `XREAD BLOCK` for the rest, and closes the connection
-  when the run ends. Heartbeats every 20s keep Cloudflare from cutting a quiet stream.
-- The client trusts the stream for the live invocation and the session history for everything
-  else, so the order the two arrive in doesn't matter. Static pages never poll: they check
-  once on load, when the tab becomes visible, and when sending.
+- Each open session page keeps one feed, `GET .../events?since=<event id>`, which never ends
+  by itself. It sends the stored events after `since` (`event: history`), then the latest run
+  from its first entry (`XRANGE`, minus partials a later complete event covers), then
+  `event: synced`, then each run live as it is written, each followed by `event: end` with its
+  outcome. The next run, started from any window, arrives on the same feed: it writes to the
+  same stream key, which the feed is already waiting on. Heartbeats every 20s keep Cloudflare
+  from cutting a quiet feed.
+- One `XREAD BLOCK` per ADK process waits on every watched session's stream at once (XREAD
+  takes many keys) and hands entries to the feeds (`StreamHub`), so Redis connections grow
+  with processes, not with open tabs.
+- At a run's end the feed also sends the run's stored events it didn't stream (a failed batch
+  write, entries trimmed by MAXLEN), so the window ends with the full record.
+- The BFF only forwards. The client keeps complete events by ADK event id (they can arrive
+  stored and again from a replay) in time order, and trusts the replay for the run in
+  progress. On a dropped connection (network change, Cloud Run's 900s request limit) it
+  reconnects with `since`; nothing polls.
 - Stop is a request (`POST .../runs/cancel`), not a disconnect. A cancel landing on a
   non-owner process sets a Redis flag the owner checks every second. Stopping uses ADK's
   `abort_signal`; the owner then stores the text already typed as a final event with
@@ -80,7 +102,8 @@ How it works:
 ### Consequences
 
 - Good, because closing the tab, a phone going to sleep or a network change no longer loses
-  the turn, and every window shows the same live output.
+  the turn, and every window shows the same live output, including messages sent from
+  another window.
 - Good, because Cloud Run doesn't need to be limited to one instance.
 - Bad, because a run left unwatched now runs to the end and costs model calls; the 15-minute
   limit bounds it. There is no per-user concurrency limit: a run exists only while the agent
@@ -89,7 +112,8 @@ How it works:
 - Bad, because Cloud Run needs CPU throttling off (instance-based billing) when Redis is set,
   since the run works after its HTTP response has ended.
 - Bad, because on Cloud Run (dev.cofacts.ai and PR previews, not production) a run can still
-  be cut short once every window is closed. With no open request, Cloud Run counts the
+  be cut short once every window is closed. An open feed is a request in progress, so this
+  only happens with no window open. With no open request, Cloud Run counts the
   instance as idle and may scale it in; it keeps idle instances only "up to 15 minutes" (see
   [instance autoscaling](https://cloud.google.com/run/docs/about-instance-autoscaling)).
   Scale-in sends SIGTERM, so the run is sealed as `interrupted` like on a redeploy, and the
@@ -103,10 +127,12 @@ How it works:
 
 - `adk/cofacts_ai/tests/test_run_bus.py` (fakeredis, or a real server via `TEST_REDIS_URL`):
   viewers from the start and mid-run, disconnects, 409, cancel on and off the owner,
-  owner death, heartbeat, deferred `opened`, shutdown, time limit, errors.
+  owner death, heartbeat, deferred `opened`, shutdown, time limit, errors; one feed across
+  runs started by different processes, `since`, catch-up at a run's end, feeds sharing the
+  hub.
 - `adk/cofacts_ai/tests/test_run_bus_adk.py`: the same against a real ADK `Runner` and
   `DatabaseSessionService`, including the stored end-of-run event after an abort.
-- `src/lib/__tests__/chatCache.runs.test.ts`: the client's merge and reattach rules.
+- `src/lib/__tests__/chatCache.runs.test.ts`: the client's merge, dedupe and reconnect rules.
 
 ## Pros and Cons of the Options
 
@@ -124,11 +150,37 @@ How it works:
 - Bad, because, tried in practice, the resumed model sees "Invocation was aborted" and does
   not finish the work; and it doesn't let a second window watch.
 
+### Wake idle feeds through the same Redis Stream (chosen)
+
+- Good, because every new message enters through our `POST .../runs`, which writes the run to
+  the session's stream key; a feed waiting on that key wakes for it, with nothing new to run.
+- Good, because the stream already holds what a late window must replay; any separate
+  notification channel would sit next to it, not replace it.
+- Neutral, because a newly watched key joins the hub's next read, up to 1s later; the feed has
+  already read up to that point itself, so it misses nothing.
+
+### A separate notification channel (Pub/Sub, Postgres `LISTEN/NOTIFY`, Cloudflare Queues)
+
+- Good, because a Postgres trigger on the events table could announce every write, even ones
+  that don't go through our routes.
+- Bad, because none of them replays what a window missed, so the partial text of a run in
+  progress, which only Redis holds, still needs Redis.
+- Bad, because `LISTEN` moves the per-listener connection problem to Postgres (Cloud SQL), and
+  `NOTIFY` payloads are capped at 8KB. Google Pub/Sub is built for a subscription per service,
+  not per browser tab, and Cloudflare Queues deliver each message to one consumer.
+
+### The BFF polls and connects to runs on demand
+
+- Good, because ADK would hold no connection while a session is idle.
+- Bad, because polling adds latency or load, and the BFF would need to know Redis's layout or
+  ADK's run state. The hub already makes idle feeds cheap.
+
 ## More Information
 
 - Not yet measured: concurrency limits of the event loop, SQLAlchemy's default pool, and
-  Vertex quotas under many simultaneous runs; Redis Cloud free-plan memory and connection
-  limits (each viewer holds one connection while waiting on `XREAD BLOCK`). If the free plan
-  is too small, a `redis:alpine` sidecar with `maxScale 1` works with no code change.
+  Vertex quotas under many simultaneous runs; Redis Cloud free-plan memory (30 MB, shared
+  with the staging LINE bot) under load. Connections are one blocking read per ADK process
+  plus the pool's short-lived ones. If the free plan is too small, a `redis:alpine` sidecar
+  with `maxScale 1` works with no code change.
 - Production (GCE) needs `REDIS_URL=redis://redis:6379` in the `adk` service's env file in
   rumors-deploy.

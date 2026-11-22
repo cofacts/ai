@@ -155,17 +155,18 @@ Design record: the kb doc
 
 A turn keeps running after the browser leaves. The browser starts it with
 `POST /api/runs/:sessionId/start`; ADK runs it in a task no request owns (`adk/cofacts_ai/run_bus.py`)
-and appends every event to a per-session Redis Stream. Any window can watch with
-`GET /api/runs/:sessionId/stream`: it replays the run from its start, then streams live, and
-closes when the run ends. Stop is `POST .../cancel`. A run stopped by the user, a redeploy, the
-15-minute limit or an error stores the text already typed with
-`customMetadata.cofacts_run_end`. Pages never poll; they check `.../status` on load, when the tab
-becomes visible and when sending. Session-state writes wait while a run holds the session
+and appends every event to a per-session Redis Stream. Each open session page keeps one feed,
+`GET /api/runs/:sessionId/events?since=<event id>`, which never ends by itself: the stored events,
+then every run as it happens, from this window or any other, so a message sent in one window
+shows up in the others without a reload. One blocking Redis read per ADK process serves all
+open feeds. Stop is `POST .../cancel`. A run stopped by the user, a redeploy, the 15-minute
+limit or an error stores the text already typed with `customMetadata.cofacts_run_end`. Nothing
+polls. Session-state writes wait while a run holds the session
 (`POST /apps/.../sessions/:id/opened`), since they would kill it. Redis is the rumors-line-bot
 container on GCE and Redis Cloud on Cloud Run (`REDIS_URL`); without it, the frontend falls back to
 `/api/run-sse`, where closing the tab stops the run. On Cloud Run (dev.cofacts.ai, PR previews)
 an instance with no open request may be scaled in, which interrupts its runs once every window is
-closed; production on GCE has no such limit.
+closed (an open feed counts as a request); production on GCE has no such limit.
 → decision: [background runs on Redis Streams](decisions/20261114-background-runs-redis-streams.md).
 
 ## Data & sessions

@@ -11,18 +11,18 @@ const ADK_BASE_URL = process.env.ADK_URL || 'http://localhost:8000'
 // Background runs (adk/cofacts_ai/run_bus.py). The run lives on in ADK after
 // the browser goes away; these routes only start it, watch it and stop it:
 //
+//   GET  /api/runs/:sessionId/events?since=<event id>
+//        -> SSE that stays open: stored events after `since`, then every
+//           run as it happens (see RunBus.open_events in adk/)
 //   POST /api/runs/:sessionId/start   {newMessage} -> 202 | 409 {invocationId}
-//   GET  /api/runs/:sessionId/status  -> {running, invocationId}
-//   GET  /api/runs/:sessionId/stream  -> SSE, closed by ADK when the run ends
 //   POST /api/runs/:sessionId/cancel  -> 202 | 404
 //
 // Each forwards to ADK with the signed-in user's id filled in, so a session
 // id alone can't reach anyone else's run. ADK answers 503 when it has no
 // Redis; the client then falls back to /api/run-sse.
 const ACTIONS = {
+  events: { method: 'GET', path: '/events' },
   start: { method: 'POST', path: '/runs' },
-  status: { method: 'GET', path: '/runs/status' },
-  stream: { method: 'GET', path: '/runs/stream' },
   cancel: { method: 'POST', path: '/runs/cancel' },
 } as const
 
@@ -61,7 +61,8 @@ async function forward(
   const url =
     `${ADK_BASE_URL}/apps/${ADK_APP_NAME}` +
     `/users/${encodeURIComponent(userId)}` +
-    `/sessions/${encodeURIComponent(params.sessionId)}${action.path}`
+    `/sessions/${encodeURIComponent(params.sessionId)}${action.path}` +
+    since(request)
 
   const upstream = await fetch(url, {
     method,
@@ -70,12 +71,12 @@ async function forward(
       ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
     },
     body: params.action === 'start' ? await request.text() : undefined,
-    // Only the stream is tied to the browser: closing the tab stops
+    // Only the feed is tied to the browser: closing the tab stops
     // watching. Nothing here can stop the run itself.
-    signal: params.action === 'stream' ? request.signal : undefined,
+    signal: params.action === 'events' ? request.signal : undefined,
   })
 
-  if (params.action === 'stream' && upstream.ok && upstream.body) {
+  if (params.action === 'events' && upstream.ok && upstream.body) {
     return new Response(withHeartbeat(upstream.body, HEARTBEAT_INTERVAL_MS), {
       status: 200,
       headers: {
@@ -92,6 +93,11 @@ async function forward(
     status: upstream.status,
     headers: { 'Content-Type': 'application/json' },
   })
+}
+
+function since(request: Request) {
+  const value = new URL(request.url).searchParams.get('since')
+  return value ? `?since=${encodeURIComponent(value)}` : ''
 }
 
 export const Route = createFileRoute('/api/runs/$sessionId/$action')({

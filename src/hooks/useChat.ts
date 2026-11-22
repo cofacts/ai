@@ -4,11 +4,10 @@ import type { ChatSessionState } from '@/lib/chatCache'
 import {
   INITIAL_CHAT_STATE,
   chatCacheKey,
-  loadChatState,
+  connectSessionEvents,
   retryInterruptedTurn,
   sendChatMessage,
   stopRun,
-  syncChatSession,
 } from '@/lib/chatCache'
 
 interface UseChatOptions {
@@ -23,34 +22,24 @@ export function useChat({ sessionId }: UseChatOptions) {
   const queryKey = chatCacheKey(sessionId)
 
   // Subscribe to the global store via TanStack Query
-  const {
-    data = INITIAL_CHAT_STATE,
-    error: queryError,
-    isSuccess,
-  } = useQuery<ChatSessionState>({
-    queryKey,
-    // When cache is cold (direct navigation), fetch from ADK.
-    // If cache is populated (LandingPage -> Session), use it without refetch (staleTime: Infinity).
-    queryFn: () => loadChatState(sessionId),
-    staleTime: Infinity,
-    gcTime: Infinity,
-    refetchOnWindowFocus: false,
-    retry: false,
-  })
+  // The cache is filled by the session's live feed (below), or already by
+  // the landing page's send; the query only subscribes to it.
+  const { data = INITIAL_CHAT_STATE, error: queryError } =
+    useQuery<ChatSessionState>({
+      queryKey,
+      queryFn: () => INITIAL_CHAT_STATE,
+      staleTime: Infinity,
+      gcTime: Infinity,
+      refetchOnWindowFocus: false,
+      retry: false,
+    })
 
-  // A run may be going without this tab watching it: started in another
-  // window, or before this tab was closed and reopened. Look once when the
-  // session is shown and whenever the tab becomes visible again; never poll.
+  // One live feed per session while anything shows it: the stored events,
+  // then every run as it happens, including ones started in other windows.
   useEffect(() => {
-    if (!sessionId || !isSuccess) return
-    void syncChatSession(queryClient, sessionId)
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      void syncChatSession(queryClient, sessionId, { checkHistory: true })
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [queryClient, sessionId, isSuccess])
+    if (!sessionId) return
+    return connectSessionEvents(queryClient, sessionId)
+  }, [queryClient, sessionId])
 
   // Combine query error with state error if needed
   const error =
@@ -76,8 +65,8 @@ export function useChat({ sessionId }: UseChatOptions) {
    * Stop generation for this session.
    */
   const stopGeneration = useCallback(() => {
-    void stopRun(queryClient, sessionId)
-  }, [queryClient, sessionId])
+    void stopRun(sessionId)
+  }, [sessionId])
 
   return {
     messages: data.messages,

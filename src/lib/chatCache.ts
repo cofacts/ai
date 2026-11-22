@@ -1,8 +1,7 @@
 import { handleAuthExpired } from './authExpired'
 import { UPLOAD_FILENAME_PREFIX } from './adk'
 import { isRunsDisabled } from './adkRuns'
-import { getSession, listSessions } from './chatSessions.functions'
-import type { SessionListItem } from './chatSessions.functions'
+import { getSession } from './chatSessions.functions'
 import type { QueryClient } from '@tanstack/react-query'
 import type {
   AdkEvent,
@@ -35,8 +34,6 @@ export interface ChatSessionState {
   notice: string | null
   /** The last turn ended without an answer and was not stopped by the user. */
   interrupted: boolean
-  /** session.state.lastEventTime when the history was loaded. */
-  lastEventTime?: number
 }
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
@@ -60,17 +57,13 @@ export function chatCacheKey(sessionId?: string) {
   return sessionId ? (['chat', sessionId] as const) : (['chat'] as const)
 }
 
-/**
- * Open connections per session: a watched background run, or a legacy
- * /api/run-sse stream. One at a time; also tells whether a session is
- * already being watched.
- */
+/** Legacy /api/run-sse streams per session (background runs off). */
 export const abortControllers = new Map<string, AbortController>()
 const legacyStreams = new Set<string>()
 /**
- * Sessions with a send in flight: between the click and the run's stream
- * being attached (reading attachments, the start request). Nothing else may
- * decide the session is idle meanwhile.
+ * Sessions with a send in flight: between the click and the start request's
+ * answer (reading attachments, the request). The feed must not decide the
+ * session is idle meanwhile.
  */
 const pendingSends = new Set<string>()
 /** Stop pressed during a send in flight; carried out once the run starts. */
@@ -116,12 +109,16 @@ export function fileToInlineDataPart(file: File): Promise<AdkPart> {
   })
 }
 
-/** Calls onEvent for each `data:` frame of an SSE response body. */
+export interface SseFrame {
+  /** The `event:` field; "message" when there is none. */
+  type: string
+  data: string
+}
+
+/** Calls onFrame for each frame of an SSE response body (comments skipped). */
 async function readSse(
   body: ReadableStream<Uint8Array>,
-  onEvent: (event: AdkEvent) => void,
-  /** `event: end` frame from /api/runs/:id/stream, with the run's outcome. */
-  onEnd?: (outcome: string) => void,
+  onFrame: (frame: SseFrame) => void,
 ) {
   const reader = body.getReader()
   const decoder = new TextDecoder()
@@ -137,23 +134,13 @@ async function readSse(
 
       for (const part of parts) {
         let data = ''
-        let type = ''
+        let type = 'message'
         for (const line of part.split('\n')) {
           if (line.startsWith('data: ')) data += line.slice(6)
           else if (line.startsWith('event: ')) type = line.slice(7)
         }
-        if (type === 'end') {
-          onEnd?.(data)
-          continue
-        }
-        if (!data) continue
-        let event: AdkEvent
-        try {
-          event = JSON.parse(data) as AdkEvent
-        } catch {
-          continue // skip unparseable events
-        }
-        onEvent(event)
+        if (!data) continue // heartbeat comments
+        onFrame({ type, data })
       }
     }
   } finally {
@@ -187,7 +174,6 @@ export function rebuildChatState(
     isStreaming: prev.isStreaming,
     error: prev.error,
     notice: prev.notice,
-    lastEventTime: prev.lastEventTime,
   }
   const liveId = live?.invocationId
   for (const event of historyEvents) {
@@ -382,13 +368,16 @@ async function sendParts(
   }
 
   if (response.status === 409) {
-    // Another window's run holds the session: watch it instead, and hand
-    // the user's draft back.
+    // Another window's run holds the session; the feed shows it. Hand the
+    // user's draft back.
     setChat(queryClient, sessionId, (prev) => ({
-      ...rebuildChatState(prev, prev.historyEvents, null),
+      ...rebuildChatState(
+        prev,
+        prev.historyEvents,
+        prev.live?.events.some((e) => !e.invocationId) ? null : prev.live,
+      ),
       notice: BUSY_NOTICE,
     }))
-    void watchRun(queryClient, sessionId)
     return false
   }
 
@@ -406,11 +395,12 @@ async function sendParts(
   }
   setChat(queryClient, sessionId, (prev) => ({
     ...prev,
-    live: prev.live ? { ...prev.live, invocationId } : prev.live,
+    live:
+      prev.live && !prev.live.invocationId
+        ? { ...prev.live, invocationId }
+        : prev.live,
   }))
-  // Refetch the history too: another window may have added turns since this
-  // one last loaded it.
-  void watchRun(queryClient, sessionId, { refreshHistory: true })
+  // The run's events, starting with the stored message, come on the feed.
   if (pendingStops.has(sessionId)) void requestCancel(sessionId)
   return true
 }
@@ -425,158 +415,208 @@ function failStream(queryClient: QueryClient, sessionId: string, err: unknown) {
   }))
 }
 
-async function fetchRunStatus(
-  sessionId: string,
-): Promise<{ running: boolean; invocationId: string | null }> {
-  const res = await fetch(`/api/runs/${encodeURIComponent(sessionId)}/status`)
-  if (res.status === 401) handleAuthExpired()
-  if (!res.ok) return { running: false, invocationId: null }
-  return res.json()
-}
-
-/** Loads the session history and the run status together. */
-export async function loadChatState(
-  sessionId: string,
-): Promise<ChatSessionState> {
-  const [session, status] = await Promise.all([
-    getSession({ data: sessionId }),
-    fetchRunStatus(sessionId).catch(() => ({
-      running: false,
-      invocationId: null,
-    })),
-  ])
-  const state = convertAdkSessionToChatState(session)
-  // A run is going: show it as such until watchRun() attaches, rather than
-  // flashing "interrupted" for its unanswered question.
-  return status.running
-    ? { ...state, isStreaming: true, interrupted: false }
-    : state
-}
-
-const MAX_REATTACHES = 3
+/**
+ * Open /events feeds, counted per session: several components can show the
+ * same session, and the feed closes when the last one goes away.
+ */
+const feeds = new Map<string, { refs: number; controller: AbortController }>()
 
 /**
- * Watches the session's background run until it ends, applying its events
- * to the cache. Safe to call when already watching (does nothing).
+ * Keeps the session's live feed open while `close` hasn't been called.
  *
- * The server replays the run from its first event, then streams the rest,
- * and closes the connection when the run ends. A connection can also drop
- * mid-run (network change, proxy); then the status decides whether to
- * reattach or to reload the history.
+ * The feed (`GET /api/runs/:id/events`) sends the stored events, then every
+ * run as it happens, from this window or any other, and never ends by
+ * itself. When the connection drops it reconnects with `since`, the last
+ * stored event it has, so only what's new comes again.
  */
-export async function watchRun(
+export function connectSessionEvents(
   queryClient: QueryClient,
   sessionId: string,
-  { refreshHistory = false }: { refreshHistory?: boolean } = {},
-) {
-  if (abortControllers.has(sessionId)) return
-  const controller = new AbortController()
-  abortControllers.set(sessionId, controller)
-  const isCurrent = () => abortControllers.get(sessionId) === controller
-
-  setChat(queryClient, sessionId, (prev) => ({
-    ...prev,
-    isStreaming: true,
-    error: null,
-    interrupted: false,
-  }))
-
-  if (refreshHistory) {
-    getSession({ data: sessionId })
-      .then((session) => {
-        if (!isCurrent()) return
-        setChat(queryClient, sessionId, (prev) =>
-          rebuildChatState(prev, completeEvents(session.events), prev.live),
-        )
-      })
-      .catch((err) => console.error('History refresh failed:', err))
+): () => void {
+  const existing = feeds.get(sessionId)
+  if (existing) {
+    existing.refs++
+  } else {
+    const controller = new AbortController()
+    feeds.set(sessionId, { refs: 1, controller })
+    void runFeed(queryClient, sessionId, controller.signal)
   }
+  let closed = false
+  return () => {
+    if (closed) return
+    closed = true
+    const feed = feeds.get(sessionId)
+    if (!feed) return
+    if (--feed.refs > 0) return
+    feeds.delete(sessionId)
+    feed.controller.abort()
+  }
+}
 
-  let reattaches = 0
-  try {
-    for (;;) {
-      // Written from the readSse callback, so not plain `let`s that
-      // TypeScript would narrow to their initial values after the await.
-      const seen = { first: true, last: null as AdkEvent | null, end: '' }
-      try {
-        const response = await fetch(
-          `/api/runs/${encodeURIComponent(sessionId)}/stream`,
-          { signal: controller.signal },
-        )
-        if (response.status === 401) handleAuthExpired()
-        if (!response.ok || !response.body) {
-          throw new Error(`Stream request failed: HTTP ${response.status}`)
-        }
-        await readSse(
-          response.body,
-          (event) => {
-            const first = seen.first
-            seen.first = false
-            seen.last = event
-            setChat(queryClient, sessionId, (prev) => {
-              if (first) {
-                // The replay starts over from the run's first event.
-                return rebuildChatState(prev, prev.historyEvents, {
-                  invocationId: event.invocationId,
-                  events: [event],
-                })
-              }
-              return {
-                ...applyEventToState(prev, event),
-                live: {
-                  invocationId: event.invocationId,
-                  events: [...(prev.live?.events ?? []), event],
-                },
-              }
-            })
-          },
-          (outcome) => {
-            seen.end = outcome
-          },
-        )
-      } catch (err) {
-        if (controller.signal.aborted) return
-        console.warn(`Run stream for ${sessionId} dropped:`, err)
-      }
-      if (!isCurrent()) return
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-      if (seen.end) {
-        // The server says the run is over. Its stored events are the
-        // record: they include anything the stream missed (a failed batch
-        // write, entries trimmed by MAXLEN).
-        await reloadHistory(queryClient, sessionId)
+async function runFeed(
+  queryClient: QueryClient,
+  sessionId: string,
+  signal: AbortSignal,
+) {
+  // A function, not `signal.aborted` inline: it changes while awaiting, and
+  // TypeScript would narrow the property to its value at the loop check.
+  const aborted = () => signal.aborted
+  let failures = 0
+  while (!aborted()) {
+    const state = queryClient.getQueryData<ChatSessionState>(
+      chatCacheKey(sessionId),
+    )
+    const since = state?.historyEvents.at(-1)?.id
+    // Per connection: the first run frame starts the replay of the run in
+    // progress, which replaces what this window had for it.
+    const conn = { fresh: true }
+    try {
+      const response = await fetch(
+        `/api/runs/${encodeURIComponent(sessionId)}/events` +
+          (since ? `?since=${encodeURIComponent(since)}` : ''),
+        { signal },
+      )
+      if (response.status === 401) {
+        handleAuthExpired()
         return
       }
-      const last = seen.last
-      // Closed without an end frame: the owner died, or the connection
-      // dropped. The status decides.
-      const status = await fetchRunStatus(sessionId).catch(() => null)
-      if (!isCurrent()) return
-      if (status?.running && reattaches < MAX_REATTACHES) {
-        reattaches = last ? 0 : reattaches + 1
-        if (!last) await new Promise((r) => setTimeout(r, 1000 * reattaches))
-        continue
+      if (await isRunsDisabled(response)) {
+        // No Redis: no live feed. Load the history once; sends use the old
+        // /api/run-sse stream, tied to this tab.
+        await loadHistoryOnce(queryClient, sessionId)
+        return
       }
-      await reloadHistory(queryClient, sessionId)
+      if (response.status === 404) {
+        failStream(queryClient, sessionId, new Error('Session not found'))
+        return
+      }
+      if (!response.ok || !response.body) {
+        throw new Error(`Feed request failed: HTTP ${response.status}`)
+      }
+      await readSse(response.body, (frame) =>
+        applyFrame(queryClient, sessionId, frame, conn),
+      )
+      failures = 0 // closed by the server or a proxy (e.g. Cloud Run's timeout)
+    } catch (err) {
+      if (aborted()) return
+      failures++
+      console.warn(`Feed for ${sessionId} dropped:`, err)
+    }
+    if (aborted()) return
+    await sleep(failures ? Math.min(1000 * 2 ** failures, 15_000) : 500)
+  }
+}
+
+function applyFrame(
+  queryClient: QueryClient,
+  sessionId: string,
+  frame: SseFrame,
+  conn: { fresh: boolean },
+) {
+  switch (frame.type) {
+    case 'history': {
+      const event = parseEvent(frame.data)
+      if (!event) return
+      setChat(queryClient, sessionId, (prev) =>
+        rebuildChatState(prev, withEvent(prev.historyEvents, event), prev.live),
+      )
       return
     }
-  } finally {
-    if (isCurrent()) {
-      abortControllers.delete(sessionId)
+    case 'synced': {
+      const { running } = JSON.parse(frame.data) as { running: boolean }
+      if (running) {
+        setChat(queryClient, sessionId, (prev) => ({
+          ...prev,
+          isStreaming: true,
+          interrupted: false,
+        }))
+        return
+      }
+      // Nothing running: drop what this window still had as live (a run that
+      // ended while it was disconnected), unless its own send is on the way.
+      if (pendingSends.has(sessionId)) return
       setChat(queryClient, sessionId, (prev) => ({
-        ...prev,
+        ...rebuildChatState(prev, prev.historyEvents, null),
         isStreaming: false,
-        messages: prev.messages.map((m) =>
-          m.isStreaming ? { ...m, isStreaming: false } : m,
-        ),
+      }))
+      return
+    }
+    case 'end': {
+      setChat(queryClient, sessionId, (prev) => ({
+        ...rebuildChatState(prev, prev.historyEvents, null),
+        // This window may already be sending the next message.
+        isStreaming: pendingSends.has(sessionId),
       }))
       // Refresh session list so lastEventTime (written by agent callback) is picked up immediately.
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      return
+    }
+    case 'message': {
+      const event = parseEvent(frame.data)
+      if (!event) return
+      const fresh = conn.fresh
+      conn.fresh = false
+      setChat(queryClient, sessionId, (prev) => {
+        const historyEvents = event.partial
+          ? prev.historyEvents
+          : withEvent(prev.historyEvents, event)
+        const live = prev.live
+        const startsRun =
+          fresh ||
+          !live ||
+          live.invocationId !== event.invocationId ||
+          // The optimistic message of this window's own send.
+          live.events.some((e) => !e.invocationId)
+        if (startsRun) {
+          return {
+            ...rebuildChatState(prev, historyEvents, {
+              invocationId: event.invocationId,
+              events: [event],
+            }),
+            isStreaming: true,
+            interrupted: false,
+          }
+        }
+        return {
+          ...applyEventToState(prev, event),
+          historyEvents,
+          isStreaming: true,
+          live: { ...live, events: [...live.events, event] },
+        }
+      })
+      return
     }
   }
 }
 
-async function reloadHistory(queryClient: QueryClient, sessionId: string) {
+function parseEvent(data: string): AdkEvent | null {
+  try {
+    return JSON.parse(data) as AdkEvent
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Adds a complete event to the history once (by its id), in time order.
+ * The same event can arrive stored and again from a run's replay, and a
+ * run's catch-up after its end can bring an event from its middle.
+ */
+function withEvent(history: Array<AdkEvent>, event: AdkEvent) {
+  if (event.id && history.some((e) => e.id === event.id)) return history
+  const next = [...history, event]
+  if (
+    history.length &&
+    (event.timestamp ?? 0) < (history.at(-1)?.timestamp ?? 0)
+  ) {
+    next.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0))
+  }
+  return next
+}
+
+async function loadHistoryOnce(queryClient: QueryClient, sessionId: string) {
   try {
     const session = await getSession({ data: sessionId })
     setChat(queryClient, sessionId, (prev) => ({
@@ -588,58 +628,8 @@ async function reloadHistory(queryClient: QueryClient, sessionId: string) {
   }
 }
 
-/**
- * Called when the page loads or becomes visible again. Attaches to a run
- * going on (maybe started in another window), or reloads the history when
- * the session changed elsewhere since it was loaded. Never polls.
- */
-export async function syncChatSession(
-  queryClient: QueryClient,
-  sessionId: string,
-  { checkHistory = false }: { checkHistory?: boolean } = {},
-) {
-  // A send in flight or a stream already open owns the state; the status
-  // could predate the run's lock. Check again after the request returns.
-  const busy = () =>
-    abortControllers.has(sessionId) || pendingSends.has(sessionId)
-  if (busy()) return
-  const status = await fetchRunStatus(sessionId)
-  if (busy()) return
-  if (status.running) {
-    void watchRun(queryClient, sessionId, { refreshHistory: checkHistory })
-    return
-  }
-  const state = queryClient.getQueryData<ChatSessionState>(
-    chatCacheKey(sessionId),
-  )
-  if (state?.isStreaming) {
-    // loadChatState saw a run that has ended since.
-    await reloadHistory(queryClient, sessionId)
-    return
-  }
-  if (!checkHistory) return
-  const sessions = await queryClient.fetchQuery<Array<SessionListItem>>({
-    queryKey: ['sessions'],
-    queryFn: listSessions,
-    staleTime: 0,
-  })
-  const item = sessions.find((s) => s.id === sessionId)
-  if (item?.lastEventTime === undefined) return
-  if (state?.lastEventTime === undefined) {
-    // Watched a run to the end here; just note where the session is now.
-    setChat(queryClient, sessionId, (prev) => ({
-      ...prev,
-      lastEventTime: item.lastEventTime,
-    }))
-    return
-  }
-  if (item.lastEventTime > state.lastEventTime) {
-    await reloadHistory(queryClient, sessionId)
-  }
-}
-
 /** The stop button: asks the server to stop the run. */
-export async function stopRun(queryClient: QueryClient, sessionId: string) {
+export async function stopRun(sessionId: string) {
   if (legacyStreams.has(sessionId)) {
     abortControllers.get(sessionId)?.abort()
     return
@@ -649,12 +639,9 @@ export async function stopRun(queryClient: QueryClient, sessionId: string) {
     pendingStops.add(sessionId)
     return
   }
-  const res = await requestCancel(sessionId)
-  // On success the run's viewers get the stopped message and the stream
-  // closes. 404: it had already ended.
-  if (res.status === 404 && !abortControllers.has(sessionId)) {
-    await reloadHistory(queryClient, sessionId)
-  }
+  // The feed then shows the stopped message and the run's end. 404: it had
+  // already ended.
+  await requestCancel(sessionId)
 }
 
 function requestCancel(sessionId: string) {
@@ -711,15 +698,17 @@ export async function startChatStream({
       throw new Error(`ADK request failed: HTTP ${response.status}`)
     }
 
-    await readSse(response.body!, (event) =>
+    await readSse(response.body!, (frame) => {
+      const event = parseEvent(frame.data)
+      if (!event) return
       setChat(queryClient, sessionId, (prev) => ({
         ...applyEventToState(prev, event),
         historyEvents: event.partial
           ? prev.historyEvents
           : [...prev.historyEvents, event],
         live: null,
-      })),
-    )
+      }))
+    })
   } catch (err) {
     if (controller.signal.aborted) {
       return
@@ -941,14 +930,9 @@ export function applyEventToState(
 export function convertAdkSessionToChatState(
   session: AdkSession,
 ): ChatSessionState {
-  const lastEventTime = session.state?.['lastEventTime']
-  return {
-    ...rebuildChatState(
-      INITIAL_CHAT_STATE,
-      completeEvents(session.events),
-      null,
-    ),
-    lastEventTime:
-      typeof lastEventTime === 'number' ? lastEventTime : undefined,
-  }
+  return rebuildChatState(
+    INITIAL_CHAT_STATE,
+    completeEvents(session.events),
+    null,
+  )
 }
