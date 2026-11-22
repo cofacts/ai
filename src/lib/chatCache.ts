@@ -115,10 +115,14 @@ export interface SseFrame {
   data: string
 }
 
-/** Calls onFrame for each frame of an SSE response body (comments skipped). */
+/**
+ * Calls onFrame for each frame of an SSE response body (comments skipped),
+ * and onChunkEnd after the frames of each chunk read.
+ */
 async function readSse(
   body: ReadableStream<Uint8Array>,
   onFrame: (frame: SseFrame) => void,
+  onChunkEnd?: () => void,
 ) {
   const reader = body.getReader()
   const decoder = new TextDecoder()
@@ -142,6 +146,7 @@ async function readSse(
         if (!data) continue // heartbeat comments
         onFrame({ type, data })
       }
+      onChunkEnd?.()
     }
   } finally {
     reader.cancel()
@@ -269,7 +274,13 @@ async function buildAndSend(
   const parts: Array<AdkPart> = []
   if (text) parts.push({ text })
   if (files.length > 0) {
-    parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
+    try {
+      parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
+    } catch (err) {
+      // Nothing was sent: show the error and give the draft back.
+      failStream(queryClient, sessionId, err)
+      return false
+    }
   }
   return sendParts(queryClient, sessionId, parts)
 }
@@ -370,14 +381,18 @@ async function sendParts(
   if (response.status === 409) {
     // Another window's run holds the session; the feed shows it. Hand the
     // user's draft back.
-    setChat(queryClient, sessionId, (prev) => ({
-      ...rebuildChatState(
-        prev,
-        prev.historyEvents,
-        prev.live?.events.some((e) => !e.invocationId) ? null : prev.live,
-      ),
-      notice: BUSY_NOTICE,
-    }))
+    setChat(queryClient, sessionId, (prev) => {
+      const live = prev.live?.events.some((e) => !e.invocationId)
+        ? null
+        : prev.live
+      return {
+        ...rebuildChatState(prev, prev.historyEvents, live),
+        // The other run may have ended while this request was out; then
+        // its `end` has already come and gone on the feed.
+        isStreaming: live !== null,
+        notice: BUSY_NOTICE,
+      }
+    })
     return false
   }
 
@@ -495,8 +510,33 @@ async function runFeed(
       if (!response.ok || !response.body) {
         throw new Error(`Feed request failed: HTTP ${response.status}`)
       }
-      await readSse(response.body, (frame) =>
-        applyFrame(queryClient, sessionId, frame, conn),
+      // Stored events come in bursts (the whole history when a feed
+      // opens). Rebuilding the screen once per burst, not once per event,
+      // keeps opening a long session linear.
+      const stored: Array<AdkEvent> = []
+      const flush = () => {
+        if (!stored.length) return
+        const batch = stored.splice(0)
+        setChat(queryClient, sessionId, (prev) =>
+          rebuildChatState(
+            prev,
+            withEvents(prev.historyEvents, batch),
+            prev.live,
+          ),
+        )
+      }
+      await readSse(
+        response.body,
+        (frame) => {
+          if (frame.type === 'history') {
+            const event = parseEvent(frame.data)
+            if (event) stored.push(event)
+            return
+          }
+          flush()
+          applyFrame(queryClient, sessionId, frame, conn)
+        },
+        flush,
       )
       failures = 0 // closed by the server or a proxy (e.g. Cloud Run's timeout)
     } catch (err) {
@@ -516,14 +556,6 @@ function applyFrame(
   conn: { fresh: boolean },
 ) {
   switch (frame.type) {
-    case 'history': {
-      const event = parseEvent(frame.data)
-      if (!event) return
-      setChat(queryClient, sessionId, (prev) =>
-        rebuildChatState(prev, withEvent(prev.historyEvents, event), prev.live),
-      )
-      return
-    }
     case 'synced': {
       const { running } = JSON.parse(frame.data) as { running: boolean }
       if (running) {
@@ -600,23 +632,33 @@ function parseEvent(data: string): AdkEvent | null {
 }
 
 /**
- * Adds a complete event to the history once (by its id), in time order.
+ * Adds complete events to the history once each (by id), in time order.
  * The same event can arrive stored and again from a run's replay, and a
  * run's catch-up after its end can bring an event from its middle.
  */
+function withEvents(history: Array<AdkEvent>, events: Array<AdkEvent>) {
+  const ids = new Set(history.map((e) => e.id))
+  const added = events.filter((e) => {
+    if (e.id && ids.has(e.id)) return false
+    ids.add(e.id)
+    return true
+  })
+  if (!added.length) return history
+  const next = [...history, ...added]
+  const time = (e: AdkEvent | undefined) => e?.timestamp ?? 0
+  const sorted = next.every((e, i) => i === 0 || time(next[i - 1]) <= time(e))
+  return sorted ? next : next.sort((a, b) => time(a) - time(b))
+}
+
 function withEvent(history: Array<AdkEvent>, event: AdkEvent) {
-  if (event.id && history.some((e) => e.id === event.id)) return history
-  const next = [...history, event]
-  if (
-    history.length &&
-    (event.timestamp ?? 0) < (history.at(-1)?.timestamp ?? 0)
-  ) {
-    next.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0))
-  }
-  return next
+  return withEvents(history, [event])
 }
 
 async function loadHistoryOnce(queryClient: QueryClient, sessionId: string) {
+  // A send from this tab (e.g. the landing page's, before navigating here) is
+  // already on its way over /api/run-sse; the cache holds it, and replacing
+  // the state would drop it and mark the session idle mid-run.
+  if (pendingSends.has(sessionId) || legacyStreams.has(sessionId)) return
   try {
     const session = await getSession({ data: sessionId })
     setChat(queryClient, sessionId, (prev) => ({

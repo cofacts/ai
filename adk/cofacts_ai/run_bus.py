@@ -56,7 +56,10 @@ from google.adk.events._internal_metadata import public_event
 from google.adk.events.event import Event
 from google.adk.events.event_actions import EventActions
 from google.adk.runners import Runner
-from google.adk.sessions.base_session_service import BaseSessionService
+from google.adk.sessions.base_session_service import (
+    BaseSessionService,
+    GetSessionConfig,
+)
 from google.genai import types
 from redis.asyncio import Redis
 
@@ -362,6 +365,7 @@ class _Feed:
         self.sent = sent  # ids of complete events already sent
         self.run_id: str | None = None  # the run in progress, as far as seen
         self.invocation_id: str | None = None
+        self.started_at: float | None = None  # its first complete event's time
 
     async def take(self, e: _Entry) -> AsyncIterator[bytes]:
         if e.type == "done":
@@ -370,13 +374,22 @@ class _Feed:
                     yield chunk
             return
         if e.run_id != self.run_id:
-            self.run_id, self.invocation_id = e.run_id, None
+            if self.run_id is not None and (self.invocation_id or self.started_at):
+                # The previous run's end never reached this feed (its done
+                # marker was lost, or the next start() cleared the stream).
+                async for chunk in self.finish("interrupted"):
+                    yield chunk
+            self.run_id, self.invocation_id, self.started_at = e.run_id, None, None
         if not e.partial:
             try:
                 meta = json.loads(e.data)
             except ValueError:
                 meta = {}
             self.invocation_id = self.invocation_id or meta.get("invocationId")
+            if self.started_at is None and isinstance(
+                meta.get("timestamp"), (int, float)
+            ):
+                self.started_at = meta["timestamp"]
             if meta.get("id"):
                 self.sent.add(meta["id"])
         yield sse_frame(e.data)
@@ -389,10 +402,15 @@ class _Feed:
         """
         if self.invocation_id:
             try:
+                # Only the run's own events, not the whole session: every
+                # open feed does this at every run's end.
                 session = await self.bus.session_service.get_session(
                     app_name=self.bus.app_name,
                     user_id=self.user_id,
                     session_id=self.session_id,
+                    config=GetSessionConfig(after_timestamp=self.started_at)
+                    if self.started_at
+                    else None,
                 )
             except Exception:
                 logger.exception("Catching up run %s failed", self.run_id)
@@ -407,7 +425,7 @@ class _Feed:
                 self.sent.add(ev.id)
             if missed:
                 yield b"".join(missed)
-        self.run_id, self.invocation_id = None, None
+        self.run_id, self.invocation_id, self.started_at = None, None, None
         yield end_frame(outcome)
 
 
@@ -426,7 +444,8 @@ class StreamHub:
     instead one loop per process blocks on all watched keys at once (XREAD
     takes many) and hands entries to the feeds. A newly watched key joins
     the next XREAD, within HUB_BLOCK_MS; the feed has already read up to its
-    own starting point, so nothing is missed.
+    own starting point. If the hub is already past that point on the key, the
+    feed reads the gap itself (see subscribe), so nothing is missed.
     """
 
     def __init__(self, redis: Redis) -> None:
@@ -435,15 +454,24 @@ class StreamHub:
         self._cursors: dict[str, str] = {}
         self._task: asyncio.Task[None] | None = None
 
-    def subscribe(self, key: str, last: str) -> _Watcher:
+    def subscribe(self, key: str, last: str) -> tuple[_Watcher, str | None]:
+        """Starts handing the key's entries after ``last`` to a new watcher.
+
+        Returns the watcher and, when the hub is already past ``last`` on this
+        key, the id it has reached: the caller reads the gap up to it itself
+        (an XREAD in flight can't be rewound to serve it).
+        """
         w = _Watcher(key, last)
         self._watchers.setdefault(key, set()).add(w)
         cur = self._cursors.get(key)
-        if cur is None or _stream_id(last) < _stream_id(cur):
+        gap_to = None
+        if cur is None:
             self._cursors[key] = last
+        elif _stream_id(cur) > _stream_id(last):
+            gap_to = cur
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._loop())
-        return w
+        return w, gap_to
 
     def unsubscribe(self, w: _Watcher) -> None:
         ws = self._watchers.get(w.key)
@@ -575,8 +603,14 @@ class RunBus:
             await self.redis.eval(_RELEASE_LOCK, 1, key, lock_value)  # type: ignore[misc]
             raise RunBusUnavailable("shutting down")
 
-        # The stream key is per session; drop whatever a previous run left.
-        await self.redis.delete(stream_key(user_id, session_id))
+        try:
+            # The stream key is per session; drop whatever a previous run left.
+            await self.redis.delete(stream_key(user_id, session_id))
+        except BaseException:
+            # No drain task yet to release the lock; don't leave the session
+            # looking busy for LOCK_TTL_MS.
+            await self.redis.eval(_RELEASE_LOCK, 1, key, lock_value)  # type: ignore[misc]
+            raise
 
         run = _Run(
             run_id=run_id, user_id=user_id, session_id=session_id, lock_value=lock_value
@@ -636,7 +670,9 @@ class RunBus:
                 run.invocation_id.set_exception(e)
                 # Retrieved by start(); keep asyncio from warning if it timed out.
                 run.invocation_id.exception()
-            elif run.end is None:
+            if run.end is None:
+                # Other windows may already show this run as going (from the
+                # lock); its end must not read "completed".
                 run.end = "interrupted"
         finally:
             timer.cancel()
@@ -851,8 +887,18 @@ class RunBus:
         feed.run_id = feed.run_id or lock_run
         yield synced_frame(feed.run_id is not None)
 
-        watcher = self.hub.subscribe(key, last)
+        watcher, gap_to = self.hub.subscribe(key, last)
         try:
+            if gap_to is not None:
+                gap = cast(
+                    list[tuple[Any, dict[Any, Any]]],
+                    await self.redis.xrange(key, min=f"({last}", max=gap_to),
+                )
+                for i, f in gap:
+                    e = _entry(i, f)
+                    last = e.id
+                    async for chunk in feed.take(e):
+                        yield chunk
             while True:
                 try:
                     e = await asyncio.wait_for(
@@ -866,6 +912,9 @@ class RunBus:
                             yield chunk
                     yield HEARTBEAT
                     continue
+                if _stream_id(e.id) <= _stream_id(last):
+                    continue  # already read with the gap
+                last = e.id
                 async for chunk in feed.take(e):
                     yield chunk
         finally:
@@ -899,8 +948,16 @@ class RunBus:
         """
         key = lock_key(user_id, session_id)
         token = json.dumps({"stateWrite": uuid.uuid4().hex})
-        if not await self.redis.set(key, token, nx=True, px=STATE_WRITE_LOCK_MS):
-            return True
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + STATE_WRITE_LOCK_MS / 1000
+        while not await self.redis.set(key, token, nx=True, px=STATE_WRITE_LOCK_MS):
+            # Deferred only for a run. Another state write (a rename while
+            # another window opens the session) is over in a moment.
+            if await self.read_run_lock(user_id, session_id) is not None:
+                return True
+            if loop.time() > deadline:
+                return True
+            await asyncio.sleep(0.05)
         try:
             await append_state_delta(
                 self.session_service,

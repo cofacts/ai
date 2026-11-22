@@ -673,3 +673,144 @@ async def test_unknown_session_feed_raises(redis, sessions):
     bus = make_bus(redis, sessions, None)
     with pytest.raises(LookupError):
         await bus.open_events(USER, "nope")
+
+
+async def test_hub_hands_a_late_subscriber_the_gap(redis, sessions, monkeypatch):
+    """A feed whose starting point is behind the hub still gets every entry."""
+    script: list[tuple[float, Any]] = [
+        (0.05, lambda inv, i=i: text_event(inv, f"p{i}", partial=True))
+        for i in range(6)
+    ]
+    script.append((0.05, lambda inv: text_event(inv, "p0p1p2p3p4p5", partial=False)))
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script))
+    first = await bus.open_events(USER, "s1")
+    await read_until(first, lambda f: any(k == "synced" for k, _ in f))
+    await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    # Window A's feed moves the hub's cursor forward.
+    await read_until(first, lambda f: sum(k == "data" for k, _ in f) >= 4)
+
+    # Window B's own XRANGE saw only the first entry (it read just before the
+    # rest landed); by the time it subscribes, the hub is far past that.
+    real_xrange = redis.xrange
+    calls = {"n": 0}
+
+    async def stale_first_read(key, *a, **kw):
+        calls["n"] += 1
+        rows = await real_xrange(key, *a, **kw)
+        return rows[:1] if calls["n"] == 1 else rows
+
+    monkeypatch.setattr(redis, "xrange", stale_first_read)
+    second = await bus.open_events(USER, "s1")
+    frames = await read_until(second, lambda f: len(ends(f)) == 1)
+    await first.aclose()
+    await second.aclose()
+    texts = [p["content"]["parts"][0]["text"] for k, p in frames if k == "data"]
+    assert texts == ["hi", "p0", "p1", "p2", "p3", "p4", "p5", "p0p1p2p3p4p5"]
+    assert ends(frames) == ["completed"]
+
+
+async def test_state_write_waits_out_another_state_write(redis, sessions):
+    bus = make_bus(redis, sessions, None)
+    key = rb.lock_key(USER, "s1")
+    await redis.set(key, json.dumps({"stateWrite": "other"}), px=5000)
+
+    async def release_soon():
+        await asyncio.sleep(0.2)
+        await redis.delete(key)
+
+    releaser = asyncio.create_task(release_soon())
+    assert await bus.write_state(USER, "s1", {"title": "x"}) is False
+    await releaser
+    session = await sessions.get_session(app_name=APP, user_id=USER, session_id="s1")
+    assert session.state["title"] == "x"
+
+
+async def test_feed_ends_a_run_whose_end_it_never_saw(redis, sessions, monkeypatch):
+    monkeypatch.setattr(rb, "STREAM_BLOCK_MS", 10_000)  # no timeout path here
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer(), inv="e-1"))
+    agen = await bus.open_events(USER, "s1")
+    await read_until(agen, lambda f: any(k == "synced" for k, _ in f))
+
+    real_xadd = redis.xadd
+
+    async def lose_done(key, fields, **kw):
+        if fields.get("type") == "done":
+            return None
+        return await real_xadd(key, fields, **kw)
+
+    monkeypatch.setattr(redis, "xadd", lose_done)
+    await bus.start(user_id=USER, session_id="s1", new_message=user_msg("one"))
+    # The feed sees run 1 all the way to its answer, but never its done.
+    run1 = await read_until(
+        agen,
+        lambda f: any(
+            k == "data" and not p.get("partial") and p["author"] == "writer"
+            for k, p in f
+        ),
+    )
+    await wait_idle(bus)
+    monkeypatch.setattr(redis, "xadd", real_xadd)
+
+    other = make_bus(
+        redis, sessions, FakeRunner(sessions, script_answer(), inv="e-2"), owner="b"
+    )
+    await other.start(user_id=USER, session_id="s1", new_message=user_msg("two"))
+    frames = await read_until(agen, lambda f: len(ends(f)) == 2)
+    await agen.aclose()
+    await wait_idle(other)
+    assert {p["invocationId"] for k, p in run1 if k == "data"} == {"e-1"}
+    first_end = next(i for i, (k, _) in enumerate(frames) if k == "end")
+    assert ends(frames) == ["interrupted", "completed"]
+    assert {p["invocationId"] for k, p in frames[first_end + 1 :] if k == "data"} == {
+        "e-2"
+    }
+
+
+async def test_start_releases_the_lock_if_it_fails_after_taking_it(
+    redis, sessions, monkeypatch
+):
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
+
+    async def boom(*a, **kw):
+        raise ConnectionError("redis blip")
+
+    monkeypatch.setattr(redis, "delete", boom)
+    with pytest.raises(ConnectionError):
+        await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    assert await redis.get(rb.lock_key(USER, "s1")) is None
+    assert bus.running_count() == 0
+
+
+async def test_run_failing_before_its_first_event_ends_as_interrupted(redis, sessions):
+    class Broken(FakeRunner):
+        async def run_async(self, **kw):
+            raise RuntimeError("runner failed to load")
+            yield  # pragma: no cover
+
+    bus = make_bus(redis, sessions, Broken(sessions, []))
+    agen = await bus.open_events(USER, "s1")
+    await read_until(agen, lambda f: any(k == "synced" for k, _ in f))
+    with pytest.raises(RuntimeError):
+        await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    frames = await read_until(agen, lambda f: len(ends(f)) == 1)
+    await agen.aclose()
+    assert ends(frames) == ["interrupted"]
+
+
+async def test_end_catch_up_reads_only_the_run(redis, sessions, monkeypatch):
+    bus = make_bus(redis, sessions, FakeRunner(sessions, script_answer()))
+    configs = []
+    real_get = sessions.get_session
+
+    async def spy(**kw):
+        configs.append(kw.get("config"))
+        return await real_get(**kw)
+
+    agen = await bus.open_events(USER, "s1")
+    await read_until(agen, lambda f: any(k == "synced" for k, _ in f))
+    monkeypatch.setattr(sessions, "get_session", spy)
+    await bus.start(user_id=USER, session_id="s1", new_message=user_msg())
+    await read_until(agen, lambda f: len(ends(f)) == 1)
+    await agen.aclose()
+    catch_up = [c for c in configs if c is not None]
+    assert catch_up and catch_up[-1].after_timestamp is not None

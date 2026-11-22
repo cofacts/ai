@@ -410,4 +410,91 @@ describe('the session feed', () => {
       fetchMock.mock.calls.filter((c) => c[0].startsWith('/api/runs/s/events')),
     ).toHaveLength(1)
   })
+  test('409 after the other run already ended leaves the page idle', async () => {
+    let releaseStart!: () => void
+    const startGate = new Promise<void>((r) => (releaseStart = r))
+    const feed = openFeed()
+    route([feed.response], {
+      '/api/runs/s/start': async () => {
+        await startGate
+        return json({ invocationId: 'other' }, 409)
+      },
+    })
+    connect()
+    feed.push(synced(true), msg(ev('other', 'user', 'theirs')))
+    await vi.waitFor(() => expect(texts(state())).toEqual(['theirs']))
+    const sent = sendChatMessage(qc, 's', 'mine')
+    // The other run ends while this send's request is still out.
+    feed.push(msg(ev('other', 'model', 'done')), end())
+    await vi.waitFor(() => expect(state()?.live).toBeNull())
+    releaseStart()
+    expect(await sent).toBe(false)
+    expect(state()?.isStreaming).toBe(false)
+    expect(state()?.notice).toBe(BUSY_NOTICE)
+  })
+
+  test('no Redis: the history load leaves a send in flight alone', async () => {
+    let releaseStart!: () => void
+    const startGate = new Promise<void>((r) => (releaseStart = r))
+    getSession.mockResolvedValue({ events: [], state: {} })
+    route([json({ detail: { reason: 'disabled' } }, 503)], {
+      '/api/runs/s/start': async () => {
+        await startGate
+        return json({ detail: { reason: 'disabled' } }, 503)
+      },
+      '/api/run-sse': () => sse([ev('x', 'model', 'answer')]),
+    })
+    const sent = sendChatMessage(qc, 's', 'hello') // landing page's send
+    connect() // then the session page mounts
+    await vi.waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some((c) => c[0].startsWith('/api/runs/s/events')),
+      ).toBe(true),
+    )
+    await new Promise((r) => setTimeout(r, 10))
+    expect(getSession).not.toHaveBeenCalled()
+    expect(texts(state())).toEqual(['hello'])
+    expect(state()?.isStreaming).toBe(true)
+    releaseStart()
+    await sent
+    await vi.waitFor(() => expect(state()?.isStreaming).toBe(false))
+    expect(texts(state())).toEqual(['hello', 'answer'])
+  })
+
+  test('an attachment that fails to read gives the draft back', async () => {
+    route([])
+    const OriginalReader = globalThis.FileReader
+    class FailingReader {
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      error = new Error('read failed')
+      readAsDataURL() {
+        setTimeout(() => this.onerror?.())
+      }
+    }
+    vi.stubGlobal('FileReader', FailingReader)
+    try {
+      const file = new File(['x'], 'a.png', { type: 'image/png' })
+      expect(await sendChatMessage(qc, 's', 'hi', [file])).toBe(false)
+    } finally {
+      vi.stubGlobal('FileReader', OriginalReader)
+    }
+    expect(state()?.isStreaming).toBe(false)
+    expect(state()?.error).toMatch(/read failed/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  test('a burst of stored events rebuilds the screen once', async () => {
+    const feed = openFeed()
+    route([feed.response])
+    const writes = vi.spyOn(qc, 'setQueryData')
+    connect()
+    const events = Array.from({ length: 50 }, (_, i) =>
+      ev('h', i % 2 ? 'model' : 'user', `m${i}`),
+    )
+    feed.push(...events.map(hist), synced(false))
+    await vi.waitFor(() => expect(state()?.historyEvents).toHaveLength(50))
+    // One write for the history, one for `synced`.
+    expect(writes.mock.calls.length).toBeLessThanOrEqual(2)
+  })
 })
