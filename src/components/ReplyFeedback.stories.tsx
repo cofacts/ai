@@ -364,6 +364,11 @@ export const ReasonsList: Story = {
       within(list).getByRole('link', { name: /檢舉/ }),
     ).toHaveAttribute('target', '_blank')
 
+    // From the tab, one Tab press reaches the scrolling list; the panel is not a stop of its own.
+    upTab().focus()
+    await userEvent.tab()
+    await expect(list).toHaveFocus()
+
     // Arrow keys move to the other tab.
     upTab().focus()
     await userEvent.keyboard('{ArrowRight}')
@@ -515,5 +520,9 @@ export const ReasonsEmpty: Story = {
     await waitFor(async () =>
       expect(await body.findByText('還沒有人留下有幫助的理由。')).toBeVisible(),
     )
+    // With nothing focusable inside, the panel itself is the Tab stop after the tab.
+    body.getByRole('tab', { name: /有幫助/ }).focus()
+    await userEvent.tab()
+    await expect(body.getByRole('tabpanel')).toHaveFocus()
   },
 }

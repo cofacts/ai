@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 
 import type { ReactionGroupProps, ReplyVote } from '@/components/ReactionGroup'
 import type { CofactsUser } from '@/lib/auth'
+import type { ReactNode } from 'react'
 import { ReactionGroup } from '@/components/ReactionGroup'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTitle } from '@/components/ui/popover'
@@ -121,8 +122,16 @@ function ReasonList({
     firstMoreRef.current?.focus()
   }, [expanded])
 
+  // The tab panel is a Tab stop of its own, so the content is reachable when it has nothing
+  // focusable. The list's scrolling region is a Tab stop already, so there the panel is not.
+  const panel = (children: ReactNode, hasList = false) => (
+    <TabsPanel value={vote} tabIndex={hasList ? -1 : 0}>
+      {children}
+    </TabsPanel>
+  )
+
   if (reasons?.status === 'error') {
-    return (
+    return panel(
       <div className="flex flex-col items-start gap-spacing-8">
         <p role="alert" className="text-type-body-s text-status-incorrect">
           載入失敗。
@@ -132,7 +141,7 @@ function ReasonList({
             重試
           </Button>
         )}
-      </div>
+      </div>,
     )
   }
   // Without onRetry (the parent's onLoadReasons) nothing will ever load, so show what there is.
@@ -140,24 +149,24 @@ function ReasonList({
     reasons?.status === 'loading' ||
     (onRetry && reasons?.status !== 'success')
   ) {
-    return (
+    return panel(
       <p role="status" className="text-type-body-s text-text-secondary">
         載入中…
-      </p>
+      </p>,
     )
   }
 
   const sorted = sortReasons(reasons?.feedbacks ?? [], vote)
   if (sorted.length === 0) {
-    return (
+    return panel(
       <p className="text-type-body-s text-text-secondary">
         還沒有人留下{VOTE_LABEL[vote]}的理由。
-      </p>
+      </p>,
     )
   }
   const shown = expanded ? sorted : sorted.slice(0, REASONS_PAGE)
 
-  return (
+  return panel(
     <div className="flex flex-col gap-spacing-8">
       {/* A scrolling area has to be reachable by keyboard, so it is focusable. */}
       <div
@@ -218,7 +227,8 @@ function ReasonList({
           載入更多
         </Button>
       )}
-    </div>
+    </div>,
+    true,
   )
 }
 
@@ -411,17 +421,16 @@ export function ReplyFeedback({
               </TabsTab>
             </TabsList>
             {(['UPVOTE', 'DOWNVOTE'] as const).map((vote) => (
-              <TabsPanel key={vote} value={vote}>
-                <ReasonList
-                  vote={vote}
-                  reasons={reasons}
-                  expanded={expanded[vote]}
-                  onExpand={() =>
-                    setExpanded((current) => ({ ...current, [vote]: true }))
-                  }
-                  onRetry={onLoadReasons}
-                />
-              </TabsPanel>
+              <ReasonList
+                key={vote}
+                vote={vote}
+                reasons={reasons}
+                expanded={expanded[vote]}
+                onExpand={() =>
+                  setExpanded((current) => ({ ...current, [vote]: true }))
+                }
+                onRetry={onLoadReasons}
+              />
             ))}
           </Tabs>
         </PopoverContent>
