@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "concurrently \"pnpm run dev:ui\" \"pnpm run dev:agent\" --names ui,agent --prefix-colors blue,green --kill-others",
     "dev:ui": "vite dev --port 3000",
-    "dev:agent": "uv run --directory adk uvicorn main:app --port 8000 --reload --reload-dir cofacts_ai",
+    "dev:agent": "uv run --directory adk uvicorn main:app --port 8000 --reload --reload-dir cofacts_ai --timeout-graceful-shutdown 5",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",

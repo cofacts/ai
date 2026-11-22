@@ -1,5 +1,7 @@
 import { handleAuthExpired } from './authExpired'
 import { UPLOAD_FILENAME_PREFIX } from './adk'
+import { isRunsDisabled } from './adkRuns'
+import { getSession } from './chatSessions.functions'
 import type { QueryClient } from '@tanstack/react-query'
 import type {
   AdkEvent,
@@ -15,6 +17,23 @@ export interface ChatSessionState {
   error: string | null
   toolInvocations: Record<string, ToolInvocation>
   lastReplyDraftId: string | null
+  /**
+   * The session's complete (non-partial) events, as the session API returns
+   * them, plus those of runs watched to the end. The screen is computed from
+   * these and `live`.
+   */
+  historyEvents: Array<AdkEvent>
+  /**
+   * The run being watched and every event received for it, partials
+   * included. Its events are trusted over the history's: the stream always
+   * replays a run from its first event, so `live` replaces that invocation.
+   * invocationId is null until the server names the run.
+   */
+  live: { invocationId: string | null; events: Array<AdkEvent> } | null
+  /** One-off message shown above the input. */
+  notice: string | null
+  /** The last turn ended without an answer and was not stopped by the user. */
+  interrupted: boolean
 }
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
@@ -23,7 +42,14 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   error: null,
   toolInvocations: {},
   lastReplyDraftId: null,
+  historyEvents: [],
+  live: null,
+  notice: null,
+  interrupted: false,
 }
+
+/** customMetadata key the backend sets on the last event of a stopped run. */
+export const RUN_END_KEY = 'cofacts_run_end'
 
 export function chatCacheKey(): readonly ['chat']
 export function chatCacheKey(sessionId: string): readonly ['chat', string]
@@ -31,20 +57,27 @@ export function chatCacheKey(sessionId?: string) {
   return sessionId ? (['chat', sessionId] as const) : (['chat'] as const)
 }
 
-// Global registry of abort controllers per session to prevent duplicate streams
+/** Legacy /api/run-sse streams per session (background runs off). */
 export const abortControllers = new Map<string, AbortController>()
+const legacyStreams = new Set<string>()
+/**
+ * Sessions with a send in flight: between the click and the start request's
+ * answer (reading attachments, the request). The feed must not decide the
+ * session is idle meanwhile.
+ */
+const pendingSends = new Set<string>()
+/** Stop pressed during a send in flight; carried out once the run starts. */
+const pendingStops = new Set<string>()
 
-let messageIdCounter = 0
-const genId = () => `msg-${++messageIdCounter}-${Date.now()}`
+// Messages are only ever appended or have their last entry updated, so a
+// message's position is a stable id: recomputing the screen from events
+// (when a stream attaches) gives every message the same key it had, and
+// React keeps the rendered messages instead of remounting them.
+const positionalId = (messages: Array<ChatMessage>) => `msg-${messages.length}`
 
-export interface StartStreamOptions {
-  queryClient: QueryClient
-  sessionId: string
-  payload?: {
-    newMessage?: { role: string; parts: Array<AdkPart> }
-    invocationId?: string
-  }
-}
+/** Text shown when the user sends while another window's run is going. */
+export const BUSY_NOTICE =
+  '另一個視窗正在處理這個對話，已幫你接上它的進度。你的訊息還沒送出，等它完成後再送一次。'
 
 /**
  * Reads a browser File into an ADK inline-data part (base64).
@@ -76,33 +109,621 @@ export function fileToInlineDataPart(file: File): Promise<AdkPart> {
   })
 }
 
+export interface SseFrame {
+  /** The `event:` field; "message" when there is none. */
+  type: string
+  data: string
+}
+
 /**
- * Starts an SSE stream for a specific session and updates its state in the TanStack Query cache.
- * Designed to run in the background, independent of React component lifecycles.
+ * Calls onFrame for each frame of an SSE response body (comments skipped),
+ * and onChunkEnd after the frames of each chunk read.
+ */
+async function readSse(
+  body: ReadableStream<Uint8Array>,
+  onFrame: (frame: SseFrame) => void,
+  onChunkEnd?: () => void,
+) {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() ?? ''
+
+      for (const part of parts) {
+        let data = ''
+        let type = 'message'
+        for (const line of part.split('\n')) {
+          if (line.startsWith('data: ')) data += line.slice(6)
+          else if (line.startsWith('event: ')) type = line.slice(7)
+        }
+        if (!data) continue // heartbeat comments
+        onFrame({ type, data })
+      }
+      onChunkEnd?.()
+    }
+  } finally {
+    reader.cancel()
+  }
+}
+
+function setChat(
+  queryClient: QueryClient,
+  sessionId: string,
+  update: (prev: ChatSessionState) => ChatSessionState,
+) {
+  queryClient.setQueryData<ChatSessionState>(chatCacheKey(sessionId), (prev) =>
+    update(prev ?? INITIAL_CHAT_STATE),
+  )
+}
+
+/**
+ * Recomputes the screen: the history without the live run's invocation,
+ * then the live run's events.
+ */
+export function rebuildChatState(
+  prev: ChatSessionState,
+  historyEvents: Array<AdkEvent>,
+  live: ChatSessionState['live'],
+): ChatSessionState {
+  let state: ChatSessionState = {
+    ...INITIAL_CHAT_STATE,
+    historyEvents,
+    live,
+    isStreaming: prev.isStreaming,
+    error: prev.error,
+    notice: prev.notice,
+  }
+  const liveId = live?.invocationId
+  for (const event of historyEvents) {
+    if (liveId && event.invocationId === liveId) continue
+    state = applyEventToState(state, event)
+  }
+  state = {
+    ...state,
+    messages: state.messages.map((m) =>
+      m.isStreaming ? { ...m, isStreaming: false } : m,
+    ),
+  }
+  for (const event of live?.events ?? []) {
+    state = applyEventToState(state, event)
+  }
+  return {
+    ...state,
+    interrupted: !live && isTurnInterrupted(historyEvents),
+  }
+}
+
+/** True when the event ends a run: the writer's answer, or a stopped run. */
+export function isRunEndEvent(event: AdkEvent): boolean {
+  if (event.partial) return false
+  if (event.customMetadata?.[RUN_END_KEY]) return true
+  const parts = event.content?.parts ?? []
+  return (
+    event.content?.role === 'model' &&
+    parts.some((p) => p.text) &&
+    !parts.some((p) => p.functionCall)
+  )
+}
+
+/**
+ * Whether the last turn ended without an answer for a reason other than the
+ * user pressing stop: a redeploy, the time limit, a crash. The screen then
+ * offers to ask again.
+ */
+export function isTurnInterrupted(events: Array<AdkEvent>): boolean {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i] as AdkEvent
+    const end = event.customMetadata?.[RUN_END_KEY]
+    if (end) return end === 'interrupted'
+    // Stopped through the old /run_sse (the browser closed the connection).
+    if (event.errorCode === 'INVOCATION_ABORTED') return false
+    if (!event.content?.parts?.length) continue // state-only events
+    return !isRunEndEvent(event)
+  }
+  return false
+}
+
+/**
+ * Sends a message from the user, updating the cache immediately and starting
+ * a background run (or, when the backend has background runs off, the old
+ * /api/run-sse stream).
+ *
+ * Attachments are passed as native File objects and converted to base64
+ * inline-data parts here, just before sending.
+ *
+ * Resolves to false when the message was not sent because another window's
+ * run holds the session; the caller should give the user their draft back.
+ */
+export function sendChatMessage(
+  queryClient: QueryClient,
+  sessionId: string,
+  text: string,
+  files: Array<File> = [],
+): Promise<boolean> {
+  return trackSend(sessionId, () =>
+    buildAndSend(queryClient, sessionId, text, files),
+  )
+}
+
+async function buildAndSend(
+  queryClient: QueryClient,
+  sessionId: string,
+  text: string,
+  files: Array<File>,
+): Promise<boolean> {
+  // Set isStreaming:true before any async work so that components mounting
+  // during file reading (e.g. after navigate()) don't see isStreaming:false
+  // and trigger other state changes like markSessionOpened.
+  setChat(queryClient, sessionId, (prev) => ({
+    ...prev,
+    isStreaming: true,
+    error: null,
+    notice: null,
+    interrupted: false,
+  }))
+
+  // Build the message parts: text first (when present), then one inline-data
+  // part per attachment.
+  const parts: Array<AdkPart> = []
+  if (text) parts.push({ text })
+  if (files.length > 0) {
+    try {
+      parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
+    } catch (err) {
+      // Nothing was sent: show the error and give the draft back.
+      failStream(queryClient, sessionId, err)
+      return false
+    }
+  }
+  return sendParts(queryClient, sessionId, parts)
+}
+
+/** Marks a send in flight until `send` has attached (or failed). */
+async function trackSend<T>(sessionId: string, send: () => Promise<T>) {
+  pendingSends.add(sessionId)
+  try {
+    return await send()
+  } finally {
+    pendingSends.delete(sessionId)
+    pendingStops.delete(sessionId)
+  }
+}
+
+/** Sends the last user message of an interrupted turn again. */
+export function retryInterruptedTurn(
+  queryClient: QueryClient,
+  sessionId: string,
+) {
+  const state = queryClient.getQueryData<ChatSessionState>(
+    chatCacheKey(sessionId),
+  )
+  const lastUser = state?.historyEvents
+    .slice()
+    .reverse()
+    .find((e) => e.content?.role === 'user' && e.author === 'user')
+  const parts = (lastUser?.content?.parts ?? []).filter(
+    (p) =>
+      !p.functionResponse &&
+      !(p.text && ARTIFACT_PLACEHOLDER.test(p.text.trim())),
+  )
+  if (parts.length === 0) return
+  setChat(queryClient, sessionId, (prev) => ({
+    ...prev,
+    isStreaming: true,
+    error: null,
+    notice: null,
+    interrupted: false,
+  }))
+  void trackSend(sessionId, () => sendParts(queryClient, sessionId, parts))
+}
+
+async function sendParts(
+  queryClient: QueryClient,
+  sessionId: string,
+  parts: Array<AdkPart>,
+): Promise<boolean> {
+  const newMessage = { role: 'user', parts }
+
+  // Shown right away; replaced by the stored message when the run's stream
+  // replays it.
+  const optimistic = {
+    invocationId: '',
+    author: 'user',
+    content: newMessage,
+  } as AdkEvent
+  setChat(queryClient, sessionId, (prev) => ({
+    ...applyEventToState(prev, optimistic),
+    live: { invocationId: null, events: [optimistic] },
+  }))
+
+  let response: Response
+  try {
+    response = await fetch(`/api/runs/${encodeURIComponent(sessionId)}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newMessage }),
+    })
+  } catch (err) {
+    failStream(queryClient, sessionId, err)
+    return true
+  }
+
+  if (await isRunsDisabled(response)) {
+    if (pendingStops.has(sessionId)) {
+      // Stopped before anything ran: just don't start.
+      setChat(queryClient, sessionId, (prev) => ({
+        ...rebuildChatState(prev, prev.historyEvents, null),
+        isStreaming: false,
+      }))
+      return true
+    }
+    // Background runs are off (no Redis): the old stream, tied to this tab.
+    void startChatStream({
+      queryClient,
+      sessionId,
+      payload: { newMessage },
+    })
+    return true
+  }
+  if (response.status === 401) {
+    handleAuthExpired()
+    failStream(queryClient, sessionId, new Error('Authentication required'))
+    return true
+  }
+
+  if (response.status === 409) {
+    // Another window's run holds the session; the feed shows it. Hand the
+    // user's draft back.
+    setChat(queryClient, sessionId, (prev) => {
+      const live = prev.live?.events.some((e) => !e.invocationId)
+        ? null
+        : prev.live
+      return {
+        ...rebuildChatState(prev, prev.historyEvents, live),
+        // The other run may have ended while this request was out; then
+        // its `end` has already come and gone on the feed.
+        isStreaming: live !== null,
+        notice: BUSY_NOTICE,
+      }
+    })
+    return false
+  }
+
+  if (!response.ok) {
+    failStream(
+      queryClient,
+      sessionId,
+      new Error(`ADK request failed: HTTP ${response.status}`),
+    )
+    return true
+  }
+
+  const { invocationId } = (await response.json()) as {
+    invocationId: string | null
+  }
+  setChat(queryClient, sessionId, (prev) => ({
+    ...prev,
+    live:
+      prev.live && !prev.live.invocationId
+        ? { ...prev.live, invocationId }
+        : prev.live,
+  }))
+  // The run's events, starting with the stored message, come on the feed.
+  if (pendingStops.has(sessionId)) void requestCancel(sessionId)
+  return true
+}
+
+function failStream(queryClient: QueryClient, sessionId: string, err: unknown) {
+  console.error(`Run error for session ${sessionId}:`, err)
+  const message = err instanceof Error ? err.message : 'Unknown error'
+  setChat(queryClient, sessionId, (prev) => ({
+    ...rebuildChatState(prev, prev.historyEvents, null),
+    isStreaming: false,
+    error: message,
+  }))
+}
+
+/**
+ * Open /events feeds, counted per session: several components can show the
+ * same session, and the feed closes when the last one goes away.
+ */
+const feeds = new Map<string, { refs: number; controller: AbortController }>()
+
+/**
+ * Keeps the session's live feed open while `close` hasn't been called.
+ *
+ * The feed (`GET /api/runs/:id/events`) sends the stored events, then every
+ * run as it happens, from this window or any other, and never ends by
+ * itself. When the connection drops it reconnects with `since`, the last
+ * stored event it has, so only what's new comes again.
+ */
+export function connectSessionEvents(
+  queryClient: QueryClient,
+  sessionId: string,
+): () => void {
+  const existing = feeds.get(sessionId)
+  if (existing) {
+    existing.refs++
+  } else {
+    const controller = new AbortController()
+    feeds.set(sessionId, { refs: 1, controller })
+    void runFeed(queryClient, sessionId, controller.signal)
+  }
+  let closed = false
+  return () => {
+    if (closed) return
+    closed = true
+    const feed = feeds.get(sessionId)
+    if (!feed) return
+    if (--feed.refs > 0) return
+    feeds.delete(sessionId)
+    feed.controller.abort()
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+async function runFeed(
+  queryClient: QueryClient,
+  sessionId: string,
+  signal: AbortSignal,
+) {
+  // A function, not `signal.aborted` inline: it changes while awaiting, and
+  // TypeScript would narrow the property to its value at the loop check.
+  const aborted = () => signal.aborted
+  let failures = 0
+  while (!aborted()) {
+    const state = queryClient.getQueryData<ChatSessionState>(
+      chatCacheKey(sessionId),
+    )
+    const since = state?.historyEvents.at(-1)?.id
+    // Per connection: the first run frame starts the replay of the run in
+    // progress, which replaces what this window had for it.
+    const conn = { fresh: true }
+    try {
+      const response = await fetch(
+        `/api/runs/${encodeURIComponent(sessionId)}/events` +
+          (since ? `?since=${encodeURIComponent(since)}` : ''),
+        { signal },
+      )
+      if (response.status === 401) {
+        handleAuthExpired()
+        return
+      }
+      if (await isRunsDisabled(response)) {
+        // No Redis: no live feed. Load the history once; sends use the old
+        // /api/run-sse stream, tied to this tab.
+        await loadHistoryOnce(queryClient, sessionId)
+        return
+      }
+      if (response.status === 404) {
+        failStream(queryClient, sessionId, new Error('Session not found'))
+        return
+      }
+      if (!response.ok || !response.body) {
+        throw new Error(`Feed request failed: HTTP ${response.status}`)
+      }
+      // Stored events come in bursts (the whole history when a feed
+      // opens). Rebuilding the screen once per burst, not once per event,
+      // keeps opening a long session linear.
+      const stored: Array<AdkEvent> = []
+      const flush = () => {
+        if (!stored.length) return
+        const batch = stored.splice(0)
+        setChat(queryClient, sessionId, (prev) =>
+          rebuildChatState(
+            prev,
+            withEvents(prev.historyEvents, batch),
+            prev.live,
+          ),
+        )
+      }
+      await readSse(
+        response.body,
+        (frame) => {
+          if (frame.type === 'history') {
+            const event = parseEvent(frame.data)
+            if (event) stored.push(event)
+            return
+          }
+          flush()
+          applyFrame(queryClient, sessionId, frame, conn)
+        },
+        flush,
+      )
+      failures = 0 // closed by the server or a proxy (e.g. Cloud Run's timeout)
+    } catch (err) {
+      if (aborted()) return
+      failures++
+      console.warn(`Feed for ${sessionId} dropped:`, err)
+    }
+    if (aborted()) return
+    await sleep(failures ? Math.min(1000 * 2 ** failures, 15_000) : 500)
+  }
+}
+
+function applyFrame(
+  queryClient: QueryClient,
+  sessionId: string,
+  frame: SseFrame,
+  conn: { fresh: boolean },
+) {
+  switch (frame.type) {
+    case 'synced': {
+      const { running } = JSON.parse(frame.data) as { running: boolean }
+      if (running) {
+        setChat(queryClient, sessionId, (prev) => ({
+          ...prev,
+          isStreaming: true,
+          interrupted: false,
+        }))
+        return
+      }
+      // Nothing running: drop what this window still had as live (a run that
+      // ended while it was disconnected), unless its own send is on the way.
+      if (pendingSends.has(sessionId)) return
+      setChat(queryClient, sessionId, (prev) => ({
+        ...rebuildChatState(prev, prev.historyEvents, null),
+        isStreaming: false,
+      }))
+      return
+    }
+    case 'end': {
+      setChat(queryClient, sessionId, (prev) => ({
+        ...rebuildChatState(prev, prev.historyEvents, null),
+        // This window may already be sending the next message.
+        isStreaming: pendingSends.has(sessionId),
+      }))
+      // Refresh session list so lastEventTime (written by agent callback) is picked up immediately.
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      return
+    }
+    case 'message': {
+      const event = parseEvent(frame.data)
+      if (!event) return
+      const fresh = conn.fresh
+      conn.fresh = false
+      setChat(queryClient, sessionId, (prev) => {
+        const historyEvents = event.partial
+          ? prev.historyEvents
+          : withEvent(prev.historyEvents, event)
+        const live = prev.live
+        const startsRun =
+          fresh ||
+          !live ||
+          live.invocationId !== event.invocationId ||
+          // The optimistic message of this window's own send.
+          live.events.some((e) => !e.invocationId)
+        if (startsRun) {
+          return {
+            ...rebuildChatState(prev, historyEvents, {
+              invocationId: event.invocationId,
+              events: [event],
+            }),
+            isStreaming: true,
+            interrupted: false,
+          }
+        }
+        return {
+          ...applyEventToState(prev, event),
+          historyEvents,
+          isStreaming: true,
+          live: { ...live, events: [...live.events, event] },
+        }
+      })
+      return
+    }
+  }
+}
+
+function parseEvent(data: string): AdkEvent | null {
+  try {
+    return JSON.parse(data) as AdkEvent
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Adds complete events to the history once each (by id), in time order.
+ * The same event can arrive stored and again from a run's replay, and a
+ * run's catch-up after its end can bring an event from its middle.
+ */
+function withEvents(history: Array<AdkEvent>, events: Array<AdkEvent>) {
+  const ids = new Set(history.map((e) => e.id))
+  const added = events.filter((e) => {
+    if (e.id && ids.has(e.id)) return false
+    ids.add(e.id)
+    return true
+  })
+  if (!added.length) return history
+  const next = [...history, ...added]
+  const time = (e: AdkEvent | undefined) => e?.timestamp ?? 0
+  const sorted = next.every((e, i) => i === 0 || time(next[i - 1]) <= time(e))
+  return sorted ? next : next.sort((a, b) => time(a) - time(b))
+}
+
+function withEvent(history: Array<AdkEvent>, event: AdkEvent) {
+  return withEvents(history, [event])
+}
+
+async function loadHistoryOnce(queryClient: QueryClient, sessionId: string) {
+  // A send from this tab (e.g. the landing page's, before navigating here) is
+  // already on its way over /api/run-sse; the cache holds it, and replacing
+  // the state would drop it and mark the session idle mid-run.
+  if (pendingSends.has(sessionId) || legacyStreams.has(sessionId)) return
+  try {
+    const session = await getSession({ data: sessionId })
+    setChat(queryClient, sessionId, (prev) => ({
+      ...convertAdkSessionToChatState(session),
+      notice: prev.notice,
+    }))
+  } catch (err) {
+    failStream(queryClient, sessionId, err)
+  }
+}
+
+/** The stop button: asks the server to stop the run. */
+export async function stopRun(sessionId: string) {
+  if (legacyStreams.has(sessionId)) {
+    abortControllers.get(sessionId)?.abort()
+    return
+  }
+  if (pendingSends.has(sessionId)) {
+    // The run has no lock yet, so a cancel now would find nothing.
+    pendingStops.add(sessionId)
+    return
+  }
+  // The feed then shows the stopped message and the run's end. 404: it had
+  // already ended.
+  await requestCancel(sessionId)
+}
+
+function requestCancel(sessionId: string) {
+  return fetch(`/api/runs/${encodeURIComponent(sessionId)}/cancel`, {
+    method: 'POST',
+  })
+}
+
+function completeEvents(events: Array<AdkEvent> | undefined) {
+  return (events ?? []).filter((e) => !e.partial && e.invocationId)
+}
+
+export interface StartStreamOptions {
+  queryClient: QueryClient
+  sessionId: string
+  payload?: {
+    newMessage?: { role: string; parts: Array<AdkPart> }
+  }
+}
+
+/**
+ * The old way, kept for when the backend has no Redis: streams ADK's
+ * /run_sse, whose run lives only as long as this connection.
  */
 export async function startChatStream({
   queryClient,
   sessionId,
   payload = {},
 }: StartStreamOptions) {
-  const queryKey = chatCacheKey(sessionId)
-
   // Abort any existing stream for this session
   abortControllers.get(sessionId)?.abort()
   const controller = new AbortController()
   abortControllers.set(sessionId, controller)
+  legacyStreams.add(sessionId)
 
-  queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => {
-    // Initialize state if it doesn't exist
-    if (!prev) return INITIAL_CHAT_STATE
-
-    // Set existing session state's streaming flag and reset errors
-    return {
-      ...prev,
-      isStreaming: true,
-      error: null,
-    }
-  })
+  setChat(queryClient, sessionId, (prev) => ({
+    ...prev,
+    isStreaming: true,
+    error: null,
+  }))
 
   try {
     const response = await fetch('/api/run-sse', {
@@ -119,65 +740,33 @@ export async function startChatStream({
       throw new Error(`ADK request failed: HTTP ${response.status}`)
     }
 
-    // Parse the ADK SSE stream directly from response.body.
-    // Unlike the old runChat server function approach, fetch's reader.read() throws
-    // AbortError immediately when controller.abort() is called — no intermediate
-    // layer to swallow it.
-    const reader = response.body!.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    try {
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() ?? ''
-
-        for (const part of parts) {
-          const lines = part.split('\n')
-          let data = ''
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              data += line.slice(6)
-            }
-          }
-          if (data) {
-            try {
-              processEventIntoCache(
-                queryClient,
-                sessionId,
-                JSON.parse(data) as AdkEvent,
-              )
-            } catch {
-              // Skip unparseable events
-            }
-          }
-        }
-      }
-    } finally {
-      reader.cancel()
-    }
+    await readSse(response.body!, (frame) => {
+      const event = parseEvent(frame.data)
+      if (!event) return
+      setChat(queryClient, sessionId, (prev) => ({
+        ...applyEventToState(prev, event),
+        historyEvents: event.partial
+          ? prev.historyEvents
+          : [...prev.historyEvents, event],
+        live: null,
+      }))
+    })
   } catch (err) {
     if (controller.signal.aborted) {
       return
     }
     const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-
-    queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => {
-      if (!prev) return INITIAL_CHAT_STATE
-      return { ...prev, error: errorMessage }
-    })
+    setChat(queryClient, sessionId, (prev) => ({
+      ...prev,
+      error: errorMessage,
+    }))
     console.error(`SSE stream error for session ${sessionId}:`, err)
   } finally {
     // Mark all streaming messages as complete.
     // Guard against the race where a new stream has already started for this
     // session (e.g. the user sent a new message while this one was streaming):
     // in that case the new stream owns the state and we must not reset it.
-    queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => {
-      if (!prev) return INITIAL_CHAT_STATE
+    setChat(queryClient, sessionId, (prev) => {
       if (abortControllers.get(sessionId) !== controller) return prev
       return {
         ...prev,
@@ -189,73 +778,11 @@ export async function startChatStream({
     })
     if (abortControllers.get(sessionId) === controller) {
       abortControllers.delete(sessionId)
+      legacyStreams.delete(sessionId)
       // Refresh session list so lastEventTime (written by agent callback) is picked up immediately.
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
     }
   }
-}
-
-/**
- * Sends a message from the user, updating the cache immediately
- * and triggering the background SSE stream.
- *
- * Attachments are passed as native File objects and converted to base64
- * inline-data parts here, just before sending.
- */
-export async function sendChatMessage(
-  queryClient: QueryClient,
-  sessionId: string,
-  text: string,
-  files: Array<File> = [],
-) {
-  const queryKey = chatCacheKey(sessionId)
-
-  // Set isStreaming:true before any async work so that components mounting
-  // during file reading (e.g. after navigate()) don't see isStreaming:false
-  // and trigger other state changes like markSessionOpened.
-  queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => ({
-    ...(prev ?? INITIAL_CHAT_STATE),
-    isStreaming: true,
-    error: null,
-  }))
-
-  // Build the message parts: text first (when present), then one inline-data
-  // part per attachment.
-  const parts: Array<AdkPart> = []
-  if (text) parts.push({ text })
-  if (files.length > 0) {
-    parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
-  }
-
-  // Add user message to state
-  queryClient.setQueryData<ChatSessionState>(queryKey, (prev) => {
-    if (!prev) return INITIAL_CHAT_STATE
-    return {
-      ...prev,
-      messages: [
-        ...prev.messages,
-        {
-          id: genId(),
-          role: 'user',
-          author: 'user',
-          parts,
-          timestamp: new Date(),
-        },
-      ],
-    }
-  })
-
-  // Start the background stream
-  startChatStream({
-    queryClient,
-    sessionId,
-    payload: {
-      newMessage: {
-        role: 'user',
-        parts,
-      },
-    },
-  })
 }
 
 /**
@@ -342,7 +869,7 @@ export function applyEventToState(
       messages: [
         ...prev.messages,
         {
-          id: genId(),
+          id: positionalId(prev.messages),
           role: 'user',
           author: event.author || 'user',
           parts: [...userParts],
@@ -366,7 +893,7 @@ export function applyEventToState(
       messages = [
         ...messages,
         {
-          id: genId(),
+          id: positionalId(messages),
           role: 'model',
           author: event.author || 'writer',
           // Partial events carry ephemeral adk-<uuid> IDs; exclude functionCall parts and
@@ -445,33 +972,9 @@ export function applyEventToState(
 export function convertAdkSessionToChatState(
   session: AdkSession,
 ): ChatSessionState {
-  let state = INITIAL_CHAT_STATE
-  for (const event of session.events ?? []) {
-    state = applyEventToState(state, event)
-  }
-
-  // Ensure we are not in streaming state after loading history
-  state = {
-    ...state,
-    isStreaming: false,
-    messages: state.messages.map((m) => ({ ...m, isStreaming: false })),
-  }
-  return state
-}
-
-/**
- * Processes a single ADK SSE event directly into the TanStack Query cache.
- */
-function processEventIntoCache(
-  queryClient: QueryClient,
-  sessionId: string,
-  event: AdkEvent,
-) {
-  queryClient.setQueryData<ChatSessionState>(
-    chatCacheKey(sessionId),
-    (prev) => {
-      if (!prev) return INITIAL_CHAT_STATE
-      return applyEventToState(prev, event)
-    },
+  return rebuildChatState(
+    INITIAL_CHAT_STATE,
+    completeEvents(session.events),
+    null,
   )
 }
