@@ -6,6 +6,7 @@ import type { CofactsUser } from '@/lib/auth'
 import { Logo } from '@/components/Logo'
 import { UserAvatar } from '@/components/UserAvatar'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { inputBoxClassName } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +30,7 @@ export const NAV_LINKS = {
   tutorial: { label: '使用教學', href: 'https://cofacts.tw/tutorial' },
   about: { label: '關於', href: 'https://cofacts.tw/about' },
   contact: { label: '聯絡我們', href: 'mailto:cofacts@googlegroups.com' },
-  report: { label: '回報可疑訊息', href: 'https://cofacts.tw/report' },
+  report: { label: '回報可疑訊息', href: '/report' },
   line: { label: '加LINE查謠言', href: 'https://line.me/R/ti/p/@cofacts' },
   search: { href: 'https://cofacts.tw/search' },
 } as const
@@ -64,7 +65,7 @@ export type SiteNavUser = Pick<
 
 export interface SiteNavProps {
   /** The page this nav is on; that item gets `aria-current="page"` and the underline. */
-  current?: NavKey
+  current?: NavKey | 'report'
   /** `undefined` while the session is loading. */
   user: SiteNavUser | null | undefined
   /** Number of new fact-checks, shown as a badge on 最新查核 (99+ above 99). */
@@ -179,22 +180,23 @@ export function SiteNav({
                 rel="noopener noreferrer"
                 className={cn(
                   buttonVariants({ variant: 'outline', withIcon: true }),
-                  'hidden min-h-[40px] border-transparent bg-surface-raised xl:inline-flex',
+                  'hidden border-transparent bg-surface-raised xl:inline-flex',
                 )}
               >
                 <LineMark />
                 {NAV_LINKS.line.label}
               </a>
-              <a
+              <NavAnchor
                 href={NAV_LINKS.report.href}
+                aria-current={current === 'report' ? 'page' : undefined}
                 className={cn(
                   buttonVariants({ variant: 'primary', withIcon: true }),
-                  'hidden min-h-[40px] lg:inline-flex',
+                  'hidden lg:inline-flex',
                 )}
               >
                 <MaterialIcon name="flag_2" filled />
                 {NAV_LINKS.report.label}
-              </a>
+              </NavAnchor>
               <AccountControl
                 user={user}
                 onLogin={onLogin}
@@ -254,6 +256,9 @@ export function SiteNav({
                   ref={i === 0 ? firstItemRef : undefined}
                   href={NAV_LINKS[key].href}
                   aria-current={current === key ? 'page' : undefined}
+                  // A local link navigates without a reload, so the menu would stay open over
+                  // the new page.
+                  onClick={() => setMenuOpen(false)}
                   className="text-type-ui-m text-text-on-dark hover:underline aria-[current=page]:underline"
                 >
                   {NAV_LINKS[key].label}
@@ -263,8 +268,10 @@ export function SiteNav({
             <li className="text-type-ui-m text-text-on-dark">LINE:@cofacts</li>
           </ul>
           <div className="flex w-full flex-col gap-spacing-8">
-            <a
+            <NavAnchor
               href={NAV_LINKS.report.href}
+              aria-current={current === 'report' ? 'page' : undefined}
+              onClick={() => setMenuOpen(false)}
               className={cn(
                 buttonVariants({ size: 'lg', withIcon: true }),
                 'w-full',
@@ -272,7 +279,7 @@ export function SiteNav({
             >
               <MaterialIcon name="flag_2" filled />
               {NAV_LINKS.report.label}
-            </a>
+            </NavAnchor>
             <a
               href={NAV_LINKS.line.href}
               target="_blank"
@@ -370,7 +377,7 @@ function AccountControl({
       <Button
         variant="secondary"
         iconStart="account_circle"
-        className={cn('min-h-[40px]', className)}
+        className={className}
         onClick={onLogin}
       >
         登入
@@ -426,7 +433,10 @@ function SearchForm({ onClose }: { onClose: () => void }) {
           type="search"
           autoFocus
           placeholder="搜尋可疑訊息或查核報告..."
-          className="min-h-[36px] w-full rounded-radius-5 border-[0.5px] border-border-control bg-surface-base py-spacing-8 pr-spacing-12 pl-[40px] text-type-ui-s text-text-primary placeholder:text-text-tertiary focus:border focus:border-border-accent"
+          className={cn(
+            inputBoxClassName,
+            'min-h-[36px] py-spacing-8 pr-spacing-12 pl-[40px] text-type-ui-s',
+          )}
         />
       </label>
       <Button

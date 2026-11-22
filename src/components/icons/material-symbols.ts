@@ -19,6 +19,7 @@ export const MATERIAL_SYMBOLS = [
   'add_reaction',
   'arrow_back',
   'arrow_drop_down',
+  'arrow_drop_up',
   'arrow_forward',
   'attach_file',
   'bookmark',

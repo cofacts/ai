@@ -96,15 +96,12 @@ const HANDLED_TYPES = new Set([
 /** Types that are read but produce nothing of their own, or that have no output yet. */
 const SKIPPED_TYPES: Record<string, string> = {
   fontSizes: 'only read through the typography tokens that reference them',
-  // Penpot's stroke width tokens (`1`, `2`, `3`, `4`, `s-05`). Deliberately not generated yet:
-  // - Their names are bare numbers, unlike the prefixed spacing-* / type-* tokens, so keeping
-  //   the Penpot name in the class would give border-1 / border-s-05, which says nothing about
-  //   what it is (and border-1 / border-2 already mean 1px / 2px in Tailwind).
-  // - Penpot doesn't use them everywhere: the focus rings' 4px and 2px strokes are plain
-  //   numbers, as are some Button variants.
-  // Revisit once the naming is settled with the designer. Until then, border widths are
-  // Tailwind's own (border, border-2) or arbitrary values (border-[0.5px]).
-  borderWidth: 'no output yet: token naming to be confirmed with the designer',
+  // Penpot's stroke width tokens: `stroke-05`, `stroke-1`, `stroke-2`, `stroke-3`, `stroke-4`
+  // (0.5 / 1 / 2 / 3 / 4px). The designer renamed them from bare numbers (`1`, `s-05`) and bound
+  // them on every stroke in Penpot, including the focus rings. Not generated yet: how they map
+  // to Tailwind classes is still to be decided. Until then, border widths are Tailwind's own
+  // (border, border-2) or arbitrary values (border-[0.5px]).
+  borderWidth: 'no output yet: class mapping for stroke-* to be decided',
 }
 for (const [setName, set] of Object.entries({ Global, Light, Dark })) {
   for (const [name, token] of Object.entries(set)) {

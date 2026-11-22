@@ -11,17 +11,22 @@ function PopoverTrigger({ ...props }: PopoverPrimitive.Trigger.Props) {
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
 }
 
+/**
+ * Floating panels share the Select popup's look (Penpot Base/Select, State = open): 5px radius,
+ * control border and the button shadow, so Select, DropdownMenu and Popover read as one family.
+ */
 function PopoverContent({
   className,
   align = 'center',
   alignOffset = 0,
   side = 'bottom',
   sideOffset = 4,
+  anchor,
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
     PopoverPrimitive.Positioner.Props,
-    'align' | 'alignOffset' | 'side' | 'sideOffset'
+    'align' | 'alignOffset' | 'side' | 'sideOffset' | 'anchor'
   >) {
   return (
     <PopoverPrimitive.Portal>
@@ -30,12 +35,13 @@ function PopoverContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
+        anchor={anchor}
         className="isolate z-50"
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(
-            'z-50 flex w-[288px] origin-(--transform-origin) flex-col gap-spacing-16 rounded-radius-10 bg-surface-base p-spacing-16 text-type-body-s text-text-primary shadow-btn-shadow outline-hidden duration-100 data-[side=bottom]:slide-in-from-top-[2px] data-[side=inline-end]:slide-in-from-left-[2px] data-[side=inline-start]:slide-in-from-right-[2px] data-[side=left]:slide-in-from-right-[2px] data-[side=right]:slide-in-from-left-[2px] data-[side=top]:slide-in-from-bottom-[2px] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+            'z-50 flex w-[288px] origin-(--transform-origin) flex-col gap-spacing-16 rounded-radius-5 border border-border-control bg-surface-base p-spacing-16 text-type-body-s text-text-primary shadow-btn-shadow outline-hidden duration-100 data-[side=bottom]:slide-in-from-top-[2px] data-[side=inline-end]:slide-in-from-left-[2px] data-[side=inline-start]:slide-in-from-right-[2px] data-[side=left]:slide-in-from-right-[2px] data-[side=right]:slide-in-from-left-[2px] data-[side=top]:slide-in-from-bottom-[2px] data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
             className,
           )}
           {...props}

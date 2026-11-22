@@ -159,7 +159,7 @@ export function ChatInput({
   return (
     <div className="px-spacing-12 md:px-spacing-16 pb-spacing-12 md:pb-spacing-16 pt-spacing-8 bg-surface-base shrink-0 z-10">
       <div
-        className={`relative rounded-radius-10 shadow-btn-shadow border bg-surface-base focus-within:border-border-accent transition-all ${isDragging && !disabled && !isStreaming ? 'border-border-accent' : 'border-border-subtle'}`}
+        className={`relative rounded-radius-10 shadow-btn-shadow border bg-surface-base focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-border-strong transition-all ${isDragging && !disabled && !isStreaming ? 'border-border-accent' : 'border-border-subtle'}`}
         onDragOver={handleDragOver}
         onDragEnter={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -194,7 +194,7 @@ export function ChatInput({
             }
           }}
           disabled={disabled || isStreaming}
-          className="w-full bg-transparent border-none p-spacing-12 min-h-[50px] max-h-[128px] resize-none text-type-body-s rounded-radius-10"
+          className="w-full bg-transparent border-none px-spacing-12 py-spacing-8 min-h-[40px] max-h-[128px] resize-none text-type-body-s rounded-radius-10 focus-visible:[box-shadow:none] focus-visible:outline-none"
           placeholder={placeholder}
         />
 
@@ -213,7 +213,7 @@ export function ChatInput({
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isStreaming}
             title="附加檔案"
-            className="shrink-0 p-[6px] text-text-tertiary rounded-radius-10 hover:bg-surface-raised transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+            className="shrink-0 p-[6px] text-text-tertiary rounded-radius-10 hover:bg-surface-raised transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <MaterialIcon name="attach_file" size={24} />
           </button>
@@ -241,7 +241,7 @@ export function ChatInput({
           <button
             onClick={isStreaming ? onStop : handleSubmit}
             disabled={(!isStreaming && !canSend) || disabled}
-            className="shrink-0 p-[6px] bg-surface-accent text-text-on-accent rounded-radius-10 hover:bg-surface-accent-subtle transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+            className="shrink-0 p-[6px] bg-surface-accent text-text-on-accent rounded-radius-10 hover:bg-surface-accent-subtle transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <MaterialIcon name={isStreaming ? 'stop' : 'send'} size={24} />
           </button>

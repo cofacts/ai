@@ -10,9 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AiRouteImport } from './routes/_ai'
+import { Route as ReportIndexRouteImport } from './routes/report/index'
 import { Route as AiIndexRouteImport } from './routes/_ai/index'
+import { Route as ReportCheckRouteImport } from './routes/report/check'
+import { Route as ReportArticleIdRouteImport } from './routes/report/$articleId'
 import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
 import { Route as listsArticlesRouteImport } from './routes/(lists)/articles'
+import { Route as ArticleIdIndexRouteImport } from './routes/article.$id/index'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as AiSessionSessionIdRouteImport } from './routes/_ai/session.$sessionId'
 import { Route as ApiRunsSessionIdActionRouteImport } from './routes/api/runs.$sessionId.$action'
@@ -22,10 +26,25 @@ const AiRoute = AiRouteImport.update({
   id: '/_ai',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportIndexRoute = ReportIndexRouteImport.update({
+  id: '/report/',
+  path: '/report/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AiIndexRoute = AiIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AiRoute,
+} as any)
+const ReportCheckRoute = ReportCheckRouteImport.update({
+  id: '/report/check',
+  path: '/report/check',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportArticleIdRoute = ReportArticleIdRouteImport.update({
+  id: '/report/$articleId',
+  path: '/report/$articleId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRunSseRoute = ApiRunSseRouteImport.update({
   id: '/api/run-sse',
@@ -35,6 +54,11 @@ const ApiRunSseRoute = ApiRunSseRouteImport.update({
 const listsArticlesRoute = listsArticlesRouteImport.update({
   id: '/(lists)/articles',
   path: '/articles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ArticleIdIndexRoute = ArticleIdIndexRouteImport.update({
+  id: '/article/$id/',
+  path: '/article/$id/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
@@ -63,17 +87,25 @@ export interface FileRoutesByFullPath {
   '/': typeof AiIndexRoute
   '/articles': typeof listsArticlesRoute
   '/api/run-sse': typeof ApiRunSseRoute
+  '/report/$articleId': typeof ReportArticleIdRoute
+  '/report/check': typeof ReportCheckRoute
+  '/report/': typeof ReportIndexRoute
   '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/article/$id/': typeof ArticleIdIndexRoute
   '/api/runs/$sessionId/$action': typeof ApiRunsSessionIdActionRoute
   '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesByTo {
   '/articles': typeof listsArticlesRoute
   '/api/run-sse': typeof ApiRunSseRoute
+  '/report/$articleId': typeof ReportArticleIdRoute
+  '/report/check': typeof ReportCheckRoute
   '/': typeof AiIndexRoute
+  '/report': typeof ReportIndexRoute
   '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/article/$id': typeof ArticleIdIndexRoute
   '/api/runs/$sessionId/$action': typeof ApiRunsSessionIdActionRoute
   '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
@@ -82,9 +114,13 @@ export interface FileRoutesById {
   '/_ai': typeof AiRouteWithChildren
   '/(lists)/articles': typeof listsArticlesRoute
   '/api/run-sse': typeof ApiRunSseRoute
+  '/report/$articleId': typeof ReportArticleIdRoute
+  '/report/check': typeof ReportCheckRoute
   '/_ai/': typeof AiIndexRoute
+  '/report/': typeof ReportIndexRoute
   '/_ai/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/article/$id/': typeof ArticleIdIndexRoute
   '/api/runs/$sessionId/$action': typeof ApiRunsSessionIdActionRoute
   '/_ai/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
@@ -94,17 +130,25 @@ export interface FileRouteTypes {
     | '/'
     | '/articles'
     | '/api/run-sse'
+    | '/report/$articleId'
+    | '/report/check'
+    | '/report/'
     | '/session/$sessionId'
     | '/api/auth/callback'
+    | '/article/$id/'
     | '/api/runs/$sessionId/$action'
     | '/session/$sessionId/tool/$toolCallId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/articles'
     | '/api/run-sse'
+    | '/report/$articleId'
+    | '/report/check'
     | '/'
+    | '/report'
     | '/session/$sessionId'
     | '/api/auth/callback'
+    | '/article/$id'
     | '/api/runs/$sessionId/$action'
     | '/session/$sessionId/tool/$toolCallId'
   id:
@@ -112,9 +156,13 @@ export interface FileRouteTypes {
     | '/_ai'
     | '/(lists)/articles'
     | '/api/run-sse'
+    | '/report/$articleId'
+    | '/report/check'
     | '/_ai/'
+    | '/report/'
     | '/_ai/session/$sessionId'
     | '/api/auth/callback'
+    | '/article/$id/'
     | '/api/runs/$sessionId/$action'
     | '/_ai/session/$sessionId/tool/$toolCallId'
   fileRoutesById: FileRoutesById
@@ -123,7 +171,11 @@ export interface RootRouteChildren {
   AiRoute: typeof AiRouteWithChildren
   listsArticlesRoute: typeof listsArticlesRoute
   ApiRunSseRoute: typeof ApiRunSseRoute
+  ReportArticleIdRoute: typeof ReportArticleIdRoute
+  ReportCheckRoute: typeof ReportCheckRoute
+  ReportIndexRoute: typeof ReportIndexRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
+  ArticleIdIndexRoute: typeof ArticleIdIndexRoute
   ApiRunsSessionIdActionRoute: typeof ApiRunsSessionIdActionRoute
 }
 
@@ -136,12 +188,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AiRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/report/': {
+      id: '/report/'
+      path: '/report'
+      fullPath: '/report/'
+      preLoaderRoute: typeof ReportIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_ai/': {
       id: '/_ai/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AiIndexRouteImport
       parentRoute: typeof AiRoute
+    }
+    '/report/check': {
+      id: '/report/check'
+      path: '/report/check'
+      fullPath: '/report/check'
+      preLoaderRoute: typeof ReportCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/report/$articleId': {
+      id: '/report/$articleId'
+      path: '/report/$articleId'
+      fullPath: '/report/$articleId'
+      preLoaderRoute: typeof ReportArticleIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/run-sse': {
       id: '/api/run-sse'
@@ -155,6 +228,13 @@ declare module '@tanstack/react-router' {
       path: '/articles'
       fullPath: '/articles'
       preLoaderRoute: typeof listsArticlesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/article/$id/': {
+      id: '/article/$id/'
+      path: '/article/$id'
+      fullPath: '/article/$id/'
+      preLoaderRoute: typeof ArticleIdIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/callback': {
@@ -215,7 +295,11 @@ const rootRouteChildren: RootRouteChildren = {
   AiRoute: AiRouteWithChildren,
   listsArticlesRoute: listsArticlesRoute,
   ApiRunSseRoute: ApiRunSseRoute,
+  ReportArticleIdRoute: ReportArticleIdRoute,
+  ReportCheckRoute: ReportCheckRoute,
+  ReportIndexRoute: ReportIndexRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
+  ArticleIdIndexRoute: ArticleIdIndexRoute,
   ApiRunsSessionIdActionRoute: ApiRunsSessionIdActionRoute,
 }
 export const routeTree = rootRouteImport

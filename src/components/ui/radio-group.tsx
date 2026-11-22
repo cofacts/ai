@@ -17,7 +17,11 @@ function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
   )
 }
 
-/** A 20px circle; selected = thick (3px) strong border. */
+/**
+ * A 20px circle (Penpot State: Default / Hover / Selected / Disabled). Unselected is a thin
+ * control border that turns strong on hover; selected is a solid circle with a dot in the
+ * middle, like a native radio.
+ */
 function RadioGroupItem({ className, ...props }: Radio.Root.Props) {
   return (
     <Radio.Root
@@ -27,12 +31,14 @@ function RadioGroupItem({ className, ...props }: Radio.Root.Props) {
       render={<button type="button" />}
       className={cn(
         'relative flex size-spacing-20 shrink-0 rounded-full border border-border-control bg-surface-base',
-        'after:absolute after:-inset-[6px] data-checked:border-3 data-checked:border-border-strong',
+        'after:absolute after:-inset-[6px] hover:border-border-strong data-checked:border-icon-default data-checked:bg-icon-default',
         'disabled:pointer-events-none disabled:opacity-50',
         className,
       )}
       {...props}
-    />
+    >
+      <Radio.Indicator className="m-auto size-spacing-8 rounded-full bg-surface-base" />
+    </Radio.Root>
   )
 }
 
