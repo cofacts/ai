@@ -30,6 +30,7 @@ from typing import Any
 from google.adk.cli.service_registry import get_service_registry
 from google.adk.errors.session_not_found_error import SessionNotFoundError
 from google.adk.events.event import Event
+from google.adk.events.event_actions import EventActions
 from google.adk.sessions import _session_util
 from google.adk.sessions.database_session_service import (
     DatabaseSessionService,
@@ -55,14 +56,20 @@ def is_state_only_write(event: Event) -> bool:
 
     Matches what ADK's PATCH route appends: an ``p-`` invocation, no content,
     and no action besides ``state_delta``. Anything else is left to ADK.
+
+    The ``p-`` prefix is what tells it apart from a turn's own state writes: an
+    after-agent callback setting ``callback_context.state`` (e.g. our
+    ``lastEventTime``) appends the same content-less, state-only event, under
+    the turn's ``e-`` invocation. Those stay on ADK's path.
     """
     if not event.invocation_id.startswith(STATE_ONLY_INVOCATION_PREFIX):
         return False
     if event.partial or event.content is not None:
         return False
-    # exclude_none too: agent_state dumps as an explicit None even when unset.
-    actions = event.actions.model_dump(exclude_defaults=True, exclude_none=True)
-    return set(actions) <= {"state_delta"}
+    # Equal to a fresh EventActions carrying only this state_delta, i.e. every
+    # other action still at its default. Compares values, so a default dict
+    # that was filled in place (actions.artifact_delta[...] = ...) counts.
+    return event.actions == EventActions(state_delta=event.actions.state_delta)
 
 
 class CofactsSessionService(DatabaseSessionService):

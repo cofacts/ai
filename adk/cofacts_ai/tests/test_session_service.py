@@ -194,8 +194,16 @@ async def test_patch_on_missing_session_raises(service):
     [
         (patch_event({"k": 1}), True),
         (patch_event({}), True),
-        # A turn's event, even one that only carries state.
-        (Event(invocation_id="e-1", author="writer"), False),
+        # A turn's own state write, e.g. an after-agent callback setting
+        # lastEventTime: same shape as a PATCH, but it stays on ADK's path.
+        (
+            Event(
+                invocation_id="e-1",
+                author="writer",
+                actions=EventActions(state_delta={"lastEventTime": 1.0}),
+            ),
+            False,
+        ),
         (
             Event(
                 invocation_id="p-x",
@@ -217,6 +225,14 @@ async def test_patch_on_missing_session_raises(service):
 )
 def test_is_state_only_write(event, expected):
     assert is_state_only_write(event) is expected
+
+
+def test_is_state_only_write_sees_actions_filled_in_place():
+    """ADK fills default dicts in place (actions.artifact_delta[...] = ...),
+    which model_fields_set doesn't record; the value comparison does."""
+    event = patch_event({"k": 1})
+    event.actions.artifact_delta["file.png"] = 1
+    assert not is_state_only_write(event)
 
 
 class ToolThenTextModel(BaseLlm):
