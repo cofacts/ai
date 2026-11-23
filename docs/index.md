@@ -157,8 +157,11 @@ Cloud SQL proxy in prod. Production (GCE) uses the `adk` database; every Cloud R
 (dev.cofacts.ai and PR previews) uses `adk_staging` on the same instance, a clone of production:
 the `DATABASE_URL` secret those deploys read points at it. Chat artifacts (e.g. the
 Google-search suggestion widget, uploaded files) are stored in GCS.
+The session service is `CofactsSessionService`: state-only writes such as `lastOpenedAt` and
+renames are stored without bumping ADK's revision marker, so they never end a running turn.
 → decisions: [Postgres session persistence](decisions/20260506-postgres-session-persistence.md),
-[writer on Claude Haiku](decisions/20261021-writer-on-claude-haiku.md).
+[writer on Claude Haiku](decisions/20261021-writer-on-claude-haiku.md),
+[state-only writes skip the revision](decisions/20261119-state-only-writes-skip-revision.md).
 
 ## Observability
 
