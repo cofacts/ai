@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { ADK_APP_NAME, adkClient } from './adkClient'
 import { handleAdkError, handleAdkResponseError } from './adk-errors'
 import { resolveAdkUserIdOrThrow } from '@/server/adkUser'
+import { runBus } from '@/server/runs'
 
 const SESSION_TITLE_KEY = 'title'
 
@@ -124,7 +125,20 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
   .inputValidator((input: UpdateSessionInput) => input)
   .handler(async ({ data: { sessionId, title } }) => {
     const userId = await resolveAdkUserIdOrThrow()
-    const { data, error } = await adkClient.PATCH(
+    // Writing session state while a run is going makes the run's next write
+    // fail with StaleSessionError, killing it: a rename waits for the run.
+    const bus = runBus()
+    if (bus) {
+      if (
+        await bus.writeState(userId, sessionId, { [SESSION_TITLE_KEY]: title })
+      ) {
+        throw new Error(SESSION_BUSY_MESSAGE)
+      }
+      return { ok: true }
+    }
+    // Background runs off: a run is tied to its open stream, and the sidebar
+    // hides renaming while one streams.
+    const { error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
         params: {
@@ -140,7 +154,7 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
       },
     )
     if (error) handleAdkError(error)
-    return data
+    return { ok: true }
   })
 
 /**
@@ -184,6 +198,16 @@ export const markSessionOpened = createServerFn({ method: 'POST' })
   .inputValidator((sessionId: string) => sessionId)
   .handler(async ({ data: sessionId }) => {
     const userId = await resolveAdkUserIdOrThrow()
+    const opened = { [SESSION_LAST_OPENED_KEY]: Date.now() / 1000 }
+    // Skipped while a run holds the session ({deferred: true}); the session
+    // page calls again once the run ends.
+    const bus = runBus()
+    if (bus) {
+      return {
+        ok: true,
+        deferred: await bus.writeState(userId, sessionId, opened),
+      }
+    }
     const { error } = await adkClient.PATCH(
       '/apps/{app_name}/users/{user_id}/sessions/{session_id}',
       {
@@ -195,11 +219,12 @@ export const markSessionOpened = createServerFn({ method: 'POST' })
           },
         },
         // Store as seconds (Date.now()/1000) to match Python's time.time() for comparison.
-        body: {
-          stateDelta: { [SESSION_LAST_OPENED_KEY]: Date.now() / 1000 },
-        },
+        body: { stateDelta: opened },
       },
     )
     if (error) handleAdkError(error)
-    return { ok: true }
+    return { ok: true, deferred: false }
   })
+
+/** Thrown by updateSessionTitle while a run holds the session. */
+export const SESSION_BUSY_MESSAGE = '對話還在執行中，請等回覆完成後再改名。'

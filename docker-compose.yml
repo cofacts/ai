@@ -8,9 +8,12 @@ services:
     environment:
       - PORT=3000
       - ADK_URL=http://backend:8000
+      - REDIS_URL=redis://redis:6379
     depends_on:
       backend:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   backend:
     build:
@@ -36,3 +39,8 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+
+  # Background runs (src/server/runBus.server.ts, in the BFF). Production uses
+  # the redis container rumors-line-bot already runs on the same network.
+  redis:
+    image: redis:alpine

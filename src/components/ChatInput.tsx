@@ -11,7 +11,8 @@ const drafts = new Map<string, string>()
 const ACCEPT = 'image/*,application/pdf,audio/*,video/*,text/plain'
 
 interface ChatInputProps {
-  onSend: (text: string, files: Array<File>) => void
+  /** May resolve to false when the message wasn't sent; the draft comes back. */
+  onSend: (text: string, files: Array<File>) => void | Promise<boolean>
   onStop?: () => void
   isStreaming?: boolean
   disabled?: boolean
@@ -131,7 +132,9 @@ export function ChatInput({
 
   useBlocker({
     shouldBlockFn: () => false,
-    enableBeforeUnload: () => isStreaming || !!value.trim() || files.length > 0,
+    // A run goes on in the background after the page closes, so only an
+    // unsent draft is worth a warning.
+    enableBeforeUnload: () => !!value.trim() || files.length > 0,
   })
 
   const canSend = !!value.trim() || files.length > 0
@@ -139,9 +142,18 @@ export function ChatInput({
   const handleSubmit = useCallback(() => {
     if ((!value.trim() && files.length === 0) || disabled) return
     drafts.delete(sessionId)
-    onSend(value.trim(), files)
+    const text = value.trim()
+    const sent = onSend(text, files)
     setValue('')
     setFiles([])
+    if (sent instanceof Promise) {
+      void sent.then((ok) => {
+        if (ok) return
+        setValue(text)
+        setFiles(files)
+        if (text) drafts.set(sessionId, text)
+      })
+    }
   }, [value, files, disabled, onSend, sessionId])
 
   return (

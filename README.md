@@ -59,6 +59,10 @@ cp .env.example .env
 
 Edit `.env` to configure your browser-safe variables (e.g. Langfuse keys).
 
+Optionally set `REDIS_URL` there (e.g. `redis://localhost:6379` with a local `redis-server`) to
+turn on background runs: a turn keeps going after the browser tab closes, and every open window
+shows every run live. Without it, closing the tab stops the turn.
+
 5. Start the development server:
 
 ```bash

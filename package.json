@@ -47,6 +47,7 @@
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
     "react-peeps": "0.1.10",
+    "redis": "^5.12.4",
     "remark-gfm": "^4.0.1",
     "shadcn": "^3.8.5",
     "string-similarity": "^4.0.4",

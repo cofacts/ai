@@ -19,6 +19,9 @@ import { Route as listsArticlesRouteImport } from './routes/(lists)/articles'
 import { Route as ArticleIdIndexRouteImport } from './routes/article.$id/index'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as AiSessionSessionIdRouteImport } from './routes/_ai/session.$sessionId'
+import { Route as ApiRunsSessionIdStartRouteImport } from './routes/api/runs.$sessionId.start'
+import { Route as ApiRunsSessionIdEventsRouteImport } from './routes/api/runs.$sessionId.events'
+import { Route as ApiRunsSessionIdCancelRouteImport } from './routes/api/runs.$sessionId.cancel'
 import { Route as AiSessionSessionIdToolToolCallIdRouteImport } from './routes/_ai/session.$sessionId.tool.$toolCallId'
 
 const AiRoute = AiRouteImport.update({
@@ -70,6 +73,21 @@ const AiSessionSessionIdRoute = AiSessionSessionIdRouteImport.update({
   path: '/session/$sessionId',
   getParentRoute: () => AiRoute,
 } as any)
+const ApiRunsSessionIdStartRoute = ApiRunsSessionIdStartRouteImport.update({
+  id: '/api/runs/$sessionId/start',
+  path: '/api/runs/$sessionId/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRunsSessionIdEventsRoute = ApiRunsSessionIdEventsRouteImport.update({
+  id: '/api/runs/$sessionId/events',
+  path: '/api/runs/$sessionId/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRunsSessionIdCancelRoute = ApiRunsSessionIdCancelRouteImport.update({
+  id: '/api/runs/$sessionId/cancel',
+  path: '/api/runs/$sessionId/cancel',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AiSessionSessionIdToolToolCallIdRoute =
   AiSessionSessionIdToolToolCallIdRouteImport.update({
     id: '/tool/$toolCallId',
@@ -87,6 +105,9 @@ export interface FileRoutesByFullPath {
   '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/article/$id/': typeof ArticleIdIndexRoute
+  '/api/runs/$sessionId/cancel': typeof ApiRunsSessionIdCancelRoute
+  '/api/runs/$sessionId/events': typeof ApiRunsSessionIdEventsRoute
+  '/api/runs/$sessionId/start': typeof ApiRunsSessionIdStartRoute
   '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesByTo {
@@ -99,6 +120,9 @@ export interface FileRoutesByTo {
   '/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/article/$id': typeof ArticleIdIndexRoute
+  '/api/runs/$sessionId/cancel': typeof ApiRunsSessionIdCancelRoute
+  '/api/runs/$sessionId/events': typeof ApiRunsSessionIdEventsRoute
+  '/api/runs/$sessionId/start': typeof ApiRunsSessionIdStartRoute
   '/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRoutesById {
@@ -113,6 +137,9 @@ export interface FileRoutesById {
   '/_ai/session/$sessionId': typeof AiSessionSessionIdRouteWithChildren
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/article/$id/': typeof ArticleIdIndexRoute
+  '/api/runs/$sessionId/cancel': typeof ApiRunsSessionIdCancelRoute
+  '/api/runs/$sessionId/events': typeof ApiRunsSessionIdEventsRoute
+  '/api/runs/$sessionId/start': typeof ApiRunsSessionIdStartRoute
   '/_ai/session/$sessionId/tool/$toolCallId': typeof AiSessionSessionIdToolToolCallIdRoute
 }
 export interface FileRouteTypes {
@@ -127,6 +154,9 @@ export interface FileRouteTypes {
     | '/session/$sessionId'
     | '/api/auth/callback'
     | '/article/$id/'
+    | '/api/runs/$sessionId/cancel'
+    | '/api/runs/$sessionId/events'
+    | '/api/runs/$sessionId/start'
     | '/session/$sessionId/tool/$toolCallId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -139,6 +169,9 @@ export interface FileRouteTypes {
     | '/session/$sessionId'
     | '/api/auth/callback'
     | '/article/$id'
+    | '/api/runs/$sessionId/cancel'
+    | '/api/runs/$sessionId/events'
+    | '/api/runs/$sessionId/start'
     | '/session/$sessionId/tool/$toolCallId'
   id:
     | '__root__'
@@ -152,6 +185,9 @@ export interface FileRouteTypes {
     | '/_ai/session/$sessionId'
     | '/api/auth/callback'
     | '/article/$id/'
+    | '/api/runs/$sessionId/cancel'
+    | '/api/runs/$sessionId/events'
+    | '/api/runs/$sessionId/start'
     | '/_ai/session/$sessionId/tool/$toolCallId'
   fileRoutesById: FileRoutesById
 }
@@ -164,6 +200,9 @@ export interface RootRouteChildren {
   ReportIndexRoute: typeof ReportIndexRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ArticleIdIndexRoute: typeof ArticleIdIndexRoute
+  ApiRunsSessionIdCancelRoute: typeof ApiRunsSessionIdCancelRoute
+  ApiRunsSessionIdEventsRoute: typeof ApiRunsSessionIdEventsRoute
+  ApiRunsSessionIdStartRoute: typeof ApiRunsSessionIdStartRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -238,6 +277,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AiSessionSessionIdRouteImport
       parentRoute: typeof AiRoute
     }
+    '/api/runs/$sessionId/start': {
+      id: '/api/runs/$sessionId/start'
+      path: '/api/runs/$sessionId/start'
+      fullPath: '/api/runs/$sessionId/start'
+      preLoaderRoute: typeof ApiRunsSessionIdStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/runs/$sessionId/events': {
+      id: '/api/runs/$sessionId/events'
+      path: '/api/runs/$sessionId/events'
+      fullPath: '/api/runs/$sessionId/events'
+      preLoaderRoute: typeof ApiRunsSessionIdEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/runs/$sessionId/cancel': {
+      id: '/api/runs/$sessionId/cancel'
+      path: '/api/runs/$sessionId/cancel'
+      fullPath: '/api/runs/$sessionId/cancel'
+      preLoaderRoute: typeof ApiRunsSessionIdCancelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_ai/session/$sessionId/tool/$toolCallId': {
       id: '/_ai/session/$sessionId/tool/$toolCallId'
       path: '/tool/$toolCallId'
@@ -280,6 +340,9 @@ const rootRouteChildren: RootRouteChildren = {
   ReportIndexRoute: ReportIndexRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ArticleIdIndexRoute: ArticleIdIndexRoute,
+  ApiRunsSessionIdCancelRoute: ApiRunsSessionIdCancelRoute,
+  ApiRunsSessionIdEventsRoute: ApiRunsSessionIdEventsRoute,
+  ApiRunsSessionIdStartRoute: ApiRunsSessionIdStartRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

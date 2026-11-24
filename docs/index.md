@@ -15,13 +15,14 @@ repeating them. See [`AGENTS.md`](../AGENTS.md) for how to keep both up to date.
 ```mermaid
 flowchart LR
     B[Browser · React UI] -->|HttpOnly cookie| BFF[BFF / SSR server · TanStack Start + Nitro]
-    BFF -->|openapi-fetch + /run_sse proxy · Bearer token| ADK[ADK agent backend · Python · Google ADK]
+    BFF -->|openapi-fetch + /run_sse · Bearer token| ADK[ADK agent backend · Python · Google ADK]
     BFF -->|GraphQL · Bearer token| API[(rumors-api)]
     ADK -->|GraphQL tools · Bearer token| API
     ADK --> GEM[Gemini + Claude · Vertex AI]
     ADK --> VIS[Google Vision]
     ADK -->|gRPC · internal only| UR[url-resolver]
     ADK --> LF[Langfuse]
+    BFF -->|run registry| R[(Redis)]
 ```
 
 1. **Frontend + BFF** — a TanStack Start (React / Vite / Nitro) app at the repo root
@@ -149,6 +150,25 @@ is only the overview.
 
 Design record: the kb doc
 [Phase 3 網站遷移與前端架構](https://github.com/cofacts/kb/blob/main/src/technical-design/cofacts.ai/Phase%203%20網站遷移與前端架構.md).
+
+## Background runs
+
+A turn keeps running after the browser leaves. The browser starts it with
+`POST /api/runs/:sessionId/start`; the BFF (`src/server/runBus.ts`) opens ADK's own
+`/run_sse` in a task no browser request owns, so ADK doesn't cancel the run when the tab closes,
+and appends every frame to a per-session Redis Stream. Each open session page keeps one feed,
+`GET /api/runs/:sessionId/events?since=<event id>`, which never ends by itself: the stored events,
+then every run as it happens, from this window or any other, so a message sent in one window
+shows up in the others without a reload. One blocking Redis read per BFF process serves all open
+feeds. Stop is `POST .../cancel`: the BFF aborts its `/run_sse` request. Nothing polls.
+Session-state writes (`lastOpenedAt`, renames) wait while a run holds the session, since they
+would kill it. ADK's server is unchanged; one plugin (`KeepPartialOnAbortPlugin`) keeps the text a
+stopped run had streamed on ADK's abort marker. Redis is the rumors-line-bot container on GCE and Redis Cloud on
+Cloud Run (`REDIS_URL`, read by the BFF); without it, the frontend falls back to `/api/run-sse`,
+where closing the tab stops the run. On Cloud Run (dev.cofacts.ai, PR previews) an instance with
+no open request may be scaled in, which interrupts its runs once every window is closed (an open
+feed counts as a request); production on GCE has no such limit.
+→ decision: [background runs on Redis Streams](decisions/20261114-background-runs-redis-streams.md).
 
 ## Data & sessions
 
