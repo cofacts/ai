@@ -81,6 +81,12 @@ jobs:
   lint-frontend:
     name: Lint frontend (ESLint, Prettier, tsc, tokens, Vitest)
     runs-on: ubuntu-latest
+    services:
+      # For the background-run tests (src/server/__tests__/runBus.test.ts).
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
     steps:
       - uses: actions/checkout@v4
         with:
@@ -126,6 +132,8 @@ jobs:
       - name: Tests (Vitest unit tests and Storybook stories)
         if: ${{ !cancelled() }}
         run: pnpm test --coverage
+        env:
+          TEST_REDIS_URL: redis://localhost:6379/0
 
       # Report only: shows coverage of the lines this PR changes in the job
       # summary, without failing the job.
