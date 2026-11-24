@@ -153,6 +153,19 @@ describe('rebuildChatState', () => {
     expect(s.interrupted).toBe(false)
   })
 
+  test('a stopped answer keeps the text it had streamed', () => {
+    // KeepPartialOnAbortPlugin (adk) puts the streamed text on ADK's abort
+    // event, so it shows as the answer, cut where the run stopped.
+    const history = [
+      ev('a', 'user', 'q'),
+      ev('a', 'model', '講到一半', { errorCode: 'INVOCATION_ABORTED' }),
+    ]
+    const s = rebuildChatState(INITIAL_CHAT_STATE, history, null)
+    expect(texts(s)).toEqual(['q', '講到一半'])
+    expect(s.messages.at(-1)?.isStreaming).toBe(false)
+    expect(s.interrupted).toBe(false)
+  })
+
   test('message ids are positions, so a rebuild keeps them', () => {
     const history = [ev('a', 'user', 'q'), ev('a', 'model', 'x')]
     const s1 = rebuildChatState(INITIAL_CHAT_STATE, history, null)

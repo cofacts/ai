@@ -21,9 +21,10 @@ work.
 A second window on the same session had no way to see a run going on elsewhere either, nor
 a message sent from another window, short of reloading.
 
-Scope: BFF (new `src/server/runBus.ts` and `/api/runs/:sessionId/:action`,
-`markSessionOpened`, `updateSessionTitle`), frontend chat cache and session page, and
-deployment (Redis for Cloud Run and GCE, CPU throttling). ADK is unchanged.
+Scope: BFF (new `src/server/runBus.ts` and the `/api/runs/:sessionId/{events,start,cancel}`
+routes, `markSessionOpened`, `updateSessionTitle`), frontend chat cache and session page, one ADK
+plugin (`KeepPartialOnAbortPlugin`), and deployment (Redis for Cloud Run and GCE, CPU
+throttling). ADK's server and run flow are unchanged.
 
 Design write-up with sequence diagrams for each scenario:
 <https://claude.ai/code/artifact/476433b8-0352-4ab0-9148-796630816d41> (2026-10-30).
@@ -68,7 +69,7 @@ persistent):
 Chosen options: "Run registry in Redis Streams", because it decouples executing a run from
 watching it across processes, needs no fan-out code of our own, and reuses a Redis we already
 have; and "The BFF holds ADK's own `/run_sse` connection", because it gets the same behaviour
-with ADK unchanged (see the pros and cons below).
+with ADK's server unchanged (see the pros and cons below).
 
 How it works:
 
@@ -98,8 +99,12 @@ How it works:
   reconnects with `since`; nothing polls.
 - Stop is a request (`POST .../cancel`), not a browser disconnect: the owner aborts its
   `/run_sse` request, and ADK cancels the run and stores its `INVOCATION_ABORTED` marker. A
-  cancel landing on a non-owner process sets a Redis flag the owner checks every second. The
-  text being typed when a run stops is not kept, as on Claude on the web. The run's `end`
+  cancel landing on a non-owner process sets a Redis flag the owner checks every second.
+  ADK stores none of the partial events of the message being typed, so an ADK plugin,
+  `KeepPartialOnAbortPlugin`, remembers their text and puts it on the abort marker as ADK
+  appends it (`on_event_callback` sees every event before it is stored, and ADK merges the
+  fields a plugin sets onto it). History then keeps the answer cut where it stopped, and the
+  model sees on the next turn where it was interrupted. The run's `end`
   frame says `cancelled` (user) or `interrupted` (redeploy, 15-minute limit, error); a window
   watching offers "重新提問" for `interrupted`, and any window does for a turn whose history
   ends without an answer.
@@ -110,6 +115,8 @@ How it works:
   `lastOpenedAt` while a run holds the session, and refuses a rename then.
 - Without `REDIS_URL` the routes answer 503 `{"reason": "disabled"}` and the client falls
   back to `/api/run-sse`.
+- The BFF talks to Redis with `redis` (node-redis), the client Redis recommends for new
+  projects; ioredis is in best-effort maintenance.
 
 ### Consequences
 
@@ -167,16 +174,17 @@ How it works:
 - Good, because everything about Redis lives in one language, next to the client it serves.
 - Neutral, because a BFF restart now interrupts runs too; the BFF and ADK are always deployed
   together, so a redeploy already did.
-- Bad, because the text being typed when a run stops isn't stored: ADK's HTTP API can't add
-  an event with content, only state. Accepted: the window shows 中斷了 and 重新提問, and the
-  answer would have been incomplete anyway.
+- Neutral, because the text being typed when a run stops reaches history through an ADK
+  plugin on the abort marker rather than from the BFF, since ADK's HTTP API can't add an
+  event with content. A crashed ADK process runs no code, so that text is lost then, as with
+  #197.
 - Bad, because the stored history can't tell a user's stop from an interruption (ADK stores
   the same marker), so only a window that watched the end knows which it was.
 
 ### ADK runs it (cofacts/ai#197)
 
-- Good, because the owner can store the typed text with how the run ended, via ADK's own
-  session service.
+- Good, because the owner can store how the run ended (stop or interruption) with the typed
+  text, via ADK's own session service.
 - Bad, because it adds our routes to ADK's app and shares its `Runner`, found by reaching into
   `get_fast_api_app()`'s internals; about 1,000 lines of Python next to ADK.
 

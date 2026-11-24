@@ -1,4 +1,4 @@
-import Redis from 'ioredis'
+import { createClient } from 'redis'
 import {
   afterAll,
   afterEach,
@@ -7,6 +7,7 @@ import {
   describe,
   expect,
   test,
+  vi,
 } from 'vitest'
 import {
   AdkRunError,
@@ -17,7 +18,7 @@ import {
   lockKey,
   streamKey,
 } from '../runBus'
-import type { AdkAccess, StoredEvent } from '../runBus'
+import type { AdkAccess, Redis, StoredEvent } from '../runBus'
 
 // Background runs run from the BFF (runBus.ts), against a real Redis
 // (TEST_REDIS_URL; CI provides one) and a fake ADK: /run_sse streams scripted
@@ -65,6 +66,10 @@ class FakeAdk implements AdkAccess {
   sessions = new Map<string, Array<StoredEvent>>([[SID, []]])
   state: Record<string, unknown> = {}
   calls = 0
+  /** How long after the abort ADK stores its marker; real ADK takes a moment. */
+  abortMarkerDelayMs = 0
+  /** Text KeepPartialOnAbortPlugin would put on the marker. */
+  abortText: string | null = null
   constructor(
     public script: Array<Step>,
     public inv = 'e-1',
@@ -86,18 +91,32 @@ class FakeAdk implements AdkAccess {
       content: newMessage as StoredEvent['content'],
     })
     const script = this.script
+    const adk = this
     const encoder = new TextEncoder()
     const body = new ReadableStream<Uint8Array>({
       async start(controller) {
         const abort = () => {
-          clock++
-          store.push({
-            id: `${inv}-aborted-${clock}`,
-            invocationId: inv,
-            author: 'writer',
-            timestamp: clock,
-            errorCode: 'INVOCATION_ABORTED',
-          } as StoredEvent)
+          const storeMarker = () => {
+            clock++
+            store.push({
+              id: `${inv}-aborted-${clock}`,
+              invocationId: inv,
+              author: 'writer',
+              timestamp: clock,
+              errorCode: 'INVOCATION_ABORTED',
+              ...(adk.abortText
+                ? {
+                    content: {
+                      role: 'model',
+                      parts: [{ text: adk.abortText }],
+                    },
+                  }
+                : {}),
+            } as StoredEvent)
+          }
+          if (adk.abortMarkerDelayMs) {
+            setTimeout(storeMarker, adk.abortMarkerDelayMs)
+          } else storeMarker()
           controller.error(new DOMException('aborted', 'AbortError'))
         }
         signal.addEventListener('abort', abort, { once: true })
@@ -183,9 +202,10 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
   const extra: Array<Redis> = []
   const saved = { ...LIMITS }
 
-  function makeBus(adk: FakeAdk) {
-    const hub = new Redis(REDIS_URL!)
+  async function makeBus(adk: FakeAdk) {
+    const hub = redis.duplicate()
     extra.push(hub)
+    await hub.connect()
     const bus = new RunBus(redis, hub, adk)
     buses.push(bus)
     return bus
@@ -214,14 +234,15 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
 
   const msg = (t = 'hi') => ({ role: 'user', parts: [{ text: t }] })
 
-  beforeAll(() => {
-    redis = new Redis(REDIS_URL!)
+  beforeAll(async () => {
+    redis = createClient({ url: REDIS_URL })
+    await redis.connect()
   })
-  afterAll(async () => {
-    await redis.quit()
+  afterAll(() => {
+    redis.destroy()
   })
   beforeEach(async () => {
-    await redis.flushdb()
+    await redis.flushDb()
     Object.assign(LIMITS, {
       writeBatchMs: 5,
       cancelPollMs: 20,
@@ -232,12 +253,12 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
   afterEach(async () => {
     Object.assign(LIMITS, saved)
     for (const bus of buses.splice(0)) await bus.shutdown()
-    for (const r of extra.splice(0)) r.disconnect()
+    for (const r of extra.splice(0)) r.destroy()
   })
 
   test('a run completes with no viewer and releases its lock', async () => {
     const adk = new FakeAdk(answer())
-    const bus = makeBus(adk)
+    const bus = await makeBus(adk)
     expect(
       await bus.start({
         userId: USER,
@@ -258,7 +279,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
   })
 
   test('a feed shows the stored question first, then the run, then its end', async () => {
-    const bus = makeBus(new FakeAdk(answer()))
+    const bus = await makeBus(new FakeAdk(answer()))
     const feed = await open(bus)
     expect((await readUntil(feed.reader, synced)).at(-1)).toEqual([
       'synced',
@@ -283,7 +304,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
       { delay: 300, event: (inv) => textEvent(inv, 'c', true) },
       { delay: 10, event: (inv) => textEvent(inv, 'abc', false) },
     ]
-    const bus = makeBus(new FakeAdk(steps))
+    const bus = await makeBus(new FakeAdk(steps))
     await bus.start({
       userId: USER,
       sessionId: SID,
@@ -302,7 +323,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
 
   test('closing a feed does not stop the run', async () => {
     const adk = new FakeAdk(answer(3, 50))
-    const bus = makeBus(adk)
+    const bus = await makeBus(adk)
     await bus.start({
       userId: USER,
       sessionId: SID,
@@ -319,8 +340,8 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
 
   test('a second start on a busy session is refused', async () => {
     const adk = new FakeAdk(answer(3, 50))
-    const bus = makeBus(adk)
-    const other = makeBus(adk)
+    const bus = await makeBus(adk)
+    const other = await makeBus(adk)
     await bus.start({
       userId: USER,
       sessionId: SID,
@@ -339,12 +360,44 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
     await idle(bus)
   })
 
+  test("a stopped run's end waits for ADK's marker and its kept text", async () => {
+    const adk = new FakeAdk([
+      { delay: 10, event: (inv) => textEvent(inv, 'half', true) },
+      { delay: 5000, event: (inv) => textEvent(inv, 'never', false) },
+    ])
+    adk.abortMarkerDelayMs = 300
+    adk.abortText = 'half'
+    const bus = await makeBus(adk)
+    const feed = await open(bus)
+    await readUntil(feed.reader, synced)
+    await bus.start({
+      userId: USER,
+      sessionId: SID,
+      newMessage: msg(),
+      token: 't',
+    })
+    await readUntil(feed.reader, (f) =>
+      datas(f).some((p) => text(p) === 'half'),
+    )
+    expect(await bus.cancel(USER, SID)).toBe(true)
+    const frames = await readUntil(feed.reader, (f) => ends(f).length === 1)
+    await feed.close()
+    await idle(bus)
+    const endAt = frames.findIndex(([k]) => k === 'end')
+    const marker = frames.findIndex(
+      ([k, p]) => k === 'history' && p.errorCode === 'INVOCATION_ABORTED',
+    )
+    expect(marker).toBeGreaterThanOrEqual(0)
+    expect(marker).toBeLessThan(endAt)
+    expect(text(frames[marker]![1])).toBe('half')
+  })
+
   test('cancel on the owner aborts the run and ends it as cancelled', async () => {
     const adk = new FakeAdk([
       { delay: 10, event: (inv) => textEvent(inv, 'half', true) },
       { delay: 5000, event: (inv) => textEvent(inv, 'never', false) },
     ])
-    const bus = makeBus(adk)
+    const bus = await makeBus(adk)
     const feed = await open(bus)
     await readUntil(feed.reader, synced)
     await bus.start({
@@ -375,14 +428,14 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
       { delay: 10, event: (inv) => textEvent(inv, 'x', true) },
       { delay: 5000, event: (inv) => textEvent(inv, 'never', false) },
     ])
-    const owner = makeBus(adk)
+    const owner = await makeBus(adk)
     await owner.start({
       userId: USER,
       sessionId: SID,
       newMessage: msg(),
       token: 't',
     })
-    const other = makeBus(adk)
+    const other = await makeBus(adk)
     expect(await other.cancel(USER, SID)).toBe(true)
     await idle(owner)
     expect(await redis.get(cancelKey(USER, SID))).toBeNull()
@@ -392,11 +445,12 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
   })
 
   test('cancel with no run is false', async () => {
-    expect(await makeBus(new FakeAdk([])).cancel(USER, SID)).toBe(false)
+    const bus = await makeBus(new FakeAdk([]))
+    expect(await bus.cancel(USER, SID)).toBe(false)
   })
 
   test('one feed carries run after run, from any process', async () => {
-    const bus = makeBus(new FakeAdk(answer(), 'e-1'))
+    const bus = await makeBus(new FakeAdk(answer(), 'e-1'))
     const feed = await open(bus)
     await readUntil(feed.reader, synced)
     await bus.start({
@@ -413,7 +467,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
     await idle(bus) // its lock is released just after its end is sent
     const adk2 = new FakeAdk(answer(), 'e-2')
     adk2.sessions = (bus.adk as FakeAdk).sessions
-    const other = makeBus(adk2)
+    const other = await makeBus(adk2)
     await other.start({
       userId: USER,
       sessionId: SID,
@@ -431,7 +485,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
 
   test('a feed sends only stored events after `since`', async () => {
     const adk = new FakeAdk(answer())
-    const bus = makeBus(adk)
+    const bus = await makeBus(adk)
     await bus.start({
       userId: USER,
       sessionId: SID,
@@ -449,20 +503,25 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
   })
 
   test("a run's end catches up what the stream missed", async () => {
-    const bus = makeBus(new FakeAdk(answer(3, 30)))
+    const bus = await makeBus(new FakeAdk(answer(3, 30)))
     const feed = await open(bus)
     await readUntil(feed.reader, synced)
-    const realPipeline = redis.pipeline.bind(redis)
-    redis.pipeline = ((...a: Parameters<typeof redis.pipeline>) => {
-      const pipe = realPipeline(...a)
-      const xadd = pipe.xadd.bind(pipe)
-      pipe.xadd = ((...args: Array<any>) =>
-        args.some((x) => typeof x === 'string' && x.includes('p0p1p2')) &&
-        args.includes('0')
+    // Drop the complete answer's entry on its way to the stream.
+    const realMulti = redis.multi.bind(redis)
+    const multi = vi.spyOn(redis, 'multi').mockImplementation(() => {
+      const pipe = realMulti()
+      const xAdd = pipe.xAdd.bind(pipe)
+      vi.spyOn(pipe, 'xAdd').mockImplementation(((
+        key: string,
+        id: string,
+        fields: Record<string, string>,
+        options: any,
+      ) =>
+        fields.partial === '0' && fields.data?.includes('p0p1p2')
           ? pipe
-          : xadd(...(args as [any]))) as typeof pipe.xadd
+          : xAdd(key, id, fields, options)) as any)
       return pipe
-    }) as typeof redis.pipeline
+    })
     try {
       await bus.start({
         userId: USER,
@@ -482,7 +541,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
           .map(([, p]) => text(p)),
       ).toContain('p0p1p2')
     } finally {
-      redis.pipeline = realPipeline
+      multi.mockRestore()
       await feed.close()
     }
   })
@@ -496,7 +555,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
       delay: 40,
       event: (inv) => textEvent(inv, 'p0p1p2p3p4p5', false),
     })
-    const bus = makeBus(new FakeAdk(steps))
+    const bus = await makeBus(new FakeAdk(steps))
     const first = await open(bus)
     await readUntil(first.reader, synced)
     await bus.start({
@@ -507,13 +566,15 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
     })
     await readUntil(first.reader, (f) => datas(f).length >= 4)
     // The second feed's own read saw only the first entry.
-    const realXrange = redis.xrange.bind(redis)
+    const realXRange = redis.xRange.bind(redis)
     let calls = 0
-    redis.xrange = (async (...a: Parameters<typeof redis.xrange>) => {
-      calls++
-      const rows = await realXrange(...a)
-      return calls === 1 ? rows.slice(0, 1) : rows
-    }) as typeof redis.xrange
+    const xRange = vi
+      .spyOn(redis, 'xRange')
+      .mockImplementation(async (...a: Parameters<typeof redis.xRange>) => {
+        calls++
+        const rows = await realXRange(...a)
+        return calls === 1 ? rows.slice(0, 1) : rows
+      })
     try {
       const second = await open(bus)
       const frames = await readUntil(second.reader, (f) => ends(f).length === 1)
@@ -529,19 +590,20 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
         'p0p1p2p3p4p5',
       ])
     } finally {
-      redis.xrange = realXrange
+      xRange.mockRestore()
       await first.close()
     }
   })
 
   test('state writes wait for no run but defer for one', async () => {
     const adk = new FakeAdk(answer(3, 50))
-    const bus = makeBus(adk)
+    const bus = await makeBus(adk)
     await redis.set(
       lockKey(USER, SID),
       JSON.stringify({ stateWrite: 'other' }),
-      'PX',
-      5000,
+      {
+        expiration: { type: 'PX', value: 5000 },
+      },
     )
     setTimeout(() => void redis.del(lockKey(USER, SID)), 150)
     expect(await bus.writeState(USER, SID, { title: 'x' })).toBe(false)
@@ -563,7 +625,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
       { delay: 10, event: (inv) => textEvent(inv, 'x', true) },
       { delay: 5000, event: (inv) => textEvent(inv, 'never', false) },
     ])
-    const bus = makeBus(adk)
+    const bus = await makeBus(adk)
     const feed = await open(bus)
     await readUntil(feed.reader, synced)
     await bus.start({
@@ -590,7 +652,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
   test('ADK refusing the run releases the lock', async () => {
     const adk = new FakeAdk(answer())
     adk.sessions.delete(SID)
-    const bus = makeBus(adk)
+    const bus = await makeBus(adk)
     await expect(
       bus.start({
         userId: USER,
@@ -607,7 +669,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
       { delay: 10, event: (inv) => textEvent(inv, 'x', true) },
       { delay: 60_000, event: (inv) => textEvent(inv, 'never', false) },
     ])
-    const bus = makeBus(adk)
+    const bus = await makeBus(adk)
     const feed = await open(bus)
     await readUntil(feed.reader, synced)
     await bus.start({
@@ -626,7 +688,7 @@ describe.skipIf(!REDIS_URL)('RunBus (BFF background runs)', () => {
   test('idle feeds share one hub loop', async () => {
     const adk = new FakeAdk([])
     adk.sessions.set('s2', [])
-    const bus = makeBus(adk)
+    const bus = await makeBus(adk)
     const feeds = []
     for (const sid of [SID, 's2', SID]) {
       const ac = new AbortController()

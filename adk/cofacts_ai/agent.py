@@ -32,6 +32,7 @@ from google.adk.tools.base_tool import BaseTool
 from google.genai import types as genai_types
 from instrumentation import LangfuseTracingPlugin
 
+from .keep_partial_plugin import KeepPartialOnAbortPlugin
 from .agent_names import (
     AI_INVESTIGATOR_NAME,
     AI_PROOFREADER_DPP_NAME,
@@ -1123,5 +1124,9 @@ ai_writer = LlmAgent(
 app = App(
     name="cofacts_ai",
     root_agent=ai_writer,
-    plugins=[LangfuseTracingPlugin(), SaveFilesAsArtifactsPlugin()],
+    plugins=[
+        LangfuseTracingPlugin(),
+        SaveFilesAsArtifactsPlugin(),
+        KeepPartialOnAbortPlugin(),
+    ],
 )

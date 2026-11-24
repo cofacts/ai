@@ -162,7 +162,8 @@ then every run as it happens, from this window or any other, so a message sent i
 shows up in the others without a reload. One blocking Redis read per BFF process serves all open
 feeds. Stop is `POST .../cancel`: the BFF aborts its `/run_sse` request. Nothing polls.
 Session-state writes (`lastOpenedAt`, renames) wait while a run holds the session, since they
-would kill it. ADK is unchanged. Redis is the rumors-line-bot container on GCE and Redis Cloud on
+would kill it. ADK's server is unchanged; one plugin (`KeepPartialOnAbortPlugin`) keeps the text a
+stopped run had streamed on ADK's abort marker. Redis is the rumors-line-bot container on GCE and Redis Cloud on
 Cloud Run (`REDIS_URL`, read by the BFF); without it, the frontend falls back to `/api/run-sse`,
 where closing the tab stops the run. On Cloud Run (dev.cofacts.ai, PR previews) an instance with
 no open request may be scaled in, which interrupts its runs once every window is closed (an open

@@ -33,7 +33,9 @@
  */
 import { randomUUID } from 'node:crypto'
 import { hostname } from 'node:os'
-import Redis from 'ioredis'
+import { createClient } from 'redis'
+
+export type Redis = ReturnType<typeof createClient>
 
 const KEY_PREFIX = 'cofacts-ai'
 
@@ -55,6 +57,8 @@ export const LIMITS = {
   /** A session-state write holds the lock this long at most. */
   stateWriteLockMs: 5_000,
   runTimeoutMs: Number(process.env.RUN_TIMEOUT_SECONDS || 900) * 1000,
+  /** After aborting a run, how long to wait for ADK to store its marker. */
+  abortMarkerWaitMs: 2_000,
 }
 
 export type RunEnd = 'completed' | 'cancelled' | 'interrupted'
@@ -132,11 +136,9 @@ export interface Entry {
   data: string
 }
 
-type RawEntry = [string, Array<string>]
+type RawEntry = { id: string; message: Record<string, string> }
 
-function toEntry([id, fields]: RawEntry): Entry {
-  const f: Record<string, string> = {}
-  for (let i = 0; i + 1 < fields.length; i += 2) f[fields[i]!] = fields[i + 1]!
+function toEntry({ id, message: f }: RawEntry): Entry {
   return {
     id,
     runId: f.runId ?? '',
@@ -176,6 +178,7 @@ export interface StoredEvent {
   invocationId?: string
   author?: string
   partial?: boolean | null
+  errorCode?: string | null
   timestamp?: number
   content?: { role?: string | null } | null
 }
@@ -204,9 +207,20 @@ export interface AdkAccess {
 
 // ---- the writer ------------------------------------------------------------
 
+/** XADD's MAXLEN ~ cap; a function so tests can lower LIMITS.streamMaxLen. */
+function trim() {
+  return {
+    TRIM: {
+      strategy: 'MAXLEN' as const,
+      strategyModifier: '~' as const,
+      threshold: LIMITS.streamMaxLen,
+    },
+  }
+}
+
 /** Appends entries to a run's stream in batches (see WRITE_BATCH). */
 class StreamWriter {
-  private buf: Array<Array<string>> = []
+  private buf: Array<Record<string, string>> = []
   private timer: ReturnType<typeof setTimeout> | null = null
   private flushing: Promise<void> = Promise.resolve()
 
@@ -217,16 +231,12 @@ class StreamWriter {
   ) {}
 
   put(data: string, partial: boolean) {
-    this.buf.push([
-      'runId',
-      this.runId,
-      'type',
-      'event',
-      'partial',
-      partial ? '1' : '0',
-      'data',
+    this.buf.push({
+      runId: this.runId,
+      type: 'event',
+      partial: partial ? '1' : '0',
       data,
-    ])
+    })
     this.timer ??= setTimeout(() => {
       this.timer = null
       void this.flush()
@@ -238,19 +248,12 @@ class StreamWriter {
     if (!batch.length) return this.flushing
     this.flushing = this.flushing.then(async () => {
       try {
-        const pipe = this.redis.pipeline()
+        const pipe = this.redis.multi()
         for (const fields of batch) {
-          pipe.xadd(
-            this.key,
-            'MAXLEN',
-            '~',
-            String(LIMITS.streamMaxLen),
-            '*',
-            ...fields,
-          )
+          pipe.xAdd(this.key, '*', fields, trim())
         }
         pipe.expire(this.key, LIMITS.streamTtlS)
-        await pipe.exec()
+        await pipe.execAsPipeline()
       } catch (err) {
         // Viewers miss these entries; a feed catches up from the session
         // store at the run's end. The run itself goes on.
@@ -334,7 +337,7 @@ export class RunBus {
   }
 
   private release(key: string, value: string) {
-    return this.redis.eval(RELEASE_LOCK, 1, key, value)
+    return this.redis.eval(RELEASE_LOCK, { keys: [key], arguments: [value] })
   }
 
   /**
@@ -355,8 +358,10 @@ export class RunBus {
     const key = lockKey(userId, sessionId)
     const deadline = Date.now() + LIMITS.stateWriteLockMs
     while (
-      (await this.redis.set(key, lockValue, 'PX', LIMITS.lockTtlMs, 'NX')) !==
-      'OK'
+      (await this.redis.set(key, lockValue, {
+        condition: 'NX',
+        expiration: { type: 'PX', value: LIMITS.lockTtlMs },
+      })) !== 'OK'
     ) {
       // A run holds the session: the caller watches that one instead. A
       // session-state write holds it for a moment: wait it out.
@@ -396,6 +401,36 @@ export class RunBus {
     return { started: true }
   }
 
+  /**
+   * Waits for ADK to store the marker of a run we aborted. ADK writes it
+   * after it notices the closed connection, with the text the stopped
+   * message had streamed (KeepPartialOnAbortPlugin), so the run's end, and
+   * the feeds' catch-up at that end, must come after it. Holding the lock
+   * until then also keeps a new run from starting while ADK still writes.
+   */
+  private async abortMarker(
+    userId: string,
+    sessionId: string,
+    invocationId: string,
+  ) {
+    const deadline = Date.now() + LIMITS.abortMarkerWaitMs
+    while (Date.now() < deadline) {
+      const stored = await this.adk
+        .sessionEvents(userId, sessionId)
+        .catch(() => null)
+      if (
+        stored?.some(
+          (e) =>
+            e.invocationId === invocationId &&
+            e.errorCode === 'INVOCATION_ABORTED',
+        )
+      ) {
+        return
+      }
+      await new Promise((r) => setTimeout(r, 100))
+    }
+  }
+
   /** Asks the run to stop: aborts its /run_sse request. */
   private stop(run: Run, end: RunEnd) {
     run.end ??= end
@@ -418,13 +453,10 @@ export class RunBus {
           const requested = await this.redis.get(cancelKey(userId, sessionId))
           if (requested === run.runId) this.stop(run, 'cancelled')
           if ((ticks * LIMITS.cancelPollMs) % LIMITS.lockRenewMs === 0) {
-            await this.redis.eval(
-              RENEW_LOCK,
-              1,
-              lockKey(userId, sessionId),
-              run.lockValue,
-              String(LIMITS.lockTtlMs),
-            )
+            await this.redis.eval(RENEW_LOCK, {
+              keys: [lockKey(userId, sessionId)],
+              arguments: [run.lockValue, String(LIMITS.lockTtlMs)],
+            })
             await this.redis.expire(key, LIMITS.streamTtlS)
           }
         } catch (err) {
@@ -433,6 +465,7 @@ export class RunBus {
       })()
     }, LIMITS.cancelPollMs)
 
+    let invocationId: string | undefined
     try {
       let first = true
       for await (const data of sseData(body)) {
@@ -444,6 +477,7 @@ export class RunBus {
         }
         if (first && event.invocationId) {
           first = false
+          invocationId = event.invocationId
           // /run_sse doesn't send the user's message. Put the stored one
           // first, so windows watching from elsewhere see the question.
           const stored = await this.adk
@@ -469,23 +503,22 @@ export class RunBus {
       clearTimeout(timeout)
       clearInterval(keeper)
       await writer.close()
+      if (run.controller.signal.aborted && invocationId) {
+        await this.abortMarker(userId, sessionId, invocationId)
+      }
       try {
         await this.redis
           .multi()
-          .xadd(
+          .xAdd(
             key,
-            'MAXLEN',
-            '~',
-            String(LIMITS.streamMaxLen),
             '*',
-            'runId',
-            run.runId,
-            'type',
-            'done',
-            'partial',
-            '0',
-            'data',
-            run.end ?? 'completed',
+            {
+              runId: run.runId,
+              type: 'done',
+              partial: '0',
+              data: run.end ?? 'completed',
+            },
+            trim(),
           )
           .expire(key, LIMITS.streamTtlAfterDoneS)
           .exec()
@@ -515,12 +548,9 @@ export class RunBus {
     const lock = await this.readRunLock(userId, sessionId)
     if (!lock?.runId) return false
     // Another process owns it; it checks this key every second.
-    await this.redis.set(
-      cancelKey(userId, sessionId),
-      lock.runId,
-      'EX',
-      LIMITS.cancelTtlS,
-    )
+    await this.redis.set(cancelKey(userId, sessionId), lock.runId, {
+      expiration: { type: 'EX', value: LIMITS.cancelTtlS },
+    })
     return true
   }
 
@@ -541,13 +571,10 @@ export class RunBus {
     const token = JSON.stringify({ stateWrite: randomUUID() })
     const deadline = Date.now() + LIMITS.stateWriteLockMs
     while (
-      (await this.redis.set(
-        key,
-        token,
-        'PX',
-        LIMITS.stateWriteLockMs,
-        'NX',
-      )) !== 'OK'
+      (await this.redis.set(key, token, {
+        condition: 'NX',
+        expiration: { type: 'PX', value: LIMITS.stateWriteLockMs },
+      })) !== 'OK'
     ) {
       if (await this.readRunLock(userId, sessionId)) return true
       if (Date.now() > deadline) return true
@@ -650,7 +677,7 @@ export class RunBus {
 
     const key = streamKey(userId, sessionId)
     const feed = new Feed(this, userId, sessionId, sent)
-    const raw = (await this.redis.xrange(key, '-', '+')) as Array<RawEntry>
+    const raw: Array<RawEntry> = await this.redis.xRange(key, '-', '+')
     const entries = raw.map(toEntry)
     let last = entries.at(-1)?.id ?? '0-0'
     const latest = entries.at(-1)?.runId
@@ -677,11 +704,11 @@ export class RunBus {
     try {
       if (gapTo !== null) {
         // The hub was already past our starting point; read the gap.
-        const gap = (await this.redis.xrange(
+        const gap: Array<RawEntry> = await this.redis.xRange(
           key,
           `(${last}`,
           gapTo,
-        )) as Array<RawEntry>
+        )
         for (const r of gap) {
           const e = toEntry(r)
           last = e.id
@@ -885,22 +912,19 @@ export class StreamHub {
       while (this.cursors.size && !this.closed) {
         const keys = [...this.cursors.keys()]
         const ids = keys.map((k) => this.cursors.get(k)!)
-        let res: Array<[string, Array<RawEntry>]> | null
+        let res: Array<{ name: string; messages: Array<RawEntry> }> | null
         try {
-          res = (await this.redis.xread(
-            'BLOCK',
-            LIMITS.hubBlockMs,
-            'STREAMS',
-            ...keys,
-            ...ids,
-          )) as Array<[string, Array<RawEntry>]> | null
+          res = (await this.redis.xRead(
+            keys.map((key, i) => ({ key, id: ids[i]! })),
+            { BLOCK: LIMITS.hubBlockMs },
+          )) as Array<{ name: string; messages: Array<RawEntry> }> | null
         } catch (err) {
           if (this.isClosed()) break
           console.error('[runBus] reading session streams failed', err)
           await new Promise((r) => setTimeout(r, 1000))
           continue
         }
-        for (const [key, items] of res ?? []) {
+        for (const { name: key, messages: items } of res ?? []) {
           for (const raw of items) {
             const e = toEntry(raw)
             if (this.cursors.has(key)) this.cursors.set(key, e.id)
@@ -921,6 +945,21 @@ export class StreamHub {
 
 // ---- the process-wide instance ---------------------------------------------
 
+/**
+ * Connects in the background; commands sent meanwhile wait in the client's
+ * queue. node-redis reconnects by itself, and an 'error' listener is
+ * required, or a dropped connection would crash the process.
+ */
+function connect(client: Redis, name: string) {
+  client.on('error', (err) => {
+    console.error(`[runBus] Redis (${name})`, err)
+  })
+  client.connect().catch((err: unknown) => {
+    console.error(`[runBus] connecting to Redis (${name}) failed`, err)
+  })
+  return client
+}
+
 let bus: RunBus | null | undefined
 
 /** The process's RunBus, or null when REDIS_URL is unset (feature off). */
@@ -928,9 +967,9 @@ export function getRunBus(adk: () => AdkAccess): RunBus | null {
   if (bus !== undefined) return bus
   const url = process.env.REDIS_URL
   if (!url) return (bus = null)
-  const redis = new Redis(url, { maxRetriesPerRequest: 3 })
+  const redis = connect(createClient({ url }), 'commands')
   // XREAD BLOCK holds its connection; the hub gets one of its own.
-  const hubRedis = new Redis(url, { maxRetriesPerRequest: null })
+  const hubRedis = connect(redis.duplicate(), 'stream reader')
   bus = new RunBus(redis, hubRedis, adk())
   const instance = bus
   // Nitro closes the server on SIGTERM and exits a few seconds later; stop
