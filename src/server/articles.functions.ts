@@ -37,7 +37,7 @@ const GetArticleAttachmentDocument = parse(`
 >
 
 export const getArticleAttachmentUrl = createServerFn({ method: 'GET' })
-  .inputValidator((articleId: string) => articleId)
+  .validator((articleId: string) => articleId)
   .handler(async ({ data: articleId }): Promise<string | null> => {
     const data = await cofactsExec(GetArticleAttachmentDocument, {
       id: articleId,

@@ -19,7 +19,7 @@ export function createServerFn() {
   let validator: Validator | undefined
   const builder = {
     middleware: () => builder,
-    inputValidator: (fn: Validator) => {
+    validator: (fn: Validator) => {
       validator = fn
       return builder
     },

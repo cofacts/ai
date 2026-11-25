@@ -6,7 +6,6 @@ import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
 import { devtools } from '@tanstack/devtools-vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
-import viteTsConfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
 
@@ -17,13 +16,10 @@ import { nitro } from 'nitro/vite'
 const isVitest = !!process.env.VITEST
 
 const config = defineConfig({
+  resolve: { tsconfigPaths: true },
   plugins: [
     !isVitest && devtools(),
     !isVitest && nitro(),
-    // this is the plugin that enables path aliases
-    viteTsConfigPaths({
-      projects: ['./tsconfig.json'],
-    }),
     tailwindcss(),
     !isVitest &&
       tanstackStart({
@@ -42,8 +38,7 @@ const config = defineConfig({
       // Every story renders in Chromium and runs its play function; a story that throws or a
       // play function whose expect() fails is a failing test.
       {
-        // Shares the root plugins, which under Vitest are only the path aliases, Tailwind and
-        // React (see isVitest).
+        // Shares the root plugins, which under Vitest are only Tailwind and React (see isVitest).
         extends: true,
         plugins: [
           storybookTest({

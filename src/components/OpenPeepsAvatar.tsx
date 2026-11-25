@@ -1,10 +1,18 @@
-import Peep, {
+import PeepModule, {
   Accessories,
   BustPose,
   Face,
   FacialHair,
   Hair,
 } from 'react-peeps'
+
+// react-peeps is CommonJS with `__esModule`. Since this package is `"type": "module"`, Vite 8
+// follows Node and makes the default import the whole `module.exports`
+// (https://vite.dev/guide/migration), so the component is on `.default`. Tools that still apply
+// the `__esModule` interop return the component itself, hence the check.
+const Peep = (
+  'default' in PeepModule ? PeepModule.default : PeepModule
+) as typeof PeepModule
 
 interface OpenPeepsAvatarData {
   accessory?: string
