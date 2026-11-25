@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
+import { playwright } from '@vitest/browser-playwright'
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
 import { devtools } from '@tanstack/devtools-vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
@@ -41,12 +42,10 @@ const config = defineConfig({
       // Every story renders in Chromium and runs its play function; a story that throws or a
       // play function whose expect() fails is a failing test.
       {
-        // The app's server plugins (TanStack Start, Nitro, devtools) aren't needed to render a
-        // story; these three are what the components need.
+        // Shares the root plugins, which under Vitest are only the path aliases, Tailwind and
+        // React (see isVitest).
+        extends: true,
         plugins: [
-          viteTsConfigPaths({ projects: ['./tsconfig.json'] }),
-          tailwindcss(),
-          viteReact(),
           storybookTest({
             configDir: path.join(
               path.dirname(fileURLToPath(import.meta.url)),
@@ -59,7 +58,7 @@ const config = defineConfig({
           browser: {
             enabled: true,
             headless: true,
-            provider: 'playwright',
+            provider: playwright(),
             instances: [{ browser: 'chromium' }],
           },
         },
