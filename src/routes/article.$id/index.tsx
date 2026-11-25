@@ -240,7 +240,7 @@ const WRITE_DONE: Record<CategoryWrite['kind'], string> = {
 /**
  * 訊息分類 and its dialog. Holds the queries and writes so the components stay
  * presentational. Marking and voting need a login, so a logged-out visitor's
- * 建議分類 opens the login dialog instead.
+ * 分類建議 opens the login dialog instead.
  */
 function ArticleCategoriesPanel({
   articleId,

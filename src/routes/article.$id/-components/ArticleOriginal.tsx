@@ -1,9 +1,11 @@
-import { formatReportedDate, linkifyText } from '../-lib'
+import { linkifyText } from '../-lib'
 import type { Hyperlink } from '@/components/HyperlinkPreview'
 import type { ArticleTypeEnum } from '@/server/gql/graphql'
 
+import { Flag } from '@/components/Flag'
 import { HyperlinkPreview } from '@/components/HyperlinkPreview'
 import { Button } from '@/components/ui/button'
+import { formatDateTime, formatTimeAgo } from '@/lib/timeAgo'
 
 export type ArticleOriginalProps = {
   text: string | null | undefined
@@ -38,21 +40,25 @@ export function ArticleOriginal({
   createdAt,
   onLogin,
 }: ArticleOriginalProps) {
-  const reportedDate = formatReportedDate(createdAt)
-
   return (
     <div className="flex flex-col gap-spacing-16">
-      <p className="text-type-body-s text-text-secondary">
-        {replyRequestCount ?? 0} 人回報此訊息
-        {reportedDate && (
-          <>
-            <span aria-hidden="true"> · </span>
-            <span className="sr-only">，</span>
+      {/* Penpot: the Flag on top; 首次回報 to its right on desktop, under it on mobile. */}
+      <div className="flex flex-col gap-spacing-8 lg:flex-row lg:items-center lg:justify-between">
+        <Flag>有 {replyRequestCount ?? 0} 人想知道以下訊息的真實性</Flag>
+        {createdAt && (
+          <p className="text-type-ui-m text-text-tertiary">
             首次回報於{' '}
-            <time dateTime={createdAt ?? undefined}>{reportedDate}</time>
-          </>
+            {/* Relative to now, so the server's and the browser's text can differ by a unit. */}
+            <time
+              dateTime={createdAt}
+              title={formatDateTime(createdAt)}
+              suppressHydrationWarning
+            >
+              {formatTimeAgo(createdAt)}
+            </time>
+          </p>
         )}
-      </p>
+      </div>
 
       <ArticleBody
         text={text}

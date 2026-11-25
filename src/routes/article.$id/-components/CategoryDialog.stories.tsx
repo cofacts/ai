@@ -11,7 +11,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "**Not in Penpot as far as known** (not audited: no Penpot MCP when this was built). 「建議分類」 on /article/:id opens it: rumors-site's AddCategoryDialog, where one marks categories and agrees or disagrees with them. To discuss with the designer.",
+          "**Not in Penpot**: no board in Cofacts-2026 has it (checked in #203). 「分類建議」 on /article/:id opens it: rumors-site's AddCategoryDialog, where one marks categories and agrees or disagrees with them. To discuss with the designer.",
       },
     },
   },

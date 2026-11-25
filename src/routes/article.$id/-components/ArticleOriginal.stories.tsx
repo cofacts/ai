@@ -20,12 +20,12 @@ const HYPERLINKS = [
 const meta = {
   title: 'article/ArticleOriginal',
   component: ArticleOriginal,
-  tags: ['not-in-penpot'],
   parameters: {
+    penpot: { board: 'MessagePage-1440 / MessagePage-原始訊息' },
     docs: {
       description: {
         component:
-          "**Not audited against Penpot yet.** 原始訊息 on /article/:id (Penpot MessagePage-1440, MessagePage-原始訊息): the reported message, its attachment, and the login prompt for media a logged-out visitor cannot open. Built from rumors-site's behaviour; to be checked against the boards.",
+          '原始訊息 on /article/:id (Penpot MessagePage-1440, MessagePage-原始訊息): the Base/Flag with the report count, 首次回報 (right of the Flag on desktop, under it on mobile), the reported message and its attachment. Not in Penpot: the login prompt for the video or audio a logged-out visitor cannot open.',
       },
     },
   },
@@ -45,7 +45,10 @@ type Story = StoryObj<typeof meta>
 export const Text: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
-    await expect(canvas.getByText(/12 人回報此訊息/)).toBeInTheDocument()
+    await expect(
+      canvas.getByText('有 12 人想知道以下訊息的真實性'),
+    ).toBeInTheDocument()
+    await expect(canvas.getByText(/^首次回報於/)).toBeInTheDocument()
     const link = canvas.getByRole('link', {
       name: 'https://example.com/news?id=1',
     })

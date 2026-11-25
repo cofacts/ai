@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   categoryVoteShares,
-  formatReportedDate,
   getQuickNavItems,
   isCategoryDisputed,
   linkifyText,
@@ -126,16 +125,5 @@ describe('categoryVoteShares', () => {
         negativeFeedbackCount: 1,
       }),
     ).toEqual({ agree: 66, disagree: 33 })
-  })
-})
-
-describe('formatReportedDate', () => {
-  it('formats the date in Taiwan time', () => {
-    expect(formatReportedDate('2026-11-16T17:30:00Z')).toBe('2026/11/17')
-  })
-
-  it('is null for a missing or broken date', () => {
-    expect(formatReportedDate(null)).toBeNull()
-    expect(formatReportedDate('nope')).toBeNull()
   })
 })

@@ -107,16 +107,3 @@ export function categoryVoteShares({
     disagree: Math.floor((disagree / total) * 100),
   }
 }
-
-/** First reported on, as a date: 2026/11/17. */
-export function formatReportedDate(iso: string | null | undefined) {
-  if (!iso) return null
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return null
-  return new Intl.DateTimeFormat('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    timeZone: 'Asia/Taipei',
-  }).format(date)
-}
