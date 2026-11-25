@@ -100,6 +100,29 @@ export const Editable: Story = {
 }
 
 /**
+ * Typing in the middle of the text keeps the cursor where it is. The edit is stored in the query
+ * cache, which notifies on a timer; if the textarea waited for that, every keystroke would reset
+ * the value and jump the cursor to the end (and break 注音 and other IME input).
+ */
+export const TypingMidText: Story = {
+  args: { toolCallId: 'adk-draft-typing' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    const text = canvas.getByLabelText<HTMLTextAreaElement>('回應內容')
+    await userEvent.type(text, 'XY', {
+      initialSelectionStart: 4,
+      initialSelectionEnd: 4,
+    })
+    await expect(text.value.slice(4, 6)).toBe('XY')
+    await expect(text.selectionStart).toBe(6)
+    // Undo the edits so localStorage doesn't carry them into the next run.
+    await userEvent.click(
+      canvas.getByRole('button', { name: /還原成 AI 的版本/ }),
+    )
+  },
+}
+
+/**
  * The user's edits went to the AI with a chat message and no newer draft came back, so the
  * draft stays editable and shows what the user sent.
  */

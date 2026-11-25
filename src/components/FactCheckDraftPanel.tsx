@@ -312,7 +312,21 @@ export function FactCheckDraftPanel({
   const original = draftFieldsFromArgs(args)
   // What the draft holds before any unsent edits: the version last sent to the AI, if any.
   const base = sentEdit ?? original
-  const [edit, setEdit] = useDraftEdit(sessionId, toolCallId)
+  const [storedEdit, setStoredEdit] = useDraftEdit(sessionId, toolCallId)
+  // What the user is typing, held in React state so the textarea updates in the same render as
+  // the keystroke. The query cache (where `useDraftEdit` stores it) notifies on a timer, and a
+  // controlled textarea that waits for it resets the value and jumps the cursor to the end on
+  // every key, which also breaks 注音 and other IME input. `typing` stays null until the user
+  // types, so the panel otherwise shows what is stored.
+  const [typing, setTyping] = useState<{
+    draftId: string
+    fields: DraftFields | null
+  } | null>(null)
+  const edit = typing?.draftId === toolCallId ? typing.fields : storedEdit
+  const setEdit = (fields: DraftFields | null) => {
+    setTyping({ draftId: toolCallId, fields })
+    setStoredEdit(fields)
+  }
   const [submitted, setSubmitted] = useSubmittedReply(sessionId, toolCallId)
   const lockReason = context.lockReason
   const editable = lockReason === null && !submitted
