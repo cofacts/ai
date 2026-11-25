@@ -20,7 +20,7 @@ export type ArticleCardProps = {
    * video with the original file, so a logged-in user gets the whole mp4, which the browser
    * would download before giving up on it as an image. When there is none, or it fails to load, a
    * placeholder says 無法預覽. Ignored for AUDIO, which never has a thumbnail and always
-   * shows the placeholder.
+   * shows the placeholder, without 無法預覽.
    */
   thumbnailUrl?: string | null
   /** How many times the message was reported (rumors-api `replyRequestCount`). 「被回報 N 次」. */
@@ -66,6 +66,25 @@ export function ArticleCard({
   const created = new Date(createdAt)
   const hasCreatedAt = !Number.isNaN(created.getTime())
   const textId = useId()
+  // The URL that failed to load, so a new URL gets its own try. rumors-api hands out a
+  // thumbnail URL without checking the file exists, and a broken attachment never gets one
+  // (cofacts/kb video-audio-thumbnail-preview.md).
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const shownThumbnail =
+    articleType in THUMBNAIL_NAME && thumbnailUrl && thumbnailUrl !== failedUrl
+      ? thumbnailUrl
+      : null
+  // For media, `text` is the AI transcript rumors-api writes when the message comes in. When
+  // there is none (transcription failed or hasn't finished), a muted line says what the message
+  // is, so the space beside the placeholder isn't empty.
+  const fallback = text
+    ? null
+    : articleType === 'VIDEO'
+      ? '這則是影片訊息，點開查看原始影片'
+      : articleType === 'IMAGE' && !shownThumbnail
+        ? '圖片暫時無法顯示'
+        : null
+  const describedBy = text || fallback ? textId : undefined
 
   return (
     <article
@@ -82,8 +101,17 @@ export function ArticleCard({
         <Media
           articleType={articleType}
           text={text}
-          thumbnailUrl={thumbnailUrl}
+          thumbnailUrl={shownThumbnail}
+          onThumbnailError={setFailedUrl}
         />
+        {fallback && (
+          <p
+            id={textId}
+            className="min-w-0 flex-1 text-type-body-s text-text-tertiary md:text-type-body-m"
+          >
+            {fallback}
+          </p>
+        )}
         {text && (
           // Clamped like Penpot's text box: 6 lines on mobile, 4 on desktop.
           <ExpandableText
@@ -115,11 +143,12 @@ export function ArticleCard({
           Penpot Base/Button, Size = Large with an icon, but it goes to another page, so it is a
           link styled as the button. Base UI's Button would give the <a> role="button".
           <Link> navigates inside the app, keeping the Query cache, like SiteNav's NavAnchor.
-          A list has one 查核闢謠 per card, so the message text describes which one it opens.
+          A list has one 查核闢謠 per card, so the message text (or the line standing in for it)
+          describes which one it opens.
         */}
         <Link
           to={href}
-          aria-describedby={text ? textId : undefined}
+          aria-describedby={describedBy}
           className={cn(
             buttonVariants({ size: 'lg', withIcon: true }),
             'w-full md:w-auto',
@@ -133,17 +162,25 @@ export function ArticleCard({
   )
 }
 
+/**
+ * The placeholder for a message without a thumbnail. 無法預覽 is only for an image or video that
+ * should have one. Audio never has one, and its transcript sits beside it, so a second line would
+ * read as if something went wrong.
+ */
 const MEDIA_PLACEHOLDER: Partial<
-  Record<ArticleTypeEnum, { icon: MaterialSymbol; label: string }>
+  Record<
+    ArticleTypeEnum,
+    { icon: MaterialSymbol; label: string; unavailable: boolean }
+  >
 > = {
-  IMAGE: { icon: 'image', label: '圖片' },
-  VIDEO: { icon: 'videocam', label: '影片' },
-  AUDIO: { icon: 'graphic_eq', label: '語音訊息' },
+  IMAGE: { icon: 'image', label: '圖片', unavailable: true },
+  VIDEO: { icon: 'videocam', label: '影片', unavailable: true },
+  AUDIO: { icon: 'graphic_eq', label: '語音訊息', unavailable: false },
 }
 
 /**
- * Types that show `thumbnailUrl`, with the image's name for when there is no text. A video's
- * thumbnail is a JPEG frame (cofacts/kb `video-audio-thumbnail-preview.md`), cropped the same way.
+ * Types that show `thumbnailUrl`, with the image's name. A video's thumbnail is a JPEG frame
+ * (cofacts/kb `video-audio-thumbnail-preview.md`), cropped the same way.
  */
 const THUMBNAIL_NAME: Partial<Record<ArticleTypeEnum, string>> = {
   IMAGE: '圖片訊息',
@@ -155,42 +192,55 @@ function Media({
   articleType,
   text,
   thumbnailUrl,
-}: Pick<ArticleCardProps, 'articleType' | 'text' | 'thumbnailUrl'>) {
-  // The URL that failed to load, so a new URL gets its own try. rumors-api hands out a
-  // thumbnail URL without checking the file exists, and a broken attachment never gets one
-  // (cofacts/kb video-audio-thumbnail-preview.md).
-  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  onThumbnailError,
+}: Pick<ArticleCardProps, 'articleType' | 'text'> & {
+  /** The thumbnail to show: null when there is none or it already failed to load. */
+  thumbnailUrl: string | null
+  onThumbnailError: (url: string) => void
+}) {
   const thumbnailName = THUMBNAIL_NAME[articleType]
-  if (thumbnailName && thumbnailUrl && thumbnailUrl !== failedUrl) {
+  if (thumbnailName && thumbnailUrl) {
+    const isVideo = articleType === 'VIDEO'
     return (
-      <img
-        src={thumbnailUrl}
-        // An image rendered on the server can fail before React hydrates and attaches onError,
-        // so the ref checks for an image that already finished without any pixels.
-        ref={(img) => {
-          if (img?.complete && img.naturalWidth === 0)
-            setFailedUrl(thumbnailUrl)
-        }}
-        onError={() => setFailedUrl(thumbnailUrl)}
-        // The text beside the thumbnail is its transcript, so the thumbnail only needs a name of
-        // its own when there is no text.
-        alt={text ? '' : thumbnailName}
-        loading="lazy"
-        className="size-[120px] shrink-0 rounded-radius-5 object-cover"
-      />
+      <div className="relative size-[120px] shrink-0">
+        <img
+          src={thumbnailUrl}
+          // An image rendered on the server can fail before React hydrates and attaches onError,
+          // so the ref checks for an image that already finished without any pixels.
+          ref={(img) => {
+            if (img?.complete && img.naturalWidth === 0)
+              onThumbnailError(thumbnailUrl)
+          }}
+          onError={() => onThumbnailError(thumbnailUrl)}
+          // An image's text is its transcript, so the image only needs a name when there is no
+          // text. A video's still frame doesn't show it's a video and its transcript doesn't
+          // say so either, so it is always named.
+          alt={isVideo || !text ? thumbnailName : ''}
+          loading="lazy"
+          className="size-full rounded-radius-5 object-cover"
+        />
+        {isVideo && (
+          // The frame alone doesn't say it's a video. A corner mark, not a play button: the list
+          // can't play it. rumors-api has no duration yet, so it's the icon only.
+          <span className="absolute right-spacing-4 bottom-spacing-4 flex rounded-radius-2 bg-overlay-scrim p-spacing-2 text-icon-on-dark">
+            <MaterialIcon name="videocam" size={16} />
+          </span>
+        )}
+      </div>
     )
   }
 
   const placeholder = MEDIA_PLACEHOLDER[articleType]
   if (!placeholder) return null
-  // One wording for every case: no thumbnail yet, a broken one, or audio that never has one.
   return (
     <div className="flex size-[120px] shrink-0 flex-col items-center justify-center gap-spacing-4 rounded-radius-5 bg-surface-raised p-spacing-8 text-center">
       <MaterialIcon name={placeholder.icon} className="text-icon-muted" />
       <p className="text-type-ui-s-bold text-text-primary">
         {placeholder.label}
       </p>
-      <p className="text-type-caption text-text-secondary">無法預覽</p>
+      {placeholder.unavailable && (
+        <p className="text-type-caption text-text-secondary">無法預覽</p>
+      )}
     </div>
   )
 }

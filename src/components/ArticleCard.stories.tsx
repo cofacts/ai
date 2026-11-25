@@ -97,33 +97,56 @@ export const Text: Story = {
 
 /**
  * Not in Penpot: a video. There is no thumbnail for video yet, so a placeholder saying
- * 無法預覽 takes the image's place.
+ * 無法預覽 takes the image's place. The text beside it is the AI transcript rumors-api writes
+ * when the message comes in.
  */
 export const Video: Story = {
   tags: ['not-in-penpot'],
-  args: { articleType: 'VIDEO', thumbnailUrl: null, text: '' },
+  args: { articleType: 'VIDEO', thumbnailUrl: null },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await expect(canvas.getByText('影片')).toBeVisible()
     await expect(canvas.getByText('無法預覽')).toBeVisible()
+    await expect(canvas.queryByText(/這則是影片訊息/)).toBeNull()
+  },
+}
+
+/**
+ * Not in Penpot: a video without a transcript (transcription failed or hasn't finished). A muted
+ * line says what the message is, and describes 查核闢謠 in place of the text.
+ */
+export const VideoWithoutText: Story = {
+  tags: ['not-in-penpot'],
+  args: { articleType: 'VIDEO', thumbnailUrl: null, text: '' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await expect(canvas.getByText('無法預覽')).toBeVisible()
+    await expect(
+      canvas.getByRole('link', { name: '查核闢謠' }),
+    ).toHaveAccessibleDescription('這則是影片訊息，點開查看原始影片')
   },
 }
 
 /**
  * Not in Penpot: a video whose thumbnail rumors-api#326 has produced. The JPEG frame takes the
- * image's place, cropped the same way, and the placeholder goes away.
+ * image's place, cropped the same way, with a video mark in the corner. It's a mark, not a play
+ * button, since the list can't play the video.
  */
 export const VideoWithThumbnail: Story = {
   tags: ['not-in-penpot'],
-  args: { articleType: 'VIDEO', text: '' },
+  args: { articleType: 'VIDEO' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
+    // Named even with a transcript: neither the frame nor the transcript says it's a video.
     await expect(canvas.getByRole('img')).toHaveAccessibleName('影片訊息')
     await expect(canvas.queryByText('無法預覽')).toBeNull()
   },
 }
 
-/** Not in Penpot: an audio message with a transcript. Same placeholder as video. */
+/**
+ * Not in Penpot: an audio message with a transcript. The placeholder names it without
+ * 無法預覽, since the transcript beside it is the message.
+ */
 export const Audio: Story = {
   tags: ['not-in-penpot'],
   // Audio never has a thumbnail, so even a URL is ignored.
@@ -131,14 +154,14 @@ export const Audio: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await expect(canvas.getByText('語音訊息')).toBeVisible()
-    await expect(canvas.getByText('無法預覽')).toBeVisible()
+    await expect(canvas.queryByText('無法預覽')).toBeNull()
     await expect(canvas.queryByRole('presentation')).toBeNull()
   },
 }
 
 /**
- * Not in Penpot: an image message whose thumbnail rumors-api hasn't produced. The placeholder
- * keeps the image's place, so the card doesn't show an empty row.
+ * Not in Penpot: an image message whose thumbnail rumors-api hasn't produced, and no transcript.
+ * The placeholder keeps the image's place, and a muted line says the image can't be shown.
  */
 export const ImageWithoutThumbnail: Story = {
   tags: ['not-in-penpot'],
@@ -147,6 +170,7 @@ export const ImageWithoutThumbnail: Story = {
     const canvas = within(canvasElement)
     await expect(canvas.getByText('圖片')).toBeVisible()
     await expect(canvas.getByText('無法預覽')).toBeVisible()
+    await expect(canvas.getByText('圖片暫時無法顯示')).toBeVisible()
   },
 }
 
@@ -162,6 +186,8 @@ export const BrokenThumbnail: Story = {
     await expect(await canvas.findByText('無法預覽')).toBeVisible()
     await expect(canvas.queryByRole('img')).toBeNull()
     await expect(canvas.queryByRole('presentation')).toBeNull()
+    // The transcript is there, so it shows instead of 圖片暫時無法顯示.
+    await expect(canvas.queryByText('圖片暫時無法顯示')).toBeNull()
   },
 }
 
