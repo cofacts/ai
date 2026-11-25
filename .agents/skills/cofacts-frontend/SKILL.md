@@ -37,7 +37,8 @@ this skill is the current, executable form of it.
   `spacing-16` → `p-spacing-16`, `RADIUS-5` → `rounded-radius-5`. Bare numbers (`w-343`, `p-16`) don't exist,
   except 0 (`p-0`, `inset-0`); use a token or an arbitrary value (`w-[343px]`).
 - **Brand yellow is a background, never text** (R2). `bg-surface-accent` pairs with `text-text-on-accent`.
-  Only exception: `icon-brand` on a pressed control's solid icon, with `aria-pressed` (see R2).
+  Besides logos, one exception: `icon-brand` on a pressed control's solid icon, only alongside an
+  outline → solid change or a `border-strong` border, and `aria-pressed` (see R2).
 - **Pair by name** (R4): `bg-surface-dark` → `text-text-on-dark`, `bg-surface-secondary` → `text-text-on-secondary`,
   `bg-surface-inverse` → `text-text-inverse`. A name that doesn't match is a bug.
 - **Disabled = default look + `opacity-50`**, plus `disabled` or `aria-disabled="true"` (R5).
