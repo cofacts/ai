@@ -138,7 +138,7 @@ export function sameLink(text: string): string {
 export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
   // Shape only (text, not empty): the URL rule itself is the form's. See the
   // ADR on why the server functions don't re-check it.
-  .inputValidator((like: string) => {
+  .validator((like: string) => {
     if (typeof like !== 'string') throw new Error('url must be text')
     const trimmed = like.trim()
     if (!trimmed) throw new Error('Nothing to search for')
@@ -194,7 +194,7 @@ export const searchSuspiciousMessages = createServerFn({ method: 'POST' })
 
 /** `reason` is the reporter's own words. Never a summary written for them. */
 export const requestFactCheck = createServerFn({ method: 'POST' })
-  .inputValidator((input: RequestFactCheckMutationVariables) => {
+  .validator((input: RequestFactCheckMutationVariables) => {
     if (typeof input.articleId !== 'string' || !input.articleId) {
       throw new Error('articleId is required')
     }
@@ -234,19 +234,17 @@ type CreateArticleReportInput = Pick<
 }
 
 export const createArticleReport = createServerFn({ method: 'POST' })
-  .inputValidator(
-    (input: CreateArticleReportInput): CreateArticleReportInput => {
-      const { url, reason } = input
-      if (typeof url !== 'string') throw new Error('url must be text')
-      if (reason != null && typeof reason !== 'string') {
-        throw new Error('reason must be text')
-      }
-      // Shape only, as in the search: an empty article is never meaningful.
-      const trimmed = url.trim()
-      if (!trimmed) throw new Error('Nothing to report')
-      return { url: trimmed, reason }
-    },
-  )
+  .validator((input: CreateArticleReportInput): CreateArticleReportInput => {
+    const { url, reason } = input
+    if (typeof url !== 'string') throw new Error('url must be text')
+    if (reason != null && typeof reason !== 'string') {
+      throw new Error('reason must be text')
+    }
+    // Shape only, as in the search: an empty article is never meaningful.
+    const trimmed = url.trim()
+    if (!trimmed) throw new Error('Nothing to report')
+    return { url: trimmed, reason }
+  })
   .handler(async ({ data }): Promise<{ articleId: string }> => {
     await resolveAdkUserIdOrThrow()
     const result = await cofactsExec(

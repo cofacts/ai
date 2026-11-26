@@ -59,7 +59,7 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
 )
 
 export const getSession = createServerFn({ method: 'GET' })
-  .inputValidator((sessionId: string) => sessionId)
+  .validator((sessionId: string) => sessionId)
   .handler(async ({ data: sessionId }) => {
     const userId = await resolveAdkUserIdOrThrow()
     const { data, error } = await adkClient.GET(
@@ -84,7 +84,7 @@ interface CreateSessionInput {
 }
 
 export const createSession = createServerFn({ method: 'POST' })
-  .inputValidator((input: CreateSessionInput) => input)
+  .validator((input: CreateSessionInput) => input)
   .handler(async ({ data: { sessionId, name } }) => {
     const userId = await resolveAdkUserIdOrThrow()
     const { response } = await adkClient.POST(
@@ -121,7 +121,7 @@ interface UpdateSessionInput {
 }
 
 export const updateSessionTitle = createServerFn({ method: 'POST' })
-  .inputValidator((input: UpdateSessionInput) => input)
+  .validator((input: UpdateSessionInput) => input)
   .handler(async ({ data: { sessionId, title } }) => {
     const userId = await resolveAdkUserIdOrThrow()
     const { data, error } = await adkClient.PATCH(
@@ -153,7 +153,7 @@ export const updateSessionTitle = createServerFn({ method: 'POST' })
  * swallowed — this is a purely decorative feature and must never break the page.
  */
 export const getSearchWidget = createServerFn({ method: 'GET' })
-  .inputValidator((input: { sessionId: string; toolCallId: string }) => input)
+  .validator((input: { sessionId: string; toolCallId: string }) => input)
   .handler(
     async ({ data: { sessionId, toolCallId } }): Promise<string | null> => {
       const userId = await resolveAdkUserIdOrThrow()
@@ -181,7 +181,7 @@ export const getSearchWidget = createServerFn({ method: 'GET' })
   )
 
 export const markSessionOpened = createServerFn({ method: 'POST' })
-  .inputValidator((sessionId: string) => sessionId)
+  .validator((sessionId: string) => sessionId)
   .handler(async ({ data: sessionId }) => {
     const userId = await resolveAdkUserIdOrThrow()
     const { error } = await adkClient.PATCH(

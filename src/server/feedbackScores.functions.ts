@@ -79,7 +79,7 @@ export async function fetchFeedbackForTrace(
 }
 
 export const getFeedbackForTrace = createServerFn({ method: 'GET' })
-  .inputValidator((traceId: string) => traceId)
+  .validator((traceId: string) => traceId)
   .handler(async ({ data: traceId }): Promise<FeedbackScore> => {
     const userId = await resolveAdkUserIdOrThrow()
     return await fetchFeedbackForTrace(traceId, userId)
@@ -129,7 +129,7 @@ export async function postFeedbackForTrace(
 }
 
 export const submitFeedbackForTrace = createServerFn({ method: 'POST' })
-  .inputValidator((raw: SubmitFeedbackInput) => raw)
+  .validator((raw: SubmitFeedbackInput) => raw)
   .handler(async ({ data }): Promise<{ ok: true }> => {
     // Re-resolve identity per submission so an expired cookie/JWT triggers
     // a 401 here instead of silently posting under a stale user id.
