@@ -28,21 +28,14 @@ function SessionPage() {
     sendMessage,
     stopGeneration,
     lastReplyDraftId,
+    toolInvocations,
   } = useChat({ sessionId })
 
   const openedCallIds = useRef<Set<string>>(new Set())
 
-  const handleToolBadgeClick = useCallback(
+  /** Opens a tool call (or a draft) in the right drawer. */
+  const handleOpenDraft = useCallback(
     (id: string) => {
-      if (toolCallId === id) {
-        navigate({
-          to: '/session/$sessionId',
-          params: { sessionId },
-          viewTransition: true,
-          replace: true,
-        })
-        return
-      }
       navigate({
         to: '/session/$sessionId/tool/$toolCallId',
         params: { sessionId, toolCallId: id },
@@ -50,14 +43,37 @@ function SessionPage() {
         replace: toolCallId !== undefined,
       })
     },
-    [toolCallId, sessionId, navigate],
+    [sessionId, toolCallId, navigate],
   )
 
-  // Auto-open: lastReplyDraftId is pre-computed by the cache reducer
+  const handleToolBadgeClick = useCallback(
+    (id: string) => {
+      if (toolCallId !== id) return handleOpenDraft(id)
+      navigate({
+        to: '/session/$sessionId',
+        params: { sessionId },
+        viewTransition: true,
+        replace: true,
+      })
+    },
+    [toolCallId, sessionId, navigate, handleOpenDraft],
+  )
+
+  // When a new latest draft appears, open it: if no drawer is open and it hasn't been opened
+  // before, or if the drawer shows the previous latest (typically the one the user just sent
+  // edits from), so the user lands on the draft they can edit.
+  const prevLatestDraftId = useRef(lastReplyDraftId)
   useEffect(() => {
-    if (toolCallId !== undefined) return
+    const prev = prevLatestDraftId.current
+    prevLatestDraftId.current = lastReplyDraftId
     if (!lastReplyDraftId) return
-    if (openedCallIds.current.has(lastReplyDraftId)) return
+    const openNew =
+      toolCallId === undefined && !openedCallIds.current.has(lastReplyDraftId)
+    const followLatest =
+      prev !== lastReplyDraftId &&
+      toolCallId !== undefined &&
+      toolCallId === prev
+    if (!openNew && !followLatest) return
 
     openedCallIds.current.add(lastReplyDraftId)
     navigate({
@@ -106,6 +122,9 @@ function SessionPage() {
           sessionId={sessionId}
           focusedToolCallId={toolCallId ?? null}
           onToolBadgeClick={handleToolBadgeClick}
+          toolInvocations={toolInvocations}
+          onOpenDraft={handleOpenDraft}
+          latestDraftId={lastReplyDraftId}
         />
       </div>
       <Outlet />

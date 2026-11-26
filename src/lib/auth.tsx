@@ -26,6 +26,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import type { CofactsUser } from '@/server/me.functions'
 import { logout as logoutServerFn } from '@/server/auth.functions'
 import { getCurrentUserServerFn } from '@/server/me.functions'
+import { MY_ARTICLE_REPLIES_QUERY } from '@/server/replies.functions'
 import { LoginModal } from '@/components/LoginModal'
 
 export type { CofactsUser }
@@ -41,6 +42,7 @@ export function clearUserScopedCache(queryClient: QueryClient) {
   queryClient.removeQueries({ queryKey: ['sessions'] })
   queryClient.removeQueries({ queryKey: chatCacheKey() })
   queryClient.removeQueries({ queryKey: ['feedback'] })
+  queryClient.removeQueries({ queryKey: [MY_ARTICLE_REPLIES_QUERY] })
 }
 
 interface AuthState {

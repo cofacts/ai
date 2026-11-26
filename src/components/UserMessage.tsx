@@ -1,8 +1,40 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AdkPart, ChatMessage } from '@/lib/adk'
+import type { DraftFields } from '@/lib/factCheckDraft'
 import { stripUploadPrefix } from '@/lib/adk'
 import { MaterialIcon } from '@/components/icons/MaterialIcon'
+import {
+  REPLY_CATEGORY_LABELS,
+  parseEditedDraftPart,
+} from '@/lib/factCheckDraft'
+
+/** The user's edited draft that was sent along with this message for the AI to revise from. */
+function EditedDraftPart({ fields }: { fields: DraftFields }) {
+  return (
+    <details className="rounded-radius-10 bg-surface-base border border-border-subtle text-type-caption text-text-primary">
+      <summary className="flex cursor-pointer items-center gap-[6px] px-spacing-8 py-spacing-4">
+        <MaterialIcon
+          name="edit_document"
+          size={24}
+          className="text-text-secondary"
+        />
+        附上我修改過的查核回應草稿
+      </summary>
+      <div className="space-y-spacing-8 border-t border-border-subtle p-spacing-8 whitespace-pre-wrap break-all">
+        {fields.classification && (
+          <p className="font-bold">
+            {REPLY_CATEGORY_LABELS[fields.classification]}
+          </p>
+        )}
+        <p>{fields.text}</p>
+        {fields.references && (
+          <p className="font-mono text-text-secondary">{fields.references}</p>
+        )}
+      </div>
+    </details>
+  )
+}
 
 interface UserMessageProps {
   message: ChatMessage
@@ -78,6 +110,10 @@ export function UserMessage({ message }: UserMessageProps) {
       <div className="bg-surface-raised p-spacing-16 rounded-radius-10 rounded-tr-none max-w-[85%] md:max-w-[70%] text-text-primary border border-border-subtle shadow-btn-shadow flex flex-col gap-spacing-8">
         {message.parts?.map((part, i) => {
           if (part.text) {
+            const editedDraft = parseEditedDraftPart(part.text)
+            if (editedDraft) {
+              return <EditedDraftPart key={i} fields={editedDraft.fields} />
+            }
             return (
               <div key={i} className="prose prose-sm max-w-none prose-p:my-0">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>

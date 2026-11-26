@@ -1,5 +1,7 @@
 import { handleAuthExpired } from './authExpired'
 import { UPLOAD_FILENAME_PREFIX } from './adk'
+import { formatEditedDraftPart, parseEditedDraftPart } from './factCheckDraft'
+import type { DraftFields } from './factCheckDraft'
 import type { QueryClient } from '@tanstack/react-query'
 import type {
   AdkEvent,
@@ -15,6 +17,11 @@ export interface ChatSessionState {
   error: string | null
   toolInvocations: Record<string, ToolInvocation>
   lastReplyDraftId: string | null
+  /**
+   * The user's edits that were sent to the AI with a chat message, by the draft they were based
+   * on; the latest one wins (see `factCheckDraft.ts`). Rebuilt from the messages on reload.
+   */
+  sentDraftEdits: Record<string, DraftFields>
 }
 
 export const INITIAL_CHAT_STATE: ChatSessionState = {
@@ -23,6 +30,20 @@ export const INITIAL_CHAT_STATE: ChatSessionState = {
   error: null,
   toolInvocations: {},
   lastReplyDraftId: null,
+  sentDraftEdits: {},
+}
+
+/** Records the draft edits that `parts` carries, keeping the latest per draft. */
+function recordSentDraftEdits(
+  sent: Record<string, DraftFields>,
+  parts: Array<AdkPart>,
+): Record<string, DraftFields> {
+  let next = sent
+  for (const p of parts) {
+    const edited = p.text ? parseEditedDraftPart(p.text) : null
+    if (edited) next = { ...next, [edited.basedOn]: edited.fields }
+  }
+  return next
 }
 
 export function chatCacheKey(): readonly ['chat']
@@ -44,6 +65,12 @@ export interface StartStreamOptions {
     newMessage?: { role: string; parts: Array<AdkPart> }
     invocationId?: string
   }
+  /**
+   * Parts of the user message being sent. Edited drafts in them count as sent only once the
+   * first event comes back: ADK has stored the message by then, so a request that fails
+   * before that leaves the edits unsent, to be attached again with the next message.
+   */
+  userParts?: Array<AdkPart>
 }
 
 /**
@@ -84,6 +111,7 @@ export async function startChatStream({
   queryClient,
   sessionId,
   payload = {},
+  userParts,
 }: StartStreamOptions) {
   const queryKey = chatCacheKey(sessionId)
 
@@ -145,6 +173,21 @@ export async function startChatStream({
             }
           }
           if (data) {
+            if (userParts) {
+              const sentParts = userParts
+              userParts = undefined
+              queryClient.setQueryData<ChatSessionState>(queryKey, (prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      sentDraftEdits: recordSentDraftEdits(
+                        prev.sentDraftEdits,
+                        sentParts,
+                      ),
+                    }
+                  : prev,
+              )
+            }
             try {
               processEventIntoCache(
                 queryClient,
@@ -207,6 +250,8 @@ export async function sendChatMessage(
   sessionId: string,
   text: string,
   files: Array<File> = [],
+  /** The user's unsent edits to the latest draft, sent along for the AI to revise from. */
+  editedDraft?: { draftId: string; fields: DraftFields },
 ) {
   const queryKey = chatCacheKey(sessionId)
 
@@ -223,6 +268,11 @@ export async function sendChatMessage(
   // part per attachment.
   const parts: Array<AdkPart> = []
   if (text) parts.push({ text })
+  if (editedDraft) {
+    parts.push({
+      text: formatEditedDraftPart(editedDraft.draftId, editedDraft.fields),
+    })
+  }
   if (files.length > 0) {
     parts.push(...(await Promise.all(files.map(fileToInlineDataPart))))
   }
@@ -255,6 +305,7 @@ export async function sendChatMessage(
         parts,
       },
     },
+    userParts: parts,
   })
 }
 
@@ -339,6 +390,7 @@ export function applyEventToState(
       ...prev,
       toolInvocations,
       lastReplyDraftId,
+      sentDraftEdits: recordSentDraftEdits(prev.sentDraftEdits, userParts),
       messages: [
         ...prev.messages,
         {

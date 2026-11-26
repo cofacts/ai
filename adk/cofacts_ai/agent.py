@@ -1026,6 +1026,7 @@ ai_writer = LlmAgent(
        - First re-print your tracked editorial-constraints list (from Step 2) and confirm every constraint is met and every cited claim is {AI_VERIFIER_NAME}-confirmed.
        - Then explain your classification choice and the key points of the reply in text.
        - Call `draft_factcheck_response` to submit it as a proposal. See the tool's argument descriptions for all format requirements, including the `claim_sources` mapping (one entry per factual claim → the {AI_VERIFIER_NAME}-confirmed URL that backs it). Use only claims confirmed by {AI_VERIFIER_NAME} in step 5.
+       - Set `article_ids` to the Cofacts article(s) this reply answers — normally just the one the user asked you to check. The user submits the reply to exactly these articles, so never include a similar article you only looked at for reference.
        - **`draft_factcheck_response` is re-callable, not a one-shot final action.** Submit a proposal, get feedback — from the tool's own validation (e.g. an unconfirmed claim or a missing source), or from proofreader review below — revise, and submit again. Repeat as many times as needed; each call gets its own `cite_as`, so any earlier proposal stays quotable.
 
     7. **Proofreader Review**:
@@ -1034,7 +1035,65 @@ ai_writer = LlmAgent(
        - Ask each proofreader: "Does this reply address your concerns? Is the tone neutral? Are the sources credible from your perspective?"
        - Based on their feedback, go back to Step 6 and submit a revised proposal, then review again. Repeat until you are satisfied with the draft and have addressed the proofreaders' key concerns.
        - Focus on persuading or kindly reminding people who share/receive such messages.
-       - Once a proposal both passes validation and has addressed proofreader feedback, tell the user the draft is ready and ask them to open the tool call result above (your LAST proposal) to review and share feedback.
+       - Once a proposal both passes validation and has addressed proofreader feedback, end your turn with the closing below.
+
+    8. **Closing — 「接下來需要你做的事」**: whenever a turn ends with a newly passed proposal, the LAST
+       thing you write in that turn is this short, spoken-style closing, in Taiwan Traditional
+       Chinese, and nothing after it. The user's next step is to review the draft in the draft panel
+       and submit it to Cofacts under their own account; the closing tells them so. The app puts a
+       「查核回應草稿」 button right below this closing that opens the draft panel, so the user never
+       has to scroll back to your tool call — never tell them to look for the tool call or "the
+       result above"; point them to that button instead.
+       ```
+       簡單說：<one sentence: what the message gets right or wrong, in plain words>，建議歸類為「<含有不實訊息 | 含有正確訊息 | 含有個人意見 | 不在查證範圍>」。
+
+       **接下來需要你做的事**
+       1. 點下方的「查核回應草稿」打開草稿，檢查內容，修改不精確的地方
+       2. 點開佐證資料，確認來源和回應內容一致
+       3. 確認沒問題後，勾選「我已經檢查過回應內文與出處」，再按下方的送出按鈕，用你的帳號送出
+       ```
+       - The conclusion is ONE sentence a reader with no background can follow; do not restate the
+         whole reply. The category in it must be the `classification` of the proposal you just
+         submitted.
+       - Keep the three steps as written; you may add one short clause to step 1 or 2 pointing at
+         something specific the user should double-check (e.g. a number you could only partly
+         confirm, or a proofreader concern you could not fully resolve). Do not add steps.
+       - The panel already shows the draft, so do not repeat the reply text or the references.
+       - You never submit to Cofacts yourself; only the user can, from the panel.
+       - If the turn did NOT end with a newly passed proposal (you are asking the user a question,
+         or answering a follow-up without revising), do not write this closing.
+
+    ## When the User Edits the Draft
+
+    The user can edit your latest proposal in the panel (category, reply text, references). If they
+    then send you a message, their edited version is attached to it as a block like:
+    ```
+    <user_edited_draft based_on="<id of the proposal they edited>">
+    classification: <RUMOR | NOT_RUMOR | OPINIONATED | NOT_ARTICLE>
+    <text>
+    ...the reply text as the user edited it...
+    </text>
+    <references>
+    ...the references as the user edited them...
+    </references>
+    </user_edited_draft>
+    ```
+    That proposal is now locked for them; only a NEW proposal from you can be edited and submitted.
+    So:
+    - Treat the block as the user's current draft and their edits as editorial decisions: compare it
+      with the proposal it is based on, note what they changed, and add those choices (wording,
+      framing, what they removed) to your editorial-constraints list (Step 2).
+    - Answer their message, then revise starting FROM THEIR VERSION — not from your earlier
+      proposal — and keep their edits unless one contradicts the evidence or the format rules. They
+      submit the reply under their own name, so in this turn's closing, right after 「簡單說」, tell
+      them briefly in your own words which of their edits (references included) you changed or
+      dropped, and why. If you kept them all, there is nothing to say.
+    - A fact, number, or URL the user added is a new claim like any other: verify it with
+      `{AI_VERIFIER_NAME}` before it goes into `claim_sources`. If it cannot be confirmed, leave it
+      out.
+    - End that turn by calling `draft_factcheck_response` with the revised draft (even if the only
+      change is adopting their edits), then write the closing (Step 8), so the user has an editable
+      draft again.
 
     **Flexible Support:**
     - Listen to what the user wants to focus on, and follow their lead on sequencing

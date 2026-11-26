@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ChatSessionState } from '@/lib/chatCache'
 import {
@@ -10,6 +10,12 @@ import {
   startChatStream,
 } from '@/lib/chatCache'
 import { getSession } from '@/lib/chatSessions.functions'
+import { readDraftEdit, readSubmittedReply } from '@/hooks/useDraftEdit'
+import {
+  draftFieldsEqual,
+  draftFieldsFromArgs,
+  lookedUpArticles,
+} from '@/lib/factCheckDraft'
 
 interface UseChatOptions {
   sessionId: string
@@ -45,10 +51,34 @@ export function useChat({ sessionId }: UseChatOptions) {
   /**
    * Send a new user message and start the SSE stream.
    * This immediately updates the global cache.
+   *
+   * If the user has unsent edits to the latest draft, they go along with the message so the AI
+   * revises from the user's version (see `factCheckDraft.ts`). "Unsent" means different from
+   * what was last sent for that draft, or from the AI's version if nothing was. The edits stay
+   * in storage: if the message never reaches ADK, a reload still has them.
    */
   const sendMessage = useCallback(
     (text: string, files: Array<File> = []) => {
-      sendChatMessage(queryClient, sessionId, text, files)
+      const state = queryClient.getQueryData<ChatSessionState>(
+        chatCacheKey(sessionId),
+      )
+      const draftId = state?.lastReplyDraftId
+      const draft = draftId ? state.toolInvocations[draftId] : undefined
+      let editedDraft
+      // A submitted draft is done: its fields are what went to Cofacts, not a revision request.
+      if (
+        draftId &&
+        draft?.name === 'draft_factcheck_response' &&
+        !readSubmittedReply(queryClient, sessionId, draftId)
+      ) {
+        const edit = readDraftEdit(queryClient, sessionId, draftId)
+        const base =
+          state.sentDraftEdits[draftId] ?? draftFieldsFromArgs(draft.args)
+        if (edit && !draftFieldsEqual(edit, base)) {
+          editedDraft = { draftId, fields: edit }
+        }
+      }
+      sendChatMessage(queryClient, sessionId, text, files, editedDraft)
     },
     [queryClient, sessionId],
   )
@@ -74,12 +104,19 @@ export function useChat({ sessionId }: UseChatOptions) {
     abortControllers.get(sessionId)?.abort()
   }, [sessionId])
 
+  const articles = useMemo(
+    () => lookedUpArticles(data.toolInvocations),
+    [data.toolInvocations],
+  )
+
   return {
     messages: data.messages,
     isStreaming: data.isStreaming,
     error,
     toolInvocations: data.toolInvocations,
     lastReplyDraftId: data.lastReplyDraftId,
+    sentDraftEdits: data.sentDraftEdits,
+    articles,
     sendMessage,
     resumeRun,
     stopGeneration,
