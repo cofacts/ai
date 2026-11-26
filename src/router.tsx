@@ -5,6 +5,7 @@ import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query
 import { routeTree } from './routeTree.gen'
 import { PageError } from './components/PageError'
 import { handleAuthExpired, isAuthExpiredError } from './lib/authExpired'
+import { parseSearch, stringifySearch } from './lib/urlSearch'
 
 export const getRouter = () => {
   // Fresh router + QueryClient per request: a module-scoped QueryClient would
@@ -35,6 +36,9 @@ export const getRouter = () => {
     defaultErrorComponent: PageError,
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
+    // Query values stay text and lists are comma-joined; see lib/urlSearch.ts.
+    parseSearch,
+    stringifySearch,
   })
 
   setupRouterSsrQueryIntegration({ router, queryClient })

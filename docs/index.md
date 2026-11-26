@@ -139,6 +139,12 @@ is only the overview.
   flows through the TanStack Query cache (see the skill's `references/data-layer.md`).
   `src/routes/(lists)/articles.tsx` is the working example; `src/server/cofacts.server.ts`
   (`cofactsExec`) is server-only and enforced by import protection.
+- **URL search params:** list pages keep their filters in the URL. `src/lib/urlSearch.ts` makes the
+  router read every query value as text and write lists comma-joined (`replyType=rumor,not-rumor`);
+  `src/lib/search-params/` holds one zod schema per page, which never throws on a bad URL. A route
+  spreads its page's options (`...articleListSearch`) to get the schema, typed links and defaults
+  left out of links.
+  → decision: [List page URL search params](decisions/20261125-list-page-url-search-params.md).
 - **Site shell:** `__root.tsx` renders the nav (`SiteNav`, and later the footer) around every
   page, and the document scrolls with the nav stuck to the top. A route opts out of the nav or
   footer with `staticData: { hideGlobalNav, hideGlobalFooter }`; `fillViewport` pins it to the
