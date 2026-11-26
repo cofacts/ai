@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { Link } from '@tanstack/react-router'
 
+import { ArticleStats } from './ArticleStats'
 import {
   ArticleMedia,
   mediaFallbackText,
@@ -112,7 +113,7 @@ export function DisputedMessage({
       </p>
 
       <div className="flex flex-col gap-spacing-20 md:flex-row md:items-start md:gap-spacing-24">
-        <ReplyRequestStats
+        <ArticleStats
           replyCount={replyCount}
           replyRequestCount={replyRequestCount}
         />
@@ -144,41 +145,5 @@ export function DisputedMessage({
         )}
       </div>
     </article>
-  )
-}
-
-/**
- * Penpot Feedback/ReportStatus: 回應 N｜回報 N. Desktop stacks each number over its label; mobile
- * puts them side by side across the card. A `<dl>` with the label first, so a screen reader
- * reads 「回應 0」; the order on screen is reversed.
- */
-function ReplyRequestStats({
-  replyCount,
-  replyRequestCount,
-}: Pick<DisputedMessageProps, 'replyCount' | 'replyRequestCount'>) {
-  const stats = [
-    { label: '回應', count: replyCount },
-    { label: '回報', count: replyRequestCount },
-  ]
-  return (
-    <dl className="flex shrink-0 justify-center gap-spacing-20 rounded-radius-10 bg-surface-raised px-spacing-24 py-spacing-12 md:py-spacing-20">
-      {stats.map(({ label, count }, i) => (
-        <div
-          key={label}
-          className={cn(
-            'flex flex-1 flex-row-reverse items-center justify-center gap-spacing-8 md:min-w-[46px] md:flex-none md:flex-col-reverse md:gap-spacing-2',
-            // Penpot's divider: a 1px border-control line, the full height, with the 20px gap on
-            // each side. Drawn by the second item, since a <dl> can't hold a separator.
-            i > 0 &&
-              "relative ml-spacing-20 before:absolute before:inset-y-0 before:-left-[20.5px] before:w-px before:bg-border-control before:content-['']",
-          )}
-        >
-          <dt className="text-type-ui-m-bold whitespace-nowrap text-text-primary">
-            {label}
-          </dt>
-          <dd className="text-type-heading-l text-text-primary">{count}</dd>
-        </div>
-      ))}
-    </dl>
   )
 }
