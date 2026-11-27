@@ -28,7 +28,7 @@ import { graphql } from '@/server/gql'
  */
 
 const getArticle = createServerFn({ method: 'GET' })
-  .inputValidator((id: string) => {
+  .validator((id: string) => {
     if (typeof id !== 'string' || !id) throw new Error('id must be text')
     return id
   })

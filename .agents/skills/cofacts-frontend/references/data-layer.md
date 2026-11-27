@@ -28,7 +28,7 @@ through TanStack Start server functions and the TanStack Query cache.
    warning as an error.
 5. The secret is read only in `src/server/cofacts.server.ts`. Import protection can't catch a
    hard-coded string or `process.env` read in a plain file.
-6. Type every server-function input with `.inputValidator`, and check there whatever a caller
+6. Type every server-function input with `.validator`, and check there whatever a caller
    could get wrong (an allowed value, a range), throwing on bad input. Return only fields the
    UI needs: the result is serialized into the HTML.
 7. **Server functions stay inline, and are tested there.** Export the ones worth a test from the
@@ -92,7 +92,7 @@ import { graphql } from '@/server/gql'
 import { ArticlePageView } from './-components/ArticlePageView'
 
 const getArticle = createServerFn({ method: 'GET' })
-  .inputValidator((id: string) => id)
+  .validator((id: string) => id)
   .handler(({ data: id }) =>
     cofactsExec(
       graphql(`

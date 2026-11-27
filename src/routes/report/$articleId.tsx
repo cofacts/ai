@@ -42,7 +42,7 @@ import { graphql } from '@/server/gql'
 type ReportOutcomeArticle = NonNullable<ReportOutcomeArticleQuery['GetArticle']>
 
 export const getReportOutcomeArticle = createServerFn({ method: 'GET' })
-  .inputValidator((articleId: string) => {
+  .validator((articleId: string) => {
     if (typeof articleId !== 'string') throw new Error('articleId must be text')
     return articleId
   })

@@ -10,25 +10,25 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AiRouteImport } from './routes/_ai'
-import { Route as ReportIndexRouteImport } from './routes/report/index'
-import { Route as AiIndexRouteImport } from './routes/_ai/index'
-import { Route as ReportCheckRouteImport } from './routes/report/check'
-import { Route as ReportArticleIdRouteImport } from './routes/report/$articleId'
-import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
 import { Route as listsArticlesRouteImport } from './routes/(lists)/articles'
+import { Route as AiIndexRouteImport } from './routes/_ai/index'
+import { Route as ApiRunSseRouteImport } from './routes/api/run-sse'
+import { Route as ReportIndexRouteImport } from './routes/report/index'
+import { Route as ReportArticleIdRouteImport } from './routes/report/$articleId'
+import { Route as ReportCheckRouteImport } from './routes/report/check'
+import { Route as AiSessionSessionIdRouteImport } from './routes/_ai/session.$sessionId'
+import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as ArticleIdIndexRouteImport } from './routes/article.$id/index'
 import { Route as ArticleIdOgDotpngRouteImport } from './routes/article.$id/og[.]png'
-import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
-import { Route as AiSessionSessionIdRouteImport } from './routes/_ai/session.$sessionId'
 import { Route as AiSessionSessionIdToolToolCallIdRouteImport } from './routes/_ai/session.$sessionId.tool.$toolCallId'
 
 const AiRoute = AiRouteImport.update({
   id: '/_ai',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ReportIndexRoute = ReportIndexRouteImport.update({
-  id: '/report/',
-  path: '/report/',
+const listsArticlesRoute = listsArticlesRouteImport.update({
+  id: '/(lists)/articles',
+  path: '/articles',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AiIndexRoute = AiIndexRouteImport.update({
@@ -36,9 +36,14 @@ const AiIndexRoute = AiIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AiRoute,
 } as any)
-const ReportCheckRoute = ReportCheckRouteImport.update({
-  id: '/report/check',
-  path: '/report/check',
+const ApiRunSseRoute = ApiRunSseRouteImport.update({
+  id: '/api/run-sse',
+  path: '/api/run-sse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportIndexRoute = ReportIndexRouteImport.update({
+  id: '/report/',
+  path: '/report/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportArticleIdRoute = ReportArticleIdRouteImport.update({
@@ -46,14 +51,19 @@ const ReportArticleIdRoute = ReportArticleIdRouteImport.update({
   path: '/report/$articleId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiRunSseRoute = ApiRunSseRouteImport.update({
-  id: '/api/run-sse',
-  path: '/api/run-sse',
+const ReportCheckRoute = ReportCheckRouteImport.update({
+  id: '/report/check',
+  path: '/report/check',
   getParentRoute: () => rootRouteImport,
 } as any)
-const listsArticlesRoute = listsArticlesRouteImport.update({
-  id: '/(lists)/articles',
-  path: '/articles',
+const AiSessionSessionIdRoute = AiSessionSessionIdRouteImport.update({
+  id: '/session/$sessionId',
+  path: '/session/$sessionId',
+  getParentRoute: () => AiRoute,
+} as any)
+const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
+  id: '/api/auth/callback',
+  path: '/api/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ArticleIdIndexRoute = ArticleIdIndexRouteImport.update({
@@ -65,16 +75,6 @@ const ArticleIdOgDotpngRoute = ArticleIdOgDotpngRouteImport.update({
   id: '/article/$id/og.png',
   path: '/article/$id/og.png',
   getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
-  id: '/api/auth/callback',
-  path: '/api/auth/callback',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AiSessionSessionIdRoute = AiSessionSessionIdRouteImport.update({
-  id: '/session/$sessionId',
-  path: '/session/$sessionId',
-  getParentRoute: () => AiRoute,
 } as any)
 const AiSessionSessionIdToolToolCallIdRoute =
   AiSessionSessionIdToolToolCallIdRouteImport.update({
@@ -188,11 +188,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AiRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/report/': {
-      id: '/report/'
-      path: '/report'
-      fullPath: '/report/'
-      preLoaderRoute: typeof ReportIndexRouteImport
+    '/(lists)/articles': {
+      id: '/(lists)/articles'
+      path: '/articles'
+      fullPath: '/articles'
+      preLoaderRoute: typeof listsArticlesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_ai/': {
@@ -202,11 +202,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AiIndexRouteImport
       parentRoute: typeof AiRoute
     }
-    '/report/check': {
-      id: '/report/check'
-      path: '/report/check'
-      fullPath: '/report/check'
-      preLoaderRoute: typeof ReportCheckRouteImport
+    '/api/run-sse': {
+      id: '/api/run-sse'
+      path: '/api/run-sse'
+      fullPath: '/api/run-sse'
+      preLoaderRoute: typeof ApiRunSseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/report/': {
+      id: '/report/'
+      path: '/report'
+      fullPath: '/report/'
+      preLoaderRoute: typeof ReportIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/report/$articleId': {
@@ -216,18 +223,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportArticleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/run-sse': {
-      id: '/api/run-sse'
-      path: '/api/run-sse'
-      fullPath: '/api/run-sse'
-      preLoaderRoute: typeof ApiRunSseRouteImport
+    '/report/check': {
+      id: '/report/check'
+      path: '/report/check'
+      fullPath: '/report/check'
+      preLoaderRoute: typeof ReportCheckRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(lists)/articles': {
-      id: '/(lists)/articles'
-      path: '/articles'
-      fullPath: '/articles'
-      preLoaderRoute: typeof listsArticlesRouteImport
+    '/_ai/session/$sessionId': {
+      id: '/_ai/session/$sessionId'
+      path: '/session/$sessionId'
+      fullPath: '/session/$sessionId'
+      preLoaderRoute: typeof AiSessionSessionIdRouteImport
+      parentRoute: typeof AiRoute
+    }
+    '/api/auth/callback': {
+      id: '/api/auth/callback'
+      path: '/api/auth/callback'
+      fullPath: '/api/auth/callback'
+      preLoaderRoute: typeof ApiAuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/article/$id/': {
@@ -243,20 +257,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/article/$id/og.png'
       preLoaderRoute: typeof ArticleIdOgDotpngRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/api/auth/callback': {
-      id: '/api/auth/callback'
-      path: '/api/auth/callback'
-      fullPath: '/api/auth/callback'
-      preLoaderRoute: typeof ApiAuthCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_ai/session/$sessionId': {
-      id: '/_ai/session/$sessionId'
-      path: '/session/$sessionId'
-      fullPath: '/session/$sessionId'
-      preLoaderRoute: typeof AiSessionSessionIdRouteImport
-      parentRoute: typeof AiRoute
     }
     '/_ai/session/$sessionId/tool/$toolCallId': {
       id: '/_ai/session/$sessionId/tool/$toolCallId'

@@ -113,7 +113,7 @@ export interface LoginInput {
 }
 
 export const login = createServerFn({ method: 'POST' })
-  .inputValidator((input: LoginInput) => {
+  .validator((input: LoginInput) => {
     if (!isAllowedProvider(input.provider)) {
       throw new Error('Invalid provider')
     }
