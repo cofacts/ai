@@ -5,7 +5,7 @@ import type { ArticleTypeEnum } from '@/server/gql/graphql'
 import { Flag } from '@/components/Flag'
 import { HyperlinkPreview } from '@/components/HyperlinkPreview'
 import { Button } from '@/components/ui/button'
-import { formatDateTime, formatTimeAgo } from '@/lib/timeAgo'
+import { formatDate, formatDateTime } from '@/lib/timeAgo'
 
 export type ArticleOriginalProps = {
   text: string | null | undefined
@@ -48,13 +48,13 @@ export function ArticleOriginal({
         {createdAt && (
           <p className="text-type-ui-m text-text-tertiary">
             首次回報於{' '}
-            {/* Relative to now, so the server's and the browser's text can differ by a unit. */}
+            {/* Relative within 48 hours, a date after (as on cofacts.tw); either way it depends on now, so server and browser can differ. */}
             <time
               dateTime={createdAt}
               title={formatDateTime(createdAt)}
               suppressHydrationWarning
             >
-              {formatTimeAgo(createdAt)}
+              {formatDate(createdAt)}
             </time>
           </p>
         )}
