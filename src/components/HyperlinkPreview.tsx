@@ -21,9 +21,15 @@ export type Hyperlink = {
  */
 export function HyperlinkPreview({
   hyperlink: { url, title, summary, topImageUrl },
+  rel,
   className,
 }: {
   hyperlink: Hyperlink
+  /**
+   * Added to the link's `noopener noreferrer`, e.g. `ugc nofollow` for a link
+   * someone pasted into a reported message.
+   */
+  rel?: string
   className?: string
 }) {
   const [imageFailed, setImageFailed] = useState(false)
@@ -78,7 +84,12 @@ export function HyperlinkPreview({
     </>
   )
   return isHttpUrl(url) ? (
-    <a href={url} target="_blank" rel="noopener noreferrer" className={classes}>
+    <a
+      href={url}
+      target="_blank"
+      rel={cn('noopener noreferrer', rel)}
+      className={classes}
+    >
       {content}
       <span className="sr-only">（另開新分頁）</span>
     </a>

@@ -46,3 +46,64 @@ export function getQuickNavItems({
     },
   ]
 }
+
+export type TextSegment =
+  | { type: 'text'; text: string }
+  | { type: 'link'; text: string; href: string }
+
+// http(s) URLs up to the next whitespace or full-width punctuation. Closing
+// punctuation that usually ends a sentence, not the URL, is left out: 「…請看 https://example.com/a.」
+const URL_PATTERN = /https?:\/\/[^\s<>"'「」『』（）。，！？；：、]+/g
+const TRAILING_PUNCTUATION = /[.,!?;:，。！？；：、)\]}]+$/
+
+/**
+ * Splits a message into plain text and links, so the page can render the links
+ * as `<a>` without `dangerouslySetInnerHTML` (rumors-site's `linkify`).
+ */
+export function linkifyText(text: string): Array<TextSegment> {
+  const segments: Array<TextSegment> = []
+  let last = 0
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const url = match[0].replace(TRAILING_PUNCTUATION, '')
+    if (url.endsWith('://')) continue // only the scheme was left
+    const start = match.index
+    if (start > last)
+      segments.push({ type: 'text', text: text.slice(last, start) })
+    segments.push({ type: 'link', text: url, href: url })
+    last = start + url.length
+  }
+  if (last < text.length)
+    segments.push({ type: 'text', text: text.slice(last) })
+  return segments
+}
+
+export type CategoryVotes = {
+  positiveFeedbackCount?: number | null
+  negativeFeedbackCount?: number | null
+}
+
+/**
+ * More people disagree with the category than agree: rumors-site still lists it,
+ * struck through.
+ */
+export function isCategoryDisputed({
+  positiveFeedbackCount,
+  negativeFeedbackCount,
+}: CategoryVotes) {
+  return (negativeFeedbackCount ?? 0) > (positiveFeedbackCount ?? 0)
+}
+
+/** Agree / disagree shares in whole percent, or null when nobody has voted. */
+export function categoryVoteShares({
+  positiveFeedbackCount,
+  negativeFeedbackCount,
+}: CategoryVotes): { agree: number; disagree: number } | null {
+  const agree = positiveFeedbackCount ?? 0
+  const disagree = negativeFeedbackCount ?? 0
+  const total = agree + disagree
+  if (total === 0) return null
+  return {
+    agree: Math.floor((agree / total) * 100),
+    disagree: Math.floor((disagree / total) * 100),
+  }
+}
